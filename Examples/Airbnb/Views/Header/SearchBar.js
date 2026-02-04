@@ -6,12 +6,13 @@ import SwiftUI from '../../../../src/index.js';
 const {
   VStack, HStack, Spacer,
   Text, Button,
-  Rectangle, Circle,
+  Rectangle, Circle, View,
   ViewThatFits,
   Color, Font
 } = SwiftUI;
 
 import vm from '../../ViewModels/AppViewModel.js';
+import { Icons } from '../../Components/Icons.js';
 
 /**
  * Search Bar Component (Desktop)
@@ -121,7 +122,20 @@ export function SearchBarDesktop() {
             el.style.alignItems = 'center';
             el.style.justifyContent = 'center';
             el.style.cursor = 'pointer';
-            el.innerHTML = `<span style="color: white; font-size: 20px;">🔍</span>`;
+            el.style.transition = 'transform 0.2s, background-color 0.2s';
+            // SVG search icon
+            el.innerHTML = `
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+              </svg>
+            `;
+            el.addEventListener('mouseenter', () => {
+              el.style.transform = 'scale(1.05)';
+            });
+            el.addEventListener('mouseleave', () => {
+              el.style.transform = 'scale(1)';
+            });
           }
         })
     )
@@ -151,17 +165,21 @@ export function SearchBarDesktop() {
 export function SearchBarMobile() {
   return Button(
     HStack({ spacing: 16 },
-      Circle()
-        .fill(Color.clear)
-        .frame({ width: 32, height: 32 })
-        .modifier({
-          apply(el) {
-            el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.justifyContent = 'center';
-            el.innerHTML = `<span style="font-size: 18px;">🔍</span>`;
-          }
-        }),
+      new View().modifier({
+        apply(el) {
+          el.style.width = '32px';
+          el.style.height = '32px';
+          el.style.display = 'flex';
+          el.style.alignItems = 'center';
+          el.style.justifyContent = 'center';
+          el.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222222" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+          `;
+        }
+      }),
       VStack({ alignment: 'leading', spacing: 2 },
         Text('Where to?')
           .font(Font.system(14, Font.Weight.semibold))
