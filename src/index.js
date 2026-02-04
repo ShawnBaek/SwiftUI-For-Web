@@ -154,6 +154,24 @@ import {
 } from './Animation/Animation.js';
 
 // =============================================================================
+// Charts (Swift Charts for Web)
+// =============================================================================
+import {
+  Chart, createChart,
+  BarMark, createBarMark,
+  LineMark, createLineMark,
+  PointMark, createPointMark,
+  AreaMark, createAreaMark,
+  RuleMark, createRuleMark,
+  RectangleMark, createRectangleMark,
+  SectorMark, createSectorMark,
+  PlottableValue, value,
+  Mark,
+  MarkDimension,
+  Charts
+} from './Charts/index.js';
+
+// =============================================================================
 // Gestures
 // =============================================================================
 import {
@@ -308,7 +326,21 @@ const SwiftUI = {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView
+  DocumentGroup, DocumentGroupView,
+
+  // Charts (Swift Charts for Web)
+  Chart, createChart,
+  BarMark, createBarMark,
+  LineMark, createLineMark,
+  PointMark, createPointMark,
+  AreaMark, createAreaMark,
+  RuleMark, createRuleMark,
+  RectangleMark, createRectangleMark,
+  SectorMark, createSectorMark,
+  PlottableValue, value,
+  Mark,
+  MarkDimension,
+  Charts
 };
 
 // Default export
@@ -430,5 +462,19 @@ export {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView
+  DocumentGroup, DocumentGroupView,
+
+  // Charts (Swift Charts for Web)
+  Chart, createChart,
+  BarMark, createBarMark,
+  LineMark, createLineMark,
+  PointMark, createPointMark,
+  AreaMark, createAreaMark,
+  RuleMark, createRuleMark,
+  RectangleMark, createRectangleMark,
+  SectorMark, createSectorMark,
+  PlottableValue, value,
+  Mark,
+  MarkDimension,
+  Charts
 };
