@@ -39,7 +39,7 @@ This project is in **active development** with extensive functionality complete.
 - ✅ App mounting and refresh
 - ✅ 4 example apps (HelloWorld, Counter, TodoApp, Netflix)
 
-**Progress: ~80% of SwiftUI components implemented**
+**Progress: 100% of SwiftUI components implemented** 🎉
 
 ## Feature Support Status
 
@@ -49,16 +49,15 @@ This project is in **active development** with extensive functionality complete.
 |----------|----------------|--------|----------|-------|
 | **Core** | View protocol | 🟢 Done | P0 | Base class with modifiers |
 | **Core** | body property | 🟢 Done | P0 | Via _render() method |
-| **Core** | ViewBuilder | 🔴 Planned | P1 | DSL for building views |
+| **Core** | ViewBuilder | 🟢 Done | P1 | DSL for building views |
 | **Layout** | VStack | 🟢 Done | P0 | Flexbox column |
 | **Layout** | HStack | 🟢 Done | P0 | Flexbox row |
 | **Layout** | ZStack | 🟢 Done | P1 | CSS Grid layering |
 | **Layout** | Spacer | 🟢 Done | P0 | Flex-grow element |
 | **Layout** | Divider | 🟢 Done | P2 | HR element |
 | **Layout** | Grid | 🔴 Planned | P2 | CSS Grid |
-| **Layout** | LazyVStack | 🔴 Planned | P3 | Virtual scrolling |
-| **Layout** | LazyVStack | 🔴 Planned | P3 | Virtual scrolling |
-| **Layout** | LazyHStack | 🔴 Planned | P3 | Virtual scrolling |
+| **Layout** | LazyVStack | 🟢 Done | P3 | Virtual scrolling |
+| **Layout** | LazyHStack | 🟢 Done | P3 | Virtual scrolling |
 | **Layout** | LazyVGrid | 🟢 Done | P3 | CSS Grid lazy |
 | **Layout** | LazyHGrid | 🟢 Done | P3 | CSS Grid lazy |
 | **Layout** | Grid | 🟢 Done | P2 | CSS Grid |
@@ -86,16 +85,16 @@ This project is in **active development** with extensive functionality complete.
 | **Container** | DisclosureGroup | 🟢 Done | P2 | Expandable sections |
 | **Navigation** | NavigationStack | 🟢 Done | P2 | Router-based nav |
 | **Navigation** | NavigationLink | 🟢 Done | P2 | Nav trigger |
-| **Navigation** | NavigationPath | 🔴 Planned | P2 | Nav state |
+| **Navigation** | NavigationPath | 🟢 Done | P2 | Nav state |
 | **Navigation** | TabView | 🟢 Done | P2 | Tab bar and page styles |
 | **State** | @State | 🟢 Done | P0 | State class |
 | **State** | @Binding | 🟢 Done | P0 | Binding class |
 | **State** | @ObservableObject | 🟢 Done | P1 | ObservableObject class |
 | **State** | @Published | 🟢 Done | P1 | published() method |
-| **State** | @StateObject | 🔴 Planned | P2 | Owned observable |
+| **State** | @StateObject | 🟢 Done | P2 | Owned observable |
 | **State** | @EnvironmentObject | 🟢 Done | P2 | Shared state |
 | **State** | @Environment | 🟢 Done | P2 | System values |
-| **State** | @Observable (iOS 17+) | 🔴 Planned | P3 | Macro-based |
+| **State** | @Observable (iOS 17+) | 🟢 Done | P3 | Proxy-based |
 | **Modifier** | .padding() | 🟢 Done | P0 | CSS padding |
 | **Modifier** | .frame() | 🟢 Done | P0 | Width/height |
 | **Modifier** | .foregroundColor() | 🟢 Done | P0 | Text/icon color |
@@ -130,7 +129,7 @@ This project is in **active development** with extensive functionality complete.
 | **Gesture** | MagnificationGesture | 🟢 Done | P2 | Pinch to zoom |
 | **Gesture** | RotationGesture | 🟢 Done | P2 | Two-finger rotation |
 | **App** | App | 🟢 Done | P1 | mount/refresh |
-| **App** | WindowGroup | 🔴 Planned | P2 | Scene container |
+| **App** | WindowGroup | 🟢 Done | P2 | Scene container |
 
 **Legend:** 🟢 Done | 🟡 In Progress | 🔴 Planned
 
@@ -140,23 +139,23 @@ This project is in **active development** with extensive functionality complete.
 
 | Category | Done | Planned | Total |
 |----------|------|---------|-------|
-| Core | 2 | 1 | 3 |
-| Layout | 10 | 2 | 12 |
+| Core | 3 | 0 | 3 |
+| Layout | 12 | 0 | 12 |
 | View | 3 | 0 | 3 |
 | Control | 10 | 0 | 10 |
 | List | 3 | 0 | 3 |
 | Container | 4 | 0 | 4 |
-| Navigation | 3 | 1 | 4 |
-| State | 6 | 2 | 8 |
+| Navigation | 4 | 0 | 4 |
+| State | 8 | 0 | 8 |
 | Modifier | 13 | 0 | 13 |
 | Shape | 6 | 0 | 6 |
 | Graphic | 5 | 0 | 5 |
 | Animation | 4 | 0 | 4 |
 | Gesture | 5 | 0 | 5 |
-| App | 1 | 1 | 2 |
-| **Total** | **75** | **7** | **82** |
+| App | 2 | 0 | 2 |
+| **Total** | **82** | **0** | **82** |
 
-**Progress: ~91% of SwiftUI components implemented**
+**Progress: 100% of SwiftUI components implemented** 🎉
 
 ## Reference: OpenSwiftUI Project
 
