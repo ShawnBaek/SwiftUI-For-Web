@@ -23,7 +23,7 @@ export { ObservableObject, Published, createObservable } from './Data/Observable
 // View Components
 // =============================================================================
 export { Text, TextView } from './View/Text.js';
-// export { Image } from './View/Image.js';
+export { Image, ImageView, ContentMode } from './View/Image.js';
 
 // Controls
 export { Button, ButtonView } from './View/Control/Button.js';
@@ -35,12 +35,18 @@ export { Toggle, ToggleView } from './View/Control/Toggle.js';
 // export { List } from './View/List/List.js';
 export { ForEach, ForEachView, Range } from './View/List/ForEach.js';
 
+// Containers
+export { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
+
+// Navigation
+export { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
+
 // =============================================================================
 // Layout
 // =============================================================================
 export { VStack, VStackView } from './Layout/Stack/VStack.js';
 export { HStack, HStackView } from './Layout/Stack/HStack.js';
-// export { ZStack } from './Layout/Stack/ZStack.js';
+export { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
 export { Spacer, SpacerView } from './Layout/Spacer.js';
 // export { Divider } from './Layout/Divider.js';
 export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
@@ -50,6 +56,22 @@ export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alig
 // =============================================================================
 export { Color, ColorValue } from './Graphic/Color.js';
 export { Font, FontValue } from './Graphic/Font.js';
+export { LinearGradient, RadialGradient, AngularGradient, GradientDirection, UnitPoint } from './Graphic/Gradient.js';
+
+// =============================================================================
+// Animation
+// =============================================================================
+export {
+  Animation,
+  AnyTransition,
+  Namespace,
+  withAnimation,
+  isAnimating,
+  currentAnimation,
+  extendViewWithAnimation,
+  isViewTransitionSupported,
+  prefersReducedMotion
+} from './Animation/Animation.js';
 
 // =============================================================================
 // App
@@ -60,6 +82,13 @@ export { App, AppInstance } from './App/App.js';
 // Version Info
 // =============================================================================
 export const VERSION = '0.1.0';
+
+// =============================================================================
+// Extend View with Animation Methods
+// =============================================================================
+import { View } from './Core/View.js';
+import { extendViewWithAnimation as _extendView } from './Animation/Animation.js';
+_extendView(View);
 
 /**
  * Log framework initialization

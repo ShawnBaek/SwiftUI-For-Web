@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftUI for Web - Developer Guide</title>
+  <style>
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #141414;
+      --bg-code: #1e1e1e;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --accent: #007AFF;
+      --accent-green: #34C759;
+      --accent-red: #FF3B30;
+      --accent-orange: #FF9500;
+      --border: #333;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    nav a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      margin-left: 24px;
+      transition: color 0.2s;
+    }
+
+    nav a:hover {
+      color: var(--text-primary);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0;
+      text-align: center;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    }
+
+    .hero h1 {
+      font-size: 56px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #007AFF, #5856D6, #AF52DE);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 20px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: var(--bg-code);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    /* Features */
+    .features {
+      padding: 80px 0;
+    }
+
+    .features h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 48px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+    }
+
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--text-secondary);
+    }
+
+    /* Code Examples */
+    .examples {
+      padding: 80px 0;
+      background: var(--bg-secondary);
+    }
+
+    .examples h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 16px;
+    }
+
+    .examples > p {
+      text-align: center;
+      color: var(--text-secondary);
+      margin-bottom: 48px;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .code-panel {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.05);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-header span {
+      font-weight: 600;
+    }
+
+    .code-header .badge {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+    }
+
+    .code-header .badge.react {
+      background: #61DAFB;
+      color: black;
+    }
+
+    pre {
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    code {
+      font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+    }
+
+    .keyword { color: #FF7AB2; }
+    .string { color: #FC6A5D; }
+    .function { color: #67B7A4; }
+    .comment { color: #6C7986; }
+    .number { color: #D0BF69; }
+    .property { color: #4FB0CC; }
+
+    /* Components Table */
+    .components {
+      padding: 80px 0;
+    }
+
+    .components h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 48px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--bg-code);
+      font-weight: 600;
+    }
+
+    .status-done {
+      color: var(--accent-green);
+    }
+
+    .status-planned {
+      color: var(--text-secondary);
+    }
+
+    /* Quick Start */
+    .quickstart {
+      padding: 80px 0;
+      background: var(--bg-secondary);
+    }
+
+    .quickstart h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 48px;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .step-number {
+      width: 40px;
+      height: 40px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-content h3 {
+      margin-bottom: 8px;
+    }
+
+    .step-content p {
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    footer p {
+      color: var(--text-secondary);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-content">
+      <div class="logo">SwiftUI for Web</div>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#examples">Examples</a>
+        <a href="#components">Components</a>
+        <a href="#quickstart">Quick Start</a>
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" target="_blank">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h1>SwiftUI for Web</h1>
+      <p>Build beautiful, declarative UIs for the web using the same patterns you love from SwiftUI. Zero dependencies. Pure JavaScript.</p>
+      <div class="hero-buttons">
+        <a href="#quickstart" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" class="btn btn-secondary" target="_blank">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="container">
+      <h2>Why SwiftUI for Web?</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>Zero Dependencies</h3>
+          <p>No npm packages, no build tools, no bundlers. Just vanilla JavaScript, CSS, and HTML.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3>Declarative UI</h3>
+          <p>Describe what your UI should look like, not how to build it. Just like SwiftUI.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🍎</div>
+          <h3>SwiftUI Familiar</h3>
+          <p>If you know SwiftUI, you already know this framework. Same components, same patterns.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Lightweight & Fast</h3>
+          <p>No virtual DOM overhead. Direct DOM manipulation for maximum performance.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏗️</div>
+          <h3>MVVM Architecture</h3>
+          <p>Clean separation of concerns with ObservableObject and reactive state management.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3>View Transition API</h3>
+          <p>Smooth, native animations using the modern CSS View Transition API.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="examples" id="examples">
+    <div class="container">
+      <h2>SwiftUI for Web vs React</h2>
+      <p>See how the same Counter app looks in both frameworks</p>
+
+      <div class="comparison">
+        <div class="code-panel">
+          <div class="code-header">
+            <span>SwiftUI for Web</span>
+            <span class="badge">0 dependencies</span>
+          </div>
+          <pre><code><span class="keyword">import</span> { App, VStack, HStack, Text, Button, State, Color, Font } <span class="keyword">from</span> <span class="string">'./src/index.js'</span>;
+
+<span class="comment">// State</span>
+<span class="keyword">const</span> count = <span class="keyword">new</span> <span class="function">State</span>(<span class="number">0</span>);
+
+<span class="comment">// View</span>
+<span class="function">App</span>(() =>
+  <span class="function">VStack</span>({ spacing: <span class="number">20</span> },
+    <span class="function">Text</span>(<span class="string">'Counter'</span>).<span class="function">font</span>(Font.title),
+    <span class="function">Text</span>(<span class="function">String</span>(count.value))
+      .<span class="function">font</span>(Font.<span class="function">system</span>(<span class="number">48</span>))
+      .<span class="function">foregroundColor</span>(Color.blue),
+    <span class="function">HStack</span>({ spacing: <span class="number">16</span> },
+      <span class="function">Button</span>(<span class="string">'-'</span>, () => count.value--)
+        .<span class="function">padding</span>(<span class="number">16</span>)
+        .<span class="function">background</span>(Color.red)
+        .<span class="function">cornerRadius</span>(<span class="number">8</span>),
+      <span class="function">Button</span>(<span class="string">'+'</span>, () => count.value++)
+        .<span class="function">padding</span>(<span class="number">16</span>)
+        .<span class="function">background</span>(Color.green)
+        .<span class="function">cornerRadius</span>(<span class="number">8</span>)
+    )
+  ).<span class="function">padding</span>(<span class="number">40</span>)
+).<span class="function">mount</span>(<span class="string">'#root'</span>);</code></pre>
+        </div>
+
+        <div class="code-panel">
+          <div class="code-header">
+            <span>React</span>
+            <span class="badge react">40+ MB node_modules</span>
+          </div>
+          <pre><code><span class="keyword">import</span> React, { useState } <span class="keyword">from</span> <span class="string">'react'</span>;
+
+<span class="keyword">function</span> <span class="function">Counter</span>() {
+  <span class="keyword">const</span> [count, setCount] = <span class="function">useState</span>(<span class="number">0</span>);
+
+  <span class="keyword">return</span> (
+    &lt;<span class="property">div</span> style={{
+      display: <span class="string">'flex'</span>,
+      flexDirection: <span class="string">'column'</span>,
+      alignItems: <span class="string">'center'</span>,
+      gap: <span class="number">20</span>,
+      padding: <span class="number">40</span>
+    }}&gt;
+      &lt;<span class="property">h1</span>&gt;Counter&lt;/<span class="property">h1</span>&gt;
+      &lt;<span class="property">span</span> style={{
+        fontSize: <span class="number">48</span>,
+        color: <span class="string">'rgb(0, 122, 255)'</span>
+      }}&gt;{count}&lt;/<span class="property">span</span>&gt;
+      &lt;<span class="property">div</span> style={{ display: <span class="string">'flex'</span>, gap: <span class="number">16</span> }}&gt;
+        &lt;<span class="property">button</span> onClick={() => <span class="function">setCount</span>(c => c - <span class="number">1</span>)}
+          style={{ padding: <span class="number">16</span>, background: <span class="string">'rgb(255,59,48)'</span> }}&gt;
+          -
+        &lt;/<span class="property">button</span>&gt;
+        &lt;<span class="property">button</span> onClick={() => <span class="function">setCount</span>(c => c + <span class="number">1</span>)}
+          style={{ padding: <span class="number">16</span>, background: <span class="string">'rgb(52,199,89)'</span> }}&gt;
+          +
+        &lt;/<span class="property">button</span>&gt;
+      &lt;/<span class="property">div</span>&gt;
+    &lt;/<span class="property">div</span>&gt;
+  );
+}</code></pre>
+        </div>
+      </div>
+
+      <h3 style="text-align: center; margin-bottom: 24px;">More Examples</h3>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>📋 Todo App (MVVM)</h3>
+          <p>Full MVVM architecture with ObservableObject, ForEach, TextField, and Toggle.</p>
+          <a href="../Examples/TodoApp/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
+        </div>
+        <div class="feature-card">
+          <h3>🎬 Netflix Clone</h3>
+          <p>Hero banner, horizontal carousels, ZStack overlays, and View Transition animations.</p>
+          <a href="../Examples/Netflix/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
+        </div>
+        <div class="feature-card">
+          <h3>👋 Hello World</h3>
+          <p>Simple text rendering with layout, fonts, and colors. Perfect starting point.</p>
+          <a href="../Examples/HelloWorld/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="components" id="components">
+    <div class="container">
+      <h2>Component Status</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Core</td>
+            <td>View, App</td>
+            <td class="status-done">✅ Done</td>
+            <td>Base class, app mounting</td>
+          </tr>
+          <tr>
+            <td>Layout</td>
+            <td>VStack, HStack, ZStack</td>
+            <td class="status-done">✅ Done</td>
+            <td>Flexbox/Grid based stacks</td>
+          </tr>
+          <tr>
+            <td>Layout</td>
+            <td>Spacer, ScrollView</td>
+            <td class="status-done">✅ Done</td>
+            <td>Flexible space, scrolling</td>
+          </tr>
+          <tr>
+            <td>Views</td>
+            <td>Text, Image</td>
+            <td class="status-done">✅ Done</td>
+            <td>Text rendering, images</td>
+          </tr>
+          <tr>
+            <td>Controls</td>
+            <td>Button, TextField, Toggle</td>
+            <td class="status-done">✅ Done</td>
+            <td>Interactive controls</td>
+          </tr>
+          <tr>
+            <td>Lists</td>
+            <td>ForEach</td>
+            <td class="status-done">✅ Done</td>
+            <td>Array iteration</td>
+          </tr>
+          <tr>
+            <td>State</td>
+            <td>State, Binding, ObservableObject</td>
+            <td class="status-done">✅ Done</td>
+            <td>Reactive state management</td>
+          </tr>
+          <tr>
+            <td>Graphics</td>
+            <td>Color, Font, LinearGradient</td>
+            <td class="status-done">✅ Done</td>
+            <td>Colors, typography, gradients</td>
+          </tr>
+          <tr>
+            <td>Animation</td>
+            <td>withAnimation</td>
+            <td class="status-done">✅ Done</td>
+            <td>View Transition API</td>
+          </tr>
+          <tr>
+            <td>Navigation</td>
+            <td>NavigationStack, NavigationLink</td>
+            <td class="status-done">✅ Done</td>
+            <td>Stack-based navigation</td>
+          </tr>
+          <tr>
+            <td>Layout</td>
+            <td>List, LazyVStack, LazyHStack</td>
+            <td class="status-planned">🔴 Planned</td>
+            <td>P1 Priority</td>
+          </tr>
+          <tr>
+            <td>Controls</td>
+            <td>Slider, Picker, DatePicker</td>
+            <td class="status-planned">🔴 Planned</td>
+            <td>P1 Priority</td>
+          </tr>
+          <tr>
+            <td>Shapes</td>
+            <td>Rectangle, Circle, Capsule</td>
+            <td class="status-planned">🔴 Planned</td>
+            <td>P1 Priority</td>
+          </tr>
+          <tr>
+            <td>Navigation</td>
+            <td>TabView, Sheet, Alert</td>
+            <td class="status-planned">🔴 Planned</td>
+            <td>P2 Priority</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="quickstart" id="quickstart">
+    <div class="container">
+      <h2>Quick Start</h2>
+
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <h3>Clone the repository</h3>
+          <p>No npm install required!</p>
+          <div class="code-panel">
+            <pre><code>git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
+cd SwiftUI-For-Web</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <h3>Start a local server</h3>
+          <p>ES modules require a server to work properly.</p>
+          <div class="code-panel">
+            <pre><code>python -m http.server 8000
+<span class="comment"># or</span>
+npx serve .</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <h3>Create your first view</h3>
+          <p>Create an index.html file and start building!</p>
+          <div class="code-panel">
+            <pre><code><span class="keyword">&lt;!DOCTYPE html&gt;</span>
+<span class="property">&lt;html&gt;</span>
+<span class="property">&lt;head&gt;</span>
+  <span class="property">&lt;link</span> rel=<span class="string">"stylesheet"</span> href=<span class="string">"src/styles/index.css"</span><span class="property">&gt;</span>
+<span class="property">&lt;/head&gt;</span>
+<span class="property">&lt;body&gt;</span>
+  <span class="property">&lt;div</span> id=<span class="string">"root"</span><span class="property">&gt;&lt;/div&gt;</span>
+  <span class="property">&lt;script</span> type=<span class="string">"module"</span><span class="property">&gt;</span>
+    <span class="keyword">import</span> { App, VStack, Text, Color, Font } <span class="keyword">from</span> <span class="string">'./src/index.js'</span>;
+
+    <span class="function">App</span>(() =>
+      <span class="function">VStack</span>({ spacing: <span class="number">16</span> },
+        <span class="function">Text</span>(<span class="string">'Hello, SwiftUI for Web!'</span>)
+          .<span class="function">font</span>(Font.largeTitle)
+          .<span class="function">foregroundColor</span>(Color.blue),
+        <span class="function">Text</span>(<span class="string">'Built with pure JavaScript'</span>)
+          .<span class="function">font</span>(Font.body)
+          .<span class="function">foregroundColor</span>(Color.gray)
+      ).<span class="function">padding</span>(<span class="number">40</span>)
+    ).<span class="function">mount</span>(<span class="string">'#root'</span>);
+  <span class="property">&lt;/script&gt;</span>
+<span class="property">&lt;/body&gt;</span>
+<span class="property">&lt;/html&gt;</span></code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <h3>Open in browser</h3>
+          <p>Visit <code>http://localhost:8000</code> and see your app!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p style="margin-bottom: 16px;">
+        <strong>Made with ❤️ for the SwiftUI and Web communities</strong>
+      </p>
+      <p>
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a> •
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/issues">Report Issues</a> •
+        <a href="https://github.com/sponsors/ShawnBaek">Sponsor</a>
+      </p>
+      <p style="margin-top: 24px; font-size: 14px;">
+        ISC License © 2024
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
