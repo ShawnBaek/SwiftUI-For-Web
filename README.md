@@ -58,17 +58,78 @@ A declarative UI framework that brings Apple's SwiftUI paradigm to web developme
 
 ## Installation
 
-**No installation needed!** Just copy the `src/` folder to your project.
+### Option 1: npm (Recommended)
 
 ```bash
-# Clone
+npm install swiftui-for-web
+```
+
+Then import in your JavaScript:
+
+```javascript
+import SwiftUI from 'swiftui-for-web';
+const { App, VStack, Text, Button, State } = SwiftUI;
+```
+
+### Option 2: Direct Download
+
+No build step required! Just copy the `src/` folder to your project.
+
+```bash
 git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
+cp -r SwiftUI-For-Web/src ./your-project/
+```
+
+Then import directly:
+
+```javascript
+import SwiftUI from './src/index.js';
+```
+
+## Running Examples
+
+Examples require a local HTTP server (ES modules don't work with `file://`).
+
+### Using npm scripts
+
+```bash
+# Clone the repo
+git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
+cd SwiftUI-For-Web
+
+# Install (optional, only needed for npm scripts)
+npm install
 
 # Run examples
+npm run serve
+# Then open in browser:
+#   http://localhost:8000/Examples/Airbnb/
+#   http://localhost:8000/Examples/Counter/
+#   http://localhost:8000/Examples/TodoApp/
+#   http://localhost:8000/Examples/Netflix/
+#   http://localhost:8000/Examples/HelloWorld/
+```
+
+### Using Python (no npm needed)
+
+```bash
 cd SwiftUI-For-Web
-python -m http.server 8000
+python3 -m http.server 8000
 # Open http://localhost:8000/Examples/Airbnb/
 ```
+
+### Using Node.js
+
+```bash
+npx serve .
+# Open http://localhost:3000/Examples/Airbnb/
+```
+
+### Using VS Code Live Server
+
+1. Install the "Live Server" extension
+2. Right-click `Examples/Airbnb/index.html`
+3. Select "Open with Live Server"
 
 ## Import Styles
 

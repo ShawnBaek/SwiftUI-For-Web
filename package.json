@@ -2,16 +2,54 @@
   "name": "swiftui-for-web",
   "version": "1.0.0",
   "type": "module",
-  "description": "SwiftUI for Web: Inspired from SwiftUI but For Web",
+  "description": "A declarative UI framework that brings Apple's SwiftUI paradigm to web development. Zero dependencies, ~52KB gzipped.",
   "main": "src/index.js",
+  "module": "src/index.js",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./src/*": "./src/*"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "node run-tests.js"
+    "test": "node run-tests.js",
+    "serve": "python3 -m http.server 8000 || python -m http.server 8000",
+    "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
+    "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",
+    "example:todo": "echo 'Open http://localhost:8000/Examples/TodoApp/' && npm run serve"
   },
   "repository": {
     "type": "git",
-    "url": "http://local_proxy@127.0.0.1:27444/git/ShawnBaek/SwiftUI-For-Web"
+    "url": "git+https://github.com/ShawnBaek/SwiftUI-For-Web.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "homepage": "https://github.com/ShawnBaek/SwiftUI-For-Web#readme",
+  "bugs": {
+    "url": "https://github.com/ShawnBaek/SwiftUI-For-Web/issues"
+  },
+  "keywords": [
+    "swiftui",
+    "ui-framework",
+    "declarative",
+    "web",
+    "javascript",
+    "frontend",
+    "mvvm",
+    "reactive",
+    "components",
+    "no-dependencies",
+    "zero-dependencies",
+    "vanilla-js"
+  ],
+  "author": "Shawn Baek",
+  "license": "ISC",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "sideEffects": false
 }
