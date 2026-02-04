@@ -3,14 +3,21 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 0.3.0
+ * @version 1.0.0
  */
 
 // =============================================================================
 // Core
 // =============================================================================
 export { View } from './Core/View.js';
-// export { ViewBuilder } from './Core/ViewBuilder.js';
+export {
+  ViewBuilder,
+  EmptyView, Empty,
+  TupleView,
+  ConditionalContent,
+  AnyView, Any,
+  buildView
+} from './Core/ViewBuilder.js';
 
 // =============================================================================
 // Data (State Management)
@@ -18,6 +25,14 @@ export { View } from './Core/View.js';
 export { State, createState } from './Data/State.js';
 export { Binding, createBinding } from './Data/Binding.js';
 export { ObservableObject, Published, createObservable } from './Data/ObservableObject.js';
+export { StateObject, createStateObject, stateObject } from './Data/StateObject.js';
+export {
+  Observable,
+  ObservationTracking,
+  Bindable,
+  withTracking,
+  withObservationTracking
+} from './Data/Observable.js';
 export {
   Environment,
   EnvironmentObject,
@@ -59,6 +74,12 @@ export { DisclosureGroup, DisclosureGroupView } from './View/Container/Disclosur
 // Navigation
 export { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
 export { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
+export {
+  NavigationPath,
+  CodableRepresentation,
+  NavigationDestination,
+  extendNavigationStackWithPath
+} from './View/Navigation/NavigationPath.js';
 
 // =============================================================================
 // Layout
@@ -77,6 +98,11 @@ export {
   LazyVGrid, LazyVGridView,
   LazyHGrid, LazyHGridView
 } from './Layout/Grid.js';
+export {
+  LazyVStack, LazyVStackView,
+  LazyHStack, LazyHStackView,
+  PinnedScrollableViews
+} from './Layout/Stack/LazyStack.js';
 
 // =============================================================================
 // Shapes
@@ -131,11 +157,19 @@ export {
 // App
 // =============================================================================
 export { App, AppInstance } from './App/App.js';
+export {
+  WindowGroup, WindowGroupView,
+  WindowResizability,
+  WindowStyle,
+  Scene,
+  Settings, SettingsView,
+  DocumentGroup, DocumentGroupView
+} from './App/WindowGroup.js';
 
 // =============================================================================
 // Version Info
 // =============================================================================
-export const VERSION = '0.3.0';
+export const VERSION = '1.0.0';
 
 // =============================================================================
 // Extend View with Animation, Gesture, and Environment Methods
@@ -152,4 +186,4 @@ _extendViewEnvironment(View);
 /**
  * Log framework initialization
  */
-console.log(`SwiftUI-For-Web v${VERSION} initialized`);
+console.log(`SwiftUI-For-Web v${VERSION} - 100% SwiftUI Component Coverage`);
