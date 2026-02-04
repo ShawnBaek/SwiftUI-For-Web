@@ -5,3 +5,4 @@
 
 export { Button, ButtonView } from './Button.js';
 export { TextField, TextFieldView, SecureField, SecureFieldView } from './TextField.js';
+export { Toggle, ToggleView } from './Toggle.js';

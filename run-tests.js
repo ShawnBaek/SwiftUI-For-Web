@@ -57,6 +57,7 @@ class MockElement {
     this.type = 'text';
     this.placeholder = '';
     this.value = '';
+    this.checked = false;
     this.autocapitalize = '';
     this.autocomplete = '';
     this._attributes = {};
@@ -494,6 +495,70 @@ async function runTests() {
         const field = SecureField('Password');
         const element = field._render();
         expect(element.type).toBe('password');
+      });
+    });
+
+    // Test Toggle
+    const { Toggle, ToggleView } = await import('./src/View/Control/Toggle.js');
+    describe('Toggle', () => {
+      it('should create a ToggleView instance', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        expect(toggle).toBeInstanceOf(ToggleView);
+      });
+
+      it('should accept label and binding', () => {
+        const state = new State(false);
+        const toggle = Toggle('Enable', state.binding);
+        expect(toggle._label).toBe('Enable');
+      });
+
+      it('should render a div for switch style', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+        expect(element.tagName).toBe('DIV');
+      });
+
+      it('should set data-view to Toggle', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+        expect(element.dataset.view).toBe('Toggle');
+      });
+
+      it('should update binding when clicked', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+
+        element.click();
+
+        expect(state.value).toBe(true);
+      });
+
+      it('should not toggle when disabled', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding).disabled();
+        const element = toggle._render();
+
+        element.click();
+
+        expect(state.value).toBe(false);
+      });
+
+      it('should render checkbox style', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding).toggleStyle('checkbox');
+        const element = toggle._render();
+        expect(element.tagName).toBe('LABEL');
+      });
+
+      it('should render button style', () => {
+        const state = new State(false);
+        const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+        const element = toggle._render();
+        expect(element.tagName).toBe('BUTTON');
       });
     });
 
