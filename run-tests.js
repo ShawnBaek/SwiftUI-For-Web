@@ -310,6 +310,70 @@ async function runTests() {
       });
     });
 
+    // Test ObservableObject
+    const { ObservableObject, Published, createObservable } = await import('./src/Data/ObservableObject.js');
+    describe('ObservableObject', () => {
+      it('should create an instance', () => {
+        const observable = new ObservableObject();
+        expect(observable).toBeInstanceOf(ObservableObject);
+      });
+
+      it('should define published properties', () => {
+        const observable = new ObservableObject();
+        observable.published('count', 0);
+        expect(observable.count).toBe(0);
+      });
+
+      it('should notify subscribers on change', () => {
+        const observable = new ObservableObject();
+        observable.published('count', 0);
+
+        let notified = false;
+        observable.subscribe(() => { notified = true; });
+        observable.count = 1;
+
+        expect(notified).toBe(true);
+      });
+
+      it('should provide binding for property', () => {
+        const observable = new ObservableObject();
+        observable.published('count', 42);
+        const binding = observable.binding('count');
+        expect(binding.value).toBe(42);
+      });
+
+      it('should update via binding', () => {
+        const observable = new ObservableObject();
+        observable.published('count', 0);
+        observable.binding('count').value = 100;
+        expect(observable.count).toBe(100);
+      });
+
+      it('should batch updates', () => {
+        const observable = new ObservableObject();
+        observable.published('a', 0);
+        observable.published('b', 0);
+
+        let notifications = 0;
+        observable.subscribe(() => { notifications++; });
+
+        observable.batch(() => {
+          observable.a = 1;
+          observable.b = 2;
+        });
+
+        expect(notifications).toBe(1);
+      });
+    });
+
+    describe('createObservable', () => {
+      it('should create observable with properties', () => {
+        const observable = createObservable({ name: 'John', age: 30 });
+        expect(observable.name).toBe('John');
+        expect(observable.age).toBe(30);
+      });
+    });
+
     // Test Color
     const { Color, ColorValue } = await import('./src/Graphic/Color.js');
     describe('Color', () => {

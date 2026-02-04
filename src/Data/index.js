@@ -5,3 +5,4 @@
 
 export { State, createState } from './State.js';
 export { Binding, createBinding } from './Binding.js';
+export { ObservableObject, Published, createObservable } from './ObservableObject.js';
