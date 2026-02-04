@@ -48,8 +48,8 @@ export { Text, TextView } from './View/Text.js';
 // =============================================================================
 // Graphics
 // =============================================================================
-// export { Color } from './Graphic/Color.js';
-// export { Font } from './Graphic/Font.js';
+export { Color, ColorValue } from './Graphic/Color.js';
+export { Font, FontValue } from './Graphic/Font.js';
 
 // =============================================================================
 // App
