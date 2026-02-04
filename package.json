@@ -5,16 +5,20 @@
   "description": "A declarative UI framework that brings Apple's SwiftUI paradigm to web development. Zero dependencies, ~52KB gzipped.",
   "main": "src/index.js",
   "module": "src/index.js",
+  "types": "src/index.d.ts",
   "exports": {
     ".": {
+      "types": "./src/index.d.ts",
       "import": "./src/index.js",
       "default": "./src/index.js"
     },
     "./core": {
+      "types": "./src/index.d.ts",
       "import": "./src/core.js",
       "default": "./src/core.js"
     },
     "./charts": {
+      "types": "./src/Charts/index.d.ts",
       "import": "./src/Charts/index.js",
       "default": "./src/Charts/index.js"
     },
