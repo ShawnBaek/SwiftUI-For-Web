@@ -84,12 +84,51 @@ export const LayoutDirection = {
 };
 
 /**
- * Size class values
+ * Size class values (matches SwiftUI)
+ *
+ * SwiftUI Size Class Reference:
+ * - compact: Constrained space (smaller devices, split-screen)
+ * - regular: Ample space (larger devices, full-screen)
+ *
+ * Web Mapping:
+ * - Mobile Portrait: compact width, regular height
+ * - Mobile Landscape: compact width, compact height
+ * - Tablet Portrait: regular width, regular height
+ * - Tablet Landscape: regular width, regular height
+ * - Desktop: regular width, regular height
  */
 export const UserInterfaceSizeClass = {
   compact: 'compact',
   regular: 'regular'
 };
+
+/**
+ * Device idiom (extension for web)
+ * Maps to SwiftUI's UIUserInterfaceIdiom
+ */
+export const UserInterfaceIdiom = {
+  phone: 'phone',     // Mobile devices (< 768px)
+  pad: 'pad',         // Tablet devices (768px - 1024px)
+  mac: 'mac',         // Desktop devices (> 1024px)
+  unspecified: 'unspecified'
+};
+
+/**
+ * Get current device idiom based on screen characteristics
+ * @returns {string} Device idiom
+ */
+export function currentDeviceIdiom() {
+  const width = window.innerWidth;
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+  if (width < 768) {
+    return UserInterfaceIdiom.phone;
+  } else if (width < 1024 || (hasTouch && width < 1366)) {
+    return UserInterfaceIdiom.pad;
+  } else {
+    return UserInterfaceIdiom.mac;
+  }
+}
 
 /**
  * Environment - Global environment for storing values
@@ -148,23 +187,58 @@ class EnvironmentStore {
 
   /**
    * Update size classes based on viewport
+   * Follows SwiftUI's size class behavior:
+   *
+   * SwiftUI Reference (approximate):
+   * - iPhone Portrait: compact width, regular height
+   * - iPhone Landscape (standard): compact width, compact height
+   * - iPhone Landscape (Plus/Max): regular width, compact height
+   * - iPad (all orientations): regular width, regular height
+   * - iPad Split View (1/3): compact width, regular height
+   * - iPad Split View (1/2+): regular width, regular height
+   * - Mac: regular width, regular height
+   *
+   * Web Breakpoints:
+   * - Horizontal: compact < 768px (mobile), regular >= 768px (tablet/desktop)
+   * - Vertical: compact < 480px (landscape phone), regular >= 480px
+   *
    * @private
    */
   _updateSizeClasses() {
     const width = window.innerWidth;
     const height = window.innerHeight;
+    const isLandscape = width > height;
 
-    // Horizontal: compact < 600px, regular >= 600px
-    this._values.set(
-      EnvironmentValues.horizontalSizeClass,
-      width < 600 ? UserInterfaceSizeClass.compact : UserInterfaceSizeClass.regular
-    );
+    // Horizontal size class
+    // compact: phone-like width (< 768px)
+    // regular: tablet/desktop width (>= 768px)
+    const horizontalClass = width < 768
+      ? UserInterfaceSizeClass.compact
+      : UserInterfaceSizeClass.regular;
 
-    // Vertical: compact < 400px, regular >= 400px
-    this._values.set(
-      EnvironmentValues.verticalSizeClass,
-      height < 400 ? UserInterfaceSizeClass.compact : UserInterfaceSizeClass.regular
-    );
+    // Vertical size class
+    // compact: landscape phone-like height (< 480px)
+    // regular: portrait or tablet/desktop height (>= 480px)
+    const verticalClass = height < 480
+      ? UserInterfaceSizeClass.compact
+      : UserInterfaceSizeClass.regular;
+
+    const oldHorizontal = this._values.get(EnvironmentValues.horizontalSizeClass);
+    const oldVertical = this._values.get(EnvironmentValues.verticalSizeClass);
+
+    this._values.set(EnvironmentValues.horizontalSizeClass, horizontalClass);
+    this._values.set(EnvironmentValues.verticalSizeClass, verticalClass);
+
+    // Also update device idiom
+    this._values.set('deviceIdiom', currentDeviceIdiom());
+
+    // Notify if changed
+    if (oldHorizontal !== horizontalClass) {
+      this._notifySubscribers(EnvironmentValues.horizontalSizeClass, horizontalClass, oldHorizontal);
+    }
+    if (oldVertical !== verticalClass) {
+      this._notifySubscribers(EnvironmentValues.verticalSizeClass, verticalClass, oldVertical);
+    }
   }
 
   /**

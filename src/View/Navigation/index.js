@@ -3,4 +3,6 @@
  */
 
 export { NavigationStack, NavigationLink, BackButton } from './NavigationStack.js';
+export { NavigationSplitView, NavigationSplitViewVisibility } from './NavigationSplitView.js';
+export { NavigationPath } from './NavigationPath.js';
 export { TabView, TabViewView, TabViewStyle } from './TabView.js';

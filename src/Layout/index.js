@@ -10,3 +10,4 @@ export { Spacer, SpacerView } from './Spacer.js';
 export { Divider, DividerView } from './Divider.js';
 export { GeometryReader, GeometryReaderView, GeometryProxy } from './GeometryReader.js';
 export { Alignment, HorizontalAlignment, VerticalAlignment, alignmentToCSS, alignmentToPosition } from './Alignment.js';
+export { ViewThatFits, Axis } from './ViewThatFits.js';
