@@ -151,6 +151,31 @@ import { VStack, Text, Button, App } from './src/index.js';
 | Vue 3 | ~33 KB |
 | Angular | ~130 KB |
 
+## Why SwiftUI-For-Web?
+
+| | SwiftUI-For-Web | React |
+|---|---|---|
+| **Bundle Size** | ~52KB | ~136KB+ |
+| **Build Step** | None | Required |
+| **Dependencies** | Zero | 100+ npm packages |
+| **Setup Time** | Instant | Minutes to hours |
+| **iOS Developer Friendly** | Native SwiftUI syntax | New paradigm to learn |
+| **TypeScript** | No | Yes |
+| **SSR/SEO** | No | Yes (Next.js) |
+| **Ecosystem** | Small | Massive |
+
+**SwiftUI-For-Web is best for:**
+- Quick prototypes without build tooling
+- iOS/SwiftUI developers moving to web
+- Projects requiring zero dependencies
+- Learning declarative UI patterns
+
+**React is best for:**
+- Large-scale production apps
+- Teams needing SSR/SEO (Next.js)
+- Projects requiring extensive ecosystem
+- TypeScript-first development
+
 ## Components (84 Total)
 
 ### Layout
