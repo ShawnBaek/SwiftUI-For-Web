@@ -35,6 +35,15 @@ class MockDocumentFragment {
   }
 }
 
+class MockEvent {
+  constructor(type, options = {}) {
+    this.type = type;
+    this.target = options.target || null;
+    this.preventDefault = () => {};
+    this.stopPropagation = () => {};
+  }
+}
+
 class MockElement {
   constructor(tagName) {
     this.tagName = tagName.toUpperCase();
@@ -44,6 +53,14 @@ class MockElement {
     this.textContent = '';
     this.innerHTML = '';
     this.disabled = false;
+    // Input-specific properties
+    this.type = 'text';
+    this.placeholder = '';
+    this.value = '';
+    this.checked = false;
+    this.autocapitalize = '';
+    this.autocomplete = '';
+    this._attributes = {};
     this.classList = {
       _classes: new Set(),
       add(c) { this._classes.add(c); },
@@ -51,6 +68,14 @@ class MockElement {
       contains(c) { return this._classes.has(c); }
     };
     this._eventListeners = {};
+  }
+
+  setAttribute(name, value) {
+    this._attributes[name] = value;
+  }
+
+  getAttribute(name) {
+    return this._attributes[name] || null;
   }
 
   appendChild(child) {
@@ -76,6 +101,13 @@ class MockElement {
     }
   }
 
+  dispatchEvent(event) {
+    event.target = this;
+    if (this._eventListeners[event.type]) {
+      this._eventListeners[event.type].forEach(h => h(event));
+    }
+  }
+
   querySelector(selector) {
     // Simple selector implementation
     for (const child of this.children) {
@@ -96,6 +128,8 @@ global.HTMLElement = MockElement;
 global.HTMLButtonElement = MockElement;
 global.HTMLDivElement = MockElement;
 global.HTMLSpanElement = MockElement;
+global.HTMLInputElement = MockElement;
+global.Event = MockEvent;
 global.console = console;
 
 // Test tracking
@@ -387,6 +421,144 @@ async function runTests() {
         const forEach = ForEach(['a', 'b', 'c'], item => Text(item));
         const element = forEach._render();
         expect(element.children.length).toBe(3);
+      });
+    });
+
+    // Test TextField
+    const { TextField, TextFieldView, SecureField, SecureFieldView } = await import('./src/View/Control/TextField.js');
+    describe('TextField', () => {
+      it('should create a TextFieldView instance', () => {
+        const field = TextField('Placeholder');
+        expect(field).toBeInstanceOf(TextFieldView);
+      });
+
+      it('should set placeholder', () => {
+        const field = TextField('Enter name');
+        expect(field._placeholder).toBe('Enter name');
+      });
+
+      it('should render an input element', () => {
+        const field = TextField('Placeholder');
+        const element = field._render();
+        expect(element.tagName).toBe('INPUT');
+      });
+
+      it('should set data-view to TextField', () => {
+        const field = TextField('Placeholder');
+        const element = field._render();
+        expect(element.dataset.view).toBe('TextField');
+      });
+
+      it('should set placeholder attribute', () => {
+        const field = TextField('Enter name');
+        const element = field._render();
+        expect(element.placeholder).toBe('Enter name');
+      });
+
+      it('should update binding when input changes', () => {
+        const state = new State('');
+        const field = TextField('Placeholder', state.binding);
+        const element = field._render();
+
+        element.value = 'New Value';
+        element.dispatchEvent(new Event('input'));
+
+        expect(state.value).toBe('New Value');
+      });
+
+      it('should disable the input', () => {
+        const field = TextField('Placeholder').disabled();
+        const element = field._render();
+        expect(element.disabled).toBe(true);
+      });
+
+      it('should apply roundedBorder style', () => {
+        const field = TextField('Placeholder').textFieldStyle('roundedBorder');
+        const element = field._render();
+        expect(element.style.borderRadius).toBe('6px');
+      });
+
+      it('should set input type for email keyboard', () => {
+        const field = TextField('Email').keyboardType('email');
+        const element = field._render();
+        expect(element.type).toBe('email');
+      });
+    });
+
+    describe('SecureField', () => {
+      it('should create a SecureFieldView instance', () => {
+        const field = SecureField('Password');
+        expect(field).toBeInstanceOf(SecureFieldView);
+      });
+
+      it('should render input with type password', () => {
+        const field = SecureField('Password');
+        const element = field._render();
+        expect(element.type).toBe('password');
+      });
+    });
+
+    // Test Toggle
+    const { Toggle, ToggleView } = await import('./src/View/Control/Toggle.js');
+    describe('Toggle', () => {
+      it('should create a ToggleView instance', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        expect(toggle).toBeInstanceOf(ToggleView);
+      });
+
+      it('should accept label and binding', () => {
+        const state = new State(false);
+        const toggle = Toggle('Enable', state.binding);
+        expect(toggle._label).toBe('Enable');
+      });
+
+      it('should render a div for switch style', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+        expect(element.tagName).toBe('DIV');
+      });
+
+      it('should set data-view to Toggle', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+        expect(element.dataset.view).toBe('Toggle');
+      });
+
+      it('should update binding when clicked', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding);
+        const element = toggle._render();
+
+        element.click();
+
+        expect(state.value).toBe(true);
+      });
+
+      it('should not toggle when disabled', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding).disabled();
+        const element = toggle._render();
+
+        element.click();
+
+        expect(state.value).toBe(false);
+      });
+
+      it('should render checkbox style', () => {
+        const state = new State(false);
+        const toggle = Toggle(state.binding).toggleStyle('checkbox');
+        const element = toggle._render();
+        expect(element.tagName).toBe('LABEL');
+      });
+
+      it('should render button style', () => {
+        const state = new State(false);
+        const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+        const element = toggle._render();
+        expect(element.tagName).toBe('BUTTON');
       });
     });
 
