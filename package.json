@@ -1,0 +1,17 @@
+{
+  "name": "swiftui-for-web",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "SwiftUI for Web: Inspired from SwiftUI but For Web",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node run-tests.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:27444/git/ShawnBaek/SwiftUI-For-Web"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
