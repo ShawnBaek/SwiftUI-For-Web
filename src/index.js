@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 0.1.0
+ * @version 0.2.0
  */
 
 // =============================================================================
@@ -24,22 +24,29 @@ export { ObservableObject, Published, createObservable } from './Data/Observable
 // =============================================================================
 export { Text, TextView } from './View/Text.js';
 export { Image, ImageView, ContentMode } from './View/Image.js';
+export { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
 
 // Controls
 export { Button, ButtonView } from './View/Control/Button.js';
 export { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
 export { Toggle, ToggleView } from './View/Control/Toggle.js';
-// export { Slider } from './View/Control/Slider.js';
+export { Slider, SliderView } from './View/Control/Slider.js';
+export { Stepper, StepperView } from './View/Control/Stepper.js';
+export { Picker, PickerView, PickerStyle } from './View/Control/Picker.js';
 
 // Lists
-// export { List } from './View/List/List.js';
+export { List, ListView, ListStyle } from './View/List/List.js';
 export { ForEach, ForEachView, Range } from './View/List/ForEach.js';
 
 // Containers
 export { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
+export { Group, GroupView } from './View/Container/Group.js';
+export { Form, FormView, FormStyle, Section, SectionView } from './View/Container/Form.js';
+export { DisclosureGroup, DisclosureGroupView } from './View/Container/DisclosureGroup.js';
 
 // Navigation
 export { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
+export { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
 
 // =============================================================================
 // Layout
@@ -48,8 +55,23 @@ export { VStack, VStackView } from './Layout/Stack/VStack.js';
 export { HStack, HStackView } from './Layout/Stack/HStack.js';
 export { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
 export { Spacer, SpacerView } from './Layout/Spacer.js';
-// export { Divider } from './Layout/Divider.js';
+export { Divider, DividerView } from './Layout/Divider.js';
+export { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
 export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
+
+// =============================================================================
+// Shapes
+// =============================================================================
+export {
+  ShapeView,
+  Rectangle, RectangleView,
+  RoundedRectangle, RoundedRectangleView,
+  Circle, CircleView,
+  Ellipse, EllipseView,
+  Capsule, CapsuleView,
+  Path, PathView,
+  UnevenRoundedRectangle, UnevenRoundedRectangleView
+} from './Shape/Shape.js';
 
 // =============================================================================
 // Graphics
@@ -74,6 +96,19 @@ export {
 } from './Animation/Animation.js';
 
 // =============================================================================
+// Gestures
+// =============================================================================
+export {
+  GestureBase,
+  TapGesture, TapGestureRecognizer,
+  LongPressGesture, LongPressGestureRecognizer,
+  DragGesture, DragGestureRecognizer,
+  MagnificationGesture, MagnificationGestureRecognizer,
+  RotationGesture, RotationGestureRecognizer,
+  extendViewWithGestures
+} from './Gesture/Gesture.js';
+
+// =============================================================================
 // App
 // =============================================================================
 export { App, AppInstance } from './App/App.js';
@@ -81,14 +116,17 @@ export { App, AppInstance } from './App/App.js';
 // =============================================================================
 // Version Info
 // =============================================================================
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 // =============================================================================
-// Extend View with Animation Methods
+// Extend View with Animation and Gesture Methods
 // =============================================================================
 import { View } from './Core/View.js';
-import { extendViewWithAnimation as _extendView } from './Animation/Animation.js';
-_extendView(View);
+import { extendViewWithAnimation as _extendViewAnimation } from './Animation/Animation.js';
+import { extendViewWithGestures as _extendViewGestures } from './Gesture/Gesture.js';
+
+_extendViewAnimation(View);
+_extendViewGestures(View);
 
 /**
  * Log framework initialization
