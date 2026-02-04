@@ -63,6 +63,7 @@ This project is in **active development** with extensive functionality complete.
 | **Layout** | Grid | 🟢 Done | P2 | CSS Grid |
 | **Layout** | GridRow | 🟢 Done | P2 | Grid row container |
 | **Layout** | GeometryReader | 🟢 Done | P2 | Parent size access |
+| **Layout** | ViewThatFits | 🟢 Done | P2 | Adaptive view selection |
 | **View** | Text | 🟢 Done | P0 | Full modifier support |
 | **View** | Image | 🟢 Done | P1 | Img element with modifiers |
 | **View** | Label | 🟢 Done | P2 | Icon + text |
@@ -84,6 +85,7 @@ This project is in **active development** with extensive functionality complete.
 | **Container** | Form | 🟢 Done | P2 | Form container with sections |
 | **Container** | DisclosureGroup | 🟢 Done | P2 | Expandable sections |
 | **Navigation** | NavigationStack | 🟢 Done | P2 | Router-based nav |
+| **Navigation** | NavigationSplitView | 🟢 Done | P2 | Adaptive multi-column nav |
 | **Navigation** | NavigationLink | 🟢 Done | P2 | Nav trigger |
 | **Navigation** | NavigationPath | 🟢 Done | P2 | Nav state |
 | **Navigation** | TabView | 🟢 Done | P2 | Tab bar and page styles |
@@ -140,12 +142,12 @@ This project is in **active development** with extensive functionality complete.
 | Category | Done | Planned | Total |
 |----------|------|---------|-------|
 | Core | 3 | 0 | 3 |
-| Layout | 12 | 0 | 12 |
+| Layout | 13 | 0 | 13 |
 | View | 3 | 0 | 3 |
 | Control | 10 | 0 | 10 |
 | List | 3 | 0 | 3 |
 | Container | 4 | 0 | 4 |
-| Navigation | 4 | 0 | 4 |
+| Navigation | 5 | 0 | 5 |
 | State | 8 | 0 | 8 |
 | Modifier | 13 | 0 | 13 |
 | Shape | 6 | 0 | 6 |
@@ -153,7 +155,7 @@ This project is in **active development** with extensive functionality complete.
 | Animation | 4 | 0 | 4 |
 | Gesture | 5 | 0 | 5 |
 | App | 2 | 0 | 2 |
-| **Total** | **82** | **0** | **82** |
+| **Total** | **84** | **0** | **84** |
 
 **Progress: 100% of SwiftUI components implemented** 🎉
 

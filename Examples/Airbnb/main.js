@@ -17,12 +17,14 @@ import {
   Text, Image, Button, TextField, Toggle, Slider, Stepper, Picker,
   ScrollView, LazyVGrid, GridItem, ForEach, List, Group,
   NavigationStack, NavigationLink, TabView,
+  NavigationSplitView, ViewThatFits,
   Form, Section, DisclosureGroup,
   Rectangle, RoundedRectangle, Circle, Capsule,
   Color, Font, LinearGradient,
   Animation, withAnimation, Namespace,
   GeometryReader, DatePicker,
-  Environment, ColorScheme
+  Environment, EnvironmentValues, ColorScheme,
+  UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom
 } from '../../src/index.js';
 
 import { api, categories, amenitiesList, propertyTypes } from './mockApi.js';
@@ -59,7 +61,6 @@ class AppViewModel extends ObservableObject {
   @Published showBooking = false;
   @Published currentPage = 1;
   @Published hasMore = true;
-  @Published screenWidth = window.innerWidth;
   @Published favorites = new Set();
 
   // Categories
@@ -68,7 +69,7 @@ class AppViewModel extends ObservableObject {
   constructor() {
     super();
     this.init();
-    this.setupResizeListener();
+    this._setupEnvironmentListeners();
   }
 
   async init() {
@@ -82,30 +83,90 @@ class AppViewModel extends ObservableObject {
     await this.loadListings();
   }
 
-  setupResizeListener() {
-    window.addEventListener('resize', () => {
-      this.screenWidth = window.innerWidth;
+  /**
+   * Setup listeners for SwiftUI-style Environment changes
+   * Uses horizontalSizeClass and verticalSizeClass like SwiftUI
+   * @private
+   */
+  _setupEnvironmentListeners() {
+    // Subscribe to size class changes from Environment
+    Environment.subscribe(EnvironmentValues.horizontalSizeClass, () => {
+      // Trigger re-render when size class changes
+      this._notifyAll();
     });
   }
 
+  /**
+   * Get the horizontal size class from Environment (matches SwiftUI @Environment(\.horizontalSizeClass))
+   * @returns {string} 'compact' or 'regular'
+   */
+  get horizontalSizeClass() {
+    return Environment.get(EnvironmentValues.horizontalSizeClass);
+  }
+
+  /**
+   * Get the vertical size class from Environment (matches SwiftUI @Environment(\.verticalSizeClass))
+   * @returns {string} 'compact' or 'regular'
+   */
+  get verticalSizeClass() {
+    return Environment.get(EnvironmentValues.verticalSizeClass);
+  }
+
+  /**
+   * Get current device idiom (matches SwiftUI UIDevice.current.userInterfaceIdiom)
+   * @returns {string} 'phone', 'pad', or 'mac'
+   */
+  get deviceIdiom() {
+    return currentDeviceIdiom();
+  }
+
+  /**
+   * Check if in compact horizontal size class (like iPhone portrait)
+   * Matches: if horizontalSizeClass == .compact
+   */
   get isMobile() {
-    return this.screenWidth < 744;
+    return this.horizontalSizeClass === UserInterfaceSizeClass.compact;
   }
 
+  /**
+   * Check if in regular horizontal but device is pad
+   * Matches: if horizontalSizeClass == .regular && idiom == .pad
+   */
   get isTablet() {
-    return this.screenWidth >= 744 && this.screenWidth < 1128;
+    return this.horizontalSizeClass === UserInterfaceSizeClass.regular &&
+           this.deviceIdiom === UserInterfaceIdiom.pad;
   }
 
+  /**
+   * Check if in regular horizontal and device is mac (desktop)
+   * Matches: if horizontalSizeClass == .regular && idiom == .mac
+   */
   get isDesktop() {
-    return this.screenWidth >= 1128;
+    return this.horizontalSizeClass === UserInterfaceSizeClass.regular &&
+           this.deviceIdiom === UserInterfaceIdiom.mac;
   }
 
+  /**
+   * Get grid columns based on size class and device idiom
+   * Similar to SwiftUI's adaptive grid with columns that adjust to available space
+   */
   get gridColumns() {
-    if (this.isMobile) return 1;
-    if (this.isTablet) return 2;
-    if (this.screenWidth < 1440) return 3;
-    if (this.screenWidth < 1920) return 4;
-    return 5;
+    // Compact horizontal = phone-like = 1 column
+    if (this.horizontalSizeClass === UserInterfaceSizeClass.compact) {
+      return 1;
+    }
+
+    // Regular horizontal, check device idiom for more columns
+    const width = window.innerWidth;
+    if (this.deviceIdiom === UserInterfaceIdiom.pad) {
+      return width >= 1024 ? 3 : 2;
+    }
+
+    // Desktop (mac idiom) - more columns based on width
+    if (width < 1440) return 3;
+    if (width < 1920) return 4;
+    if (width < 2560) return 5;
+    return 6;
   }
 
   async loadListings(reset = true) {
@@ -210,6 +271,34 @@ const vm = new AppViewModel();
 // =============================================================================
 // Components
 // =============================================================================
+
+/**
+ * SwiftUI-style Adaptive Layout Pattern
+ *
+ * This app demonstrates SwiftUI's approach to adaptive layouts using:
+ *
+ * 1. @Environment(\.horizontalSizeClass) - Detect compact vs regular width
+ *    - compact: Phone-like width (< 768px)
+ *    - regular: Tablet/Desktop width (>= 768px)
+ *
+ * 2. @Environment(\.verticalSizeClass) - Detect compact vs regular height
+ *    - compact: Landscape phone-like height (< 480px)
+ *    - regular: Portrait or larger height (>= 480px)
+ *
+ * 3. UserInterfaceIdiom - Device type detection
+ *    - phone: Mobile devices (< 768px)
+ *    - pad: Tablet devices (768px - 1024px)
+ *    - mac: Desktop devices (> 1024px)
+ *
+ * 4. ViewThatFits - Automatically select the best fitting layout
+ *
+ * 5. NavigationSplitView - Adaptive sidebar/detail layout
+ *
+ * Layout Decision Tree (like SwiftUI):
+ * - horizontalSizeClass == .compact -> Mobile layout (single column)
+ * - horizontalSizeClass == .regular && idiom == .pad -> Tablet layout (2 columns)
+ * - horizontalSizeClass == .regular && idiom == .mac -> Desktop layout (4-6 columns)
+ */
 
 // Logo Component
 function Logo() {
@@ -389,81 +478,155 @@ function SearchBarMobile() {
   });
 }
 
-// Header Component
-function Header() {
-  return VStack({ spacing: 0 },
-    HStack({ spacing: 16 },
-      // Logo (hidden on mobile)
-      vm.isMobile ? null : Logo(),
+/**
+ * Adaptive Search Bar - Uses ViewThatFits pattern like SwiftUI
+ *
+ * SwiftUI equivalent:
+ * ```swift
+ * ViewThatFits(in: .horizontal) {
+ *   SearchBarDesktop()  // Shown when space is available
+ *   SearchBarMobile()   // Fallback for compact width
+ * }
+ * ```
+ *
+ * This component automatically selects the appropriate search bar
+ * based on available horizontal space, just like SwiftUI's ViewThatFits.
+ */
+function AdaptiveSearchBar() {
+  return ViewThatFits({ in: 'horizontal' },
+    // Wide layout - Desktop search bar with full options
+    SearchBarDesktop(),
+    // Compact layout - Mobile search bar
+    SearchBarMobile()
+  );
+}
 
-      Spacer(),
+/**
+ * Adaptive Header Actions - Right side of header
+ * Only shown when horizontal size class is regular (tablet/desktop)
+ */
+function HeaderActions() {
+  // Only render on regular horizontal size class
+  if (vm.horizontalSizeClass === UserInterfaceSizeClass.compact) {
+    return null;
+  }
 
-      // Search bar
-      vm.isDesktop ? SearchBarDesktop() : null,
+  return HStack({ spacing: 8 },
+    Button(
+      Text('Become a Host')
+        .font(Font.system(14, Font.Weight.medium))
+        .foregroundColor(Color.hex('#222222')),
+      () => {}
+    )
+    .modifier({
+      apply(el) {
+        el.style.background = 'transparent';
+        el.style.border = 'none';
+        el.style.padding = '10px 12px';
+        el.style.borderRadius = '22px';
+        el.style.cursor = 'pointer';
+        el.style.transition = 'background-color 0.2s';
+        el.addEventListener('mouseenter', () => {
+          el.style.backgroundColor = '#F7F7F7';
+        });
+        el.addEventListener('mouseleave', () => {
+          el.style.backgroundColor = 'transparent';
+        });
+      }
+    }),
 
-      Spacer(),
-
-      // Right side actions (hidden on mobile)
-      vm.isMobile ? null : HStack({ spacing: 8 },
-        Button(
-          Text('Become a Host')
-            .font(Font.system(14, Font.Weight.medium))
-            .foregroundColor(Color.hex('#222222')),
-          () => {}
-        )
+    // User menu
+    HStack({ spacing: 12 },
+      Text('☰').font(Font.system(14)),
+      Circle()
+        .fill(Color.hex('#717171'))
+        .frame({ width: 30, height: 30 })
         .modifier({
           apply(el) {
-            el.style.background = 'transparent';
-            el.style.border = 'none';
-            el.style.padding = '10px 12px';
-            el.style.borderRadius = '22px';
-            el.style.cursor = 'pointer';
-            el.style.transition = 'background-color 0.2s';
-            el.addEventListener('mouseenter', () => {
-              el.style.backgroundColor = '#F7F7F7';
-            });
-            el.addEventListener('mouseleave', () => {
-              el.style.backgroundColor = 'transparent';
-            });
-          }
-        }),
-
-        // User menu
-        HStack({ spacing: 12 },
-          Text('☰').font(Font.system(14)),
-          Circle()
-            .fill(Color.hex('#717171'))
-            .frame({ width: 30, height: 30 })
-            .modifier({
-              apply(el) {
-                el.innerHTML = '<span style="color: white; font-size: 16px;">👤</span>';
-                el.style.display = 'flex';
-                el.style.alignItems = 'center';
-                el.style.justifyContent = 'center';
-              }
-            })
-        )
-        .padding({ horizontal: 12, vertical: 6 })
-        .modifier({
-          apply(el) {
-            el.style.border = '1px solid #DDDDDD';
-            el.style.borderRadius = '22px';
-            el.style.cursor = 'pointer';
-            el.style.transition = 'box-shadow 0.2s';
-            el.addEventListener('mouseenter', () => {
-              el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-            });
-            el.addEventListener('mouseleave', () => {
-              el.style.boxShadow = 'none';
-            });
+            el.innerHTML = '<span style="color: white; font-size: 16px;">👤</span>';
+            el.style.display = 'flex';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'center';
           }
         })
-      )
     )
-    .padding({ horizontal: vm.isMobile ? 16 : 24, vertical: 16 }),
+    .padding({ horizontal: 12, vertical: 6 })
+    .modifier({
+      apply(el) {
+        el.style.border = '1px solid #DDDDDD';
+        el.style.borderRadius = '22px';
+        el.style.cursor = 'pointer';
+        el.style.transition = 'box-shadow 0.2s';
+        el.addEventListener('mouseenter', () => {
+          el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        });
+        el.addEventListener('mouseleave', () => {
+          el.style.boxShadow = 'none';
+        });
+      }
+    })
+  );
+}
 
-    // Mobile search bar
-    vm.isMobile || vm.isTablet ?
+/**
+ * Header Component - Adaptive layout using SwiftUI patterns
+ *
+ * SwiftUI equivalent structure:
+ * ```swift
+ * struct Header: View {
+ *   @Environment(\.horizontalSizeClass) var horizontalSizeClass
+ *
+ *   var body: some View {
+ *     VStack(spacing: 0) {
+ *       HStack {
+ *         if horizontalSizeClass == .regular {
+ *           Logo()
+ *         }
+ *         Spacer()
+ *         if horizontalSizeClass == .regular {
+ *           SearchBarDesktop()
+ *         }
+ *         Spacer()
+ *         if horizontalSizeClass == .regular {
+ *           HeaderActions()
+ *         }
+ *       }
+ *       if horizontalSizeClass == .compact {
+ *         SearchBarMobile()
+ *       }
+ *       Divider()
+ *     }
+ *   }
+ * }
+ * ```
+ */
+function Header() {
+  // Read size class from Environment (like @Environment(\.horizontalSizeClass))
+  const isCompact = vm.horizontalSizeClass === UserInterfaceSizeClass.compact;
+  const isRegular = vm.horizontalSizeClass === UserInterfaceSizeClass.regular;
+
+  return VStack({ spacing: 0 },
+    HStack({ spacing: 16 },
+      // Logo - only shown when horizontalSizeClass == .regular
+      isRegular ? Logo() : null,
+
+      Spacer(),
+
+      // Search bar - Desktop version only for regular + mac idiom
+      (isRegular && vm.deviceIdiom === UserInterfaceIdiom.mac) ? SearchBarDesktop() : null,
+
+      Spacer(),
+
+      // Right side actions - only shown when horizontalSizeClass == .regular
+      HeaderActions()
+    )
+    .padding({
+      horizontal: isCompact ? 16 : 24,
+      vertical: 16
+    }),
+
+    // Mobile/Tablet search bar - shown when compact OR tablet idiom
+    (isCompact || vm.deviceIdiom === UserInterfaceIdiom.pad) ?
       VStack({ spacing: 0 },
         SearchBarMobile()
       )

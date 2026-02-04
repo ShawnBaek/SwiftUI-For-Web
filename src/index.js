@@ -40,6 +40,8 @@ export {
   ColorScheme,
   LayoutDirection,
   UserInterfaceSizeClass,
+  UserInterfaceIdiom,
+  currentDeviceIdiom,
   extendViewWithEnvironment
 } from './Data/Environment.js';
 
@@ -73,6 +75,7 @@ export { DisclosureGroup, DisclosureGroupView } from './View/Container/Disclosur
 
 // Navigation
 export { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
+export { NavigationSplitView, NavigationSplitViewVisibility } from './View/Navigation/NavigationSplitView.js';
 export { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
 export {
   NavigationPath,
@@ -103,6 +106,7 @@ export {
   LazyHStack, LazyHStackView,
   PinnedScrollableViews
 } from './Layout/Stack/LazyStack.js';
+export { ViewThatFits, Axis as ViewThatFitsAxis } from './Layout/ViewThatFits.js';
 
 // =============================================================================
 // Shapes
