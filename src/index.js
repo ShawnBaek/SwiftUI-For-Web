@@ -28,7 +28,7 @@ export { Text, TextView } from './View/Text.js';
 
 // Controls
 export { Button, ButtonView } from './View/Control/Button.js';
-// export { TextField } from './View/Control/TextField.js';
+export { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
 // export { Toggle } from './View/Control/Toggle.js';
 // export { Slider } from './View/Control/Slider.js';
 
