@@ -34,7 +34,7 @@ export { Button, ButtonView } from './View/Control/Button.js';
 
 // Lists
 // export { List } from './View/List/List.js';
-// export { ForEach } from './View/List/ForEach.js';
+export { ForEach, ForEachView, Range } from './View/List/ForEach.js';
 
 // =============================================================================
 // Layout
