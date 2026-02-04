@@ -11,21 +11,24 @@
  * - Animations and gestures
  */
 
-import {
-  View, App, State, Binding, ObservableObject, Published,
+// Simple import - just one line!
+import SwiftUI from '../../src/index.js';
+
+// Destructure what you need
+const {
+  App, ObservableObject, Published,
   VStack, HStack, ZStack, Spacer, Divider,
-  Text, Image, Button, TextField, Toggle, Slider, Stepper, Picker,
-  ScrollView, LazyVGrid, GridItem, ForEach, List, Group,
-  NavigationStack, NavigationLink, TabView,
+  Text, Button, TextField, Toggle, Slider, Stepper,
+  ScrollView, LazyVGrid, GridItem, ForEach,
   NavigationSplitView, ViewThatFits,
-  Form, Section, DisclosureGroup,
+  Form, Section,
   Rectangle, RoundedRectangle, Circle, Capsule,
   Color, Font, LinearGradient,
-  Animation, withAnimation, Namespace,
-  GeometryReader, DatePicker,
-  Environment, EnvironmentValues, ColorScheme,
+  withAnimation,
+  GeometryReader,
+  Environment, EnvironmentValues,
   UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom
-} from '../../src/index.js';
+} = SwiftUI;
 
 import { api, categories, amenitiesList, propertyTypes } from './mockApi.js';
 

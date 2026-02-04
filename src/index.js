@@ -4,13 +4,22 @@
  *
  * @module SwiftUI-For-Web
  * @version 1.0.0
+ *
+ * @example
+ * // Simple import (recommended)
+ * import SwiftUI from 'swiftui-for-web';
+ * const { VStack, Text, Button, App } = SwiftUI;
+ *
+ * @example
+ * // Named imports (also supported)
+ * import { VStack, Text, Button, App } from 'swiftui-for-web';
  */
 
 // =============================================================================
 // Core
 // =============================================================================
-export { View } from './Core/View.js';
-export {
+import { View } from './Core/View.js';
+import {
   ViewBuilder,
   EmptyView, Empty,
   TupleView,
@@ -22,18 +31,18 @@ export {
 // =============================================================================
 // Data (State Management)
 // =============================================================================
-export { State, createState } from './Data/State.js';
-export { Binding, createBinding } from './Data/Binding.js';
-export { ObservableObject, Published, createObservable } from './Data/ObservableObject.js';
-export { StateObject, createStateObject, stateObject } from './Data/StateObject.js';
-export {
+import { State, createState } from './Data/State.js';
+import { Binding, createBinding } from './Data/Binding.js';
+import { ObservableObject, Published, createObservable } from './Data/ObservableObject.js';
+import { StateObject, createStateObject, stateObject } from './Data/StateObject.js';
+import {
   Observable,
   ObservationTracking,
   Bindable,
   withTracking,
   withObservationTracking
 } from './Data/Observable.js';
-export {
+import {
   Environment,
   EnvironmentObject,
   EnvironmentValues,
@@ -48,36 +57,36 @@ export {
 // =============================================================================
 // View Components
 // =============================================================================
-export { Text, TextView } from './View/Text.js';
-export { Image, ImageView, ContentMode } from './View/Image.js';
-export { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
+import { Text, TextView } from './View/Text.js';
+import { Image, ImageView, ContentMode } from './View/Image.js';
+import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
 
 // Controls
-export { Button, ButtonView } from './View/Control/Button.js';
-export { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
-export { Toggle, ToggleView } from './View/Control/Toggle.js';
-export { Slider, SliderView } from './View/Control/Slider.js';
-export { Stepper, StepperView } from './View/Control/Stepper.js';
-export { Picker, PickerView, PickerStyle } from './View/Control/Picker.js';
-export { Menu, MenuView } from './View/Control/Menu.js';
-export { DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
-export { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
+import { Button, ButtonView } from './View/Control/Button.js';
+import { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
+import { Toggle, ToggleView } from './View/Control/Toggle.js';
+import { Slider, SliderView } from './View/Control/Slider.js';
+import { Stepper, StepperView } from './View/Control/Stepper.js';
+import { Picker, PickerView, PickerStyle } from './View/Control/Picker.js';
+import { Menu, MenuView } from './View/Control/Menu.js';
+import { DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
+import { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
 
 // Lists
-export { List, ListView, ListStyle } from './View/List/List.js';
-export { ForEach, ForEachView, Range } from './View/List/ForEach.js';
+import { List, ListView, ListStyle } from './View/List/List.js';
+import { ForEach, ForEachView, Range } from './View/List/ForEach.js';
 
 // Containers
-export { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
-export { Group, GroupView } from './View/Container/Group.js';
-export { Form, FormView, FormStyle, Section, SectionView } from './View/Container/Form.js';
-export { DisclosureGroup, DisclosureGroupView } from './View/Container/DisclosureGroup.js';
+import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
+import { Group, GroupView } from './View/Container/Group.js';
+import { Form, FormView, FormStyle, Section, SectionView } from './View/Container/Form.js';
+import { DisclosureGroup, DisclosureGroupView } from './View/Container/DisclosureGroup.js';
 
 // Navigation
-export { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
-export { NavigationSplitView, NavigationSplitViewVisibility } from './View/Navigation/NavigationSplitView.js';
-export { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
-export {
+import { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
+import { NavigationSplitView, NavigationSplitViewVisibility } from './View/Navigation/NavigationSplitView.js';
+import { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
+import {
   NavigationPath,
   CodableRepresentation,
   NavigationDestination,
@@ -87,31 +96,31 @@ export {
 // =============================================================================
 // Layout
 // =============================================================================
-export { VStack, VStackView } from './Layout/Stack/VStack.js';
-export { HStack, HStackView } from './Layout/Stack/HStack.js';
-export { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
-export { Spacer, SpacerView } from './Layout/Spacer.js';
-export { Divider, DividerView } from './Layout/Divider.js';
-export { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
-export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
-export {
+import { VStack, VStackView } from './Layout/Stack/VStack.js';
+import { HStack, HStackView } from './Layout/Stack/HStack.js';
+import { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
+import { Spacer, SpacerView } from './Layout/Spacer.js';
+import { Divider, DividerView } from './Layout/Divider.js';
+import { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
+import { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
+import {
   Grid, GridView,
   GridRow, GridRowView,
   GridItem, GridItemSize,
   LazyVGrid, LazyVGridView,
   LazyHGrid, LazyHGridView
 } from './Layout/Grid.js';
-export {
+import {
   LazyVStack, LazyVStackView,
   LazyHStack, LazyHStackView,
   PinnedScrollableViews
 } from './Layout/Stack/LazyStack.js';
-export { ViewThatFits, Axis as ViewThatFitsAxis } from './Layout/ViewThatFits.js';
+import { ViewThatFits, Axis as ViewThatFitsAxis } from './Layout/ViewThatFits.js';
 
 // =============================================================================
 // Shapes
 // =============================================================================
-export {
+import {
   ShapeView,
   Rectangle, RectangleView,
   RoundedRectangle, RoundedRectangleView,
@@ -125,14 +134,14 @@ export {
 // =============================================================================
 // Graphics
 // =============================================================================
-export { Color, ColorValue } from './Graphic/Color.js';
-export { Font, FontValue } from './Graphic/Font.js';
-export { LinearGradient, RadialGradient, AngularGradient, GradientDirection, UnitPoint } from './Graphic/Gradient.js';
+import { Color, ColorValue } from './Graphic/Color.js';
+import { Font, FontValue } from './Graphic/Font.js';
+import { LinearGradient, RadialGradient, AngularGradient, GradientDirection, UnitPoint } from './Graphic/Gradient.js';
 
 // =============================================================================
 // Animation
 // =============================================================================
-export {
+import {
   Animation,
   AnyTransition,
   Namespace,
@@ -147,7 +156,7 @@ export {
 // =============================================================================
 // Gestures
 // =============================================================================
-export {
+import {
   GestureBase,
   TapGesture, TapGestureRecognizer,
   LongPressGesture, LongPressGestureRecognizer,
@@ -160,8 +169,8 @@ export {
 // =============================================================================
 // App
 // =============================================================================
-export { App, AppInstance } from './App/App.js';
-export {
+import { App, AppInstance } from './App/App.js';
+import {
   WindowGroup, WindowGroupView,
   WindowResizability,
   WindowStyle,
@@ -173,21 +182,253 @@ export {
 // =============================================================================
 // Version Info
 // =============================================================================
-export const VERSION = '1.0.0';
+const VERSION = '1.0.0';
 
 // =============================================================================
 // Extend View with Animation, Gesture, and Environment Methods
 // =============================================================================
-import { View } from './Core/View.js';
-import { extendViewWithAnimation as _extendViewAnimation } from './Animation/Animation.js';
-import { extendViewWithGestures as _extendViewGestures } from './Gesture/Gesture.js';
-import { extendViewWithEnvironment as _extendViewEnvironment } from './Data/Environment.js';
+extendViewWithAnimation(View);
+extendViewWithGestures(View);
+extendViewWithEnvironment(View);
 
-_extendViewAnimation(View);
-_extendViewGestures(View);
-_extendViewEnvironment(View);
-
+// =============================================================================
+// Default Export - Simple unified namespace
+// =============================================================================
 /**
- * Log framework initialization
+ * SwiftUI-For-Web unified namespace
+ * Import everything with: import SwiftUI from 'swiftui-for-web'
  */
-console.log(`SwiftUI-For-Web v${VERSION} - 100% SwiftUI Component Coverage`);
+const SwiftUI = {
+  // Version
+  VERSION,
+
+  // Core
+  View,
+  ViewBuilder,
+  EmptyView, Empty,
+  TupleView,
+  ConditionalContent,
+  AnyView, Any,
+  buildView,
+
+  // State Management
+  State, createState,
+  Binding, createBinding,
+  ObservableObject, Published, createObservable,
+  StateObject, createStateObject, stateObject,
+  Observable, ObservationTracking, Bindable,
+  withTracking, withObservationTracking,
+  Environment, EnvironmentObject, EnvironmentValues,
+  ColorScheme, LayoutDirection,
+  UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom,
+
+  // Views
+  Text, TextView,
+  Image, ImageView, ContentMode,
+  Label, LabelView, LabelStyle, SystemIcons,
+
+  // Controls
+  Button, ButtonView,
+  TextField, TextFieldView,
+  SecureField, SecureFieldView,
+  Toggle, ToggleView,
+  Slider, SliderView,
+  Stepper, StepperView,
+  Picker, PickerView, PickerStyle,
+  Menu, MenuView,
+  DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle,
+  ColorPicker, ColorPickerView,
+
+  // Lists
+  List, ListView, ListStyle,
+  ForEach, ForEachView, Range,
+
+  // Containers
+  ScrollView, ScrollViewView, Axis,
+  Group, GroupView,
+  Form, FormView, FormStyle,
+  Section, SectionView,
+  DisclosureGroup, DisclosureGroupView,
+
+  // Navigation
+  NavigationStack, NavigationLink, BackButton,
+  NavigationSplitView, NavigationSplitViewVisibility,
+  NavigationPath, CodableRepresentation, NavigationDestination,
+  TabView, TabViewView, TabViewStyle,
+
+  // Layout
+  VStack, VStackView,
+  HStack, HStackView,
+  ZStack, ZStackView,
+  Spacer, SpacerView,
+  Divider, DividerView,
+  GeometryReader, GeometryReaderView, GeometryProxy,
+  Alignment, HorizontalAlignment, VerticalAlignment,
+  Grid, GridView,
+  GridRow, GridRowView,
+  GridItem, GridItemSize,
+  LazyVGrid, LazyVGridView,
+  LazyHGrid, LazyHGridView,
+  LazyVStack, LazyVStackView,
+  LazyHStack, LazyHStackView,
+  PinnedScrollableViews,
+  ViewThatFits, ViewThatFitsAxis,
+
+  // Shapes
+  ShapeView,
+  Rectangle, RectangleView,
+  RoundedRectangle, RoundedRectangleView,
+  Circle, CircleView,
+  Ellipse, EllipseView,
+  Capsule, CapsuleView,
+  Path, PathView,
+  UnevenRoundedRectangle, UnevenRoundedRectangleView,
+
+  // Graphics
+  Color, ColorValue,
+  Font, FontValue,
+  LinearGradient, RadialGradient, AngularGradient,
+  GradientDirection, UnitPoint,
+
+  // Animation
+  Animation, AnyTransition, Namespace,
+  withAnimation, isAnimating, currentAnimation,
+  isViewTransitionSupported, prefersReducedMotion,
+
+  // Gestures
+  GestureBase,
+  TapGesture, TapGestureRecognizer,
+  LongPressGesture, LongPressGestureRecognizer,
+  DragGesture, DragGestureRecognizer,
+  MagnificationGesture, MagnificationGestureRecognizer,
+  RotationGesture, RotationGestureRecognizer,
+
+  // App
+  App, AppInstance,
+  WindowGroup, WindowGroupView,
+  WindowResizability, WindowStyle,
+  Scene, Settings, SettingsView,
+  DocumentGroup, DocumentGroupView
+};
+
+// Default export
+export default SwiftUI;
+
+// =============================================================================
+// Named Exports (for backward compatibility and tree-shaking)
+// =============================================================================
+export {
+  VERSION,
+
+  // Core
+  View,
+  ViewBuilder,
+  EmptyView, Empty,
+  TupleView,
+  ConditionalContent,
+  AnyView, Any,
+  buildView,
+
+  // State Management
+  State, createState,
+  Binding, createBinding,
+  ObservableObject, Published, createObservable,
+  StateObject, createStateObject, stateObject,
+  Observable, ObservationTracking, Bindable,
+  withTracking, withObservationTracking,
+  Environment, EnvironmentObject, EnvironmentValues,
+  ColorScheme, LayoutDirection,
+  UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom,
+  extendViewWithEnvironment,
+
+  // Views
+  Text, TextView,
+  Image, ImageView, ContentMode,
+  Label, LabelView, LabelStyle, SystemIcons,
+
+  // Controls
+  Button, ButtonView,
+  TextField, TextFieldView,
+  SecureField, SecureFieldView,
+  Toggle, ToggleView,
+  Slider, SliderView,
+  Stepper, StepperView,
+  Picker, PickerView, PickerStyle,
+  Menu, MenuView,
+  DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle,
+  ColorPicker, ColorPickerView,
+
+  // Lists
+  List, ListView, ListStyle,
+  ForEach, ForEachView, Range,
+
+  // Containers
+  ScrollView, ScrollViewView, Axis,
+  Group, GroupView,
+  Form, FormView, FormStyle,
+  Section, SectionView,
+  DisclosureGroup, DisclosureGroupView,
+
+  // Navigation
+  NavigationStack, NavigationLink, BackButton,
+  NavigationSplitView, NavigationSplitViewVisibility,
+  NavigationPath, CodableRepresentation, NavigationDestination,
+  extendNavigationStackWithPath,
+  TabView, TabViewView, TabViewStyle,
+
+  // Layout
+  VStack, VStackView,
+  HStack, HStackView,
+  ZStack, ZStackView,
+  Spacer, SpacerView,
+  Divider, DividerView,
+  GeometryReader, GeometryReaderView, GeometryProxy,
+  Alignment, HorizontalAlignment, VerticalAlignment,
+  Grid, GridView,
+  GridRow, GridRowView,
+  GridItem, GridItemSize,
+  LazyVGrid, LazyVGridView,
+  LazyHGrid, LazyHGridView,
+  LazyVStack, LazyVStackView,
+  LazyHStack, LazyHStackView,
+  PinnedScrollableViews,
+  ViewThatFits, ViewThatFitsAxis,
+
+  // Shapes
+  ShapeView,
+  Rectangle, RectangleView,
+  RoundedRectangle, RoundedRectangleView,
+  Circle, CircleView,
+  Ellipse, EllipseView,
+  Capsule, CapsuleView,
+  Path, PathView,
+  UnevenRoundedRectangle, UnevenRoundedRectangleView,
+
+  // Graphics
+  Color, ColorValue,
+  Font, FontValue,
+  LinearGradient, RadialGradient, AngularGradient,
+  GradientDirection, UnitPoint,
+
+  // Animation
+  Animation, AnyTransition, Namespace,
+  withAnimation, isAnimating, currentAnimation,
+  extendViewWithAnimation,
+  isViewTransitionSupported, prefersReducedMotion,
+
+  // Gestures
+  GestureBase,
+  TapGesture, TapGestureRecognizer,
+  LongPressGesture, LongPressGestureRecognizer,
+  DragGesture, DragGestureRecognizer,
+  MagnificationGesture, MagnificationGestureRecognizer,
+  RotationGesture, RotationGestureRecognizer,
+  extendViewWithGestures,
+
+  // App
+  App, AppInstance,
+  WindowGroup, WindowGroupView,
+  WindowResizability, WindowStyle,
+  Scene, Settings, SettingsView,
+  DocumentGroup, DocumentGroupView
+};
