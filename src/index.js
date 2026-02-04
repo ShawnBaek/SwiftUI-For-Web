@@ -39,11 +39,12 @@ export { Text, TextView } from './View/Text.js';
 // =============================================================================
 // Layout
 // =============================================================================
-// export { VStack } from './Layout/Stack/VStack.js';
-// export { HStack } from './Layout/Stack/HStack.js';
+export { VStack, VStackView } from './Layout/Stack/VStack.js';
+export { HStack, HStackView } from './Layout/Stack/HStack.js';
 // export { ZStack } from './Layout/Stack/ZStack.js';
-// export { Spacer } from './Layout/Spacer.js';
+export { Spacer, SpacerView } from './Layout/Spacer.js';
 // export { Divider } from './Layout/Divider.js';
+export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
 
 // =============================================================================
 // Graphics
