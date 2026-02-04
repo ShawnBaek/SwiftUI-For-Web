@@ -23,7 +23,7 @@ export { View } from './Core/View.js';
 // =============================================================================
 // View Components
 // =============================================================================
-// export { Text } from './View/Text.js';
+export { Text, TextView } from './View/Text.js';
 // export { Image } from './View/Image.js';
 
 // Controls
