@@ -1,0 +1,63 @@
+/**
+ * SwiftUI-For-Web CSS Reset
+ * Minimal reset for consistent cross-browser styling
+ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+/* Remove default focus outlines - we'll add our own */
+:focus {
+  outline: none;
+}
+
+/* Accessibility: show focus for keyboard navigation */
+:focus-visible {
+  outline: 2px solid #007AFF;
+  outline-offset: 2px;
+}

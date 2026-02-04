@@ -1,0 +1,67 @@
+/**
+ * SwiftUI-For-Web
+ * A zero-dependency UI framework inspired by Apple's SwiftUI
+ *
+ * @module SwiftUI-For-Web
+ * @version 0.1.0
+ */
+
+// =============================================================================
+// Core
+// =============================================================================
+// export { View } from './Core/View.js';
+// export { ViewBuilder } from './Core/ViewBuilder.js';
+
+// =============================================================================
+// Data (State Management)
+// =============================================================================
+// export { State } from './Data/State.js';
+// export { Binding } from './Data/Binding.js';
+// export { ObservableObject } from './Data/ObservableObject.js';
+// export { Published } from './Data/Published.js';
+
+// =============================================================================
+// View Components
+// =============================================================================
+// export { Text } from './View/Text.js';
+// export { Image } from './View/Image.js';
+
+// Controls
+// export { Button } from './View/Control/Button.js';
+// export { TextField } from './View/Control/TextField.js';
+// export { Toggle } from './View/Control/Toggle.js';
+// export { Slider } from './View/Control/Slider.js';
+
+// Lists
+// export { List } from './View/List/List.js';
+// export { ForEach } from './View/List/ForEach.js';
+
+// =============================================================================
+// Layout
+// =============================================================================
+// export { VStack } from './Layout/Stack/VStack.js';
+// export { HStack } from './Layout/Stack/HStack.js';
+// export { ZStack } from './Layout/Stack/ZStack.js';
+// export { Spacer } from './Layout/Spacer.js';
+// export { Divider } from './Layout/Divider.js';
+
+// =============================================================================
+// Graphics
+// =============================================================================
+// export { Color } from './Graphic/Color.js';
+// export { Font } from './Graphic/Font.js';
+
+// =============================================================================
+// App
+// =============================================================================
+// export { App } from './App/App.js';
+
+// =============================================================================
+// Version Info
+// =============================================================================
+export const VERSION = '0.1.0';
+
+/**
+ * Log framework initialization
+ */
+console.log(`SwiftUI-For-Web v${VERSION} initialized`);
