@@ -4,7 +4,7 @@
 
 A declarative UI framework that brings Apple's SwiftUI paradigm to web development using pure JavaScript.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
 [![License](https://img.shields.io/badge/license-ISC-green.svg)](LICENSE)
 [![Components](https://img.shields.io/badge/components-84-orange.svg)](CLAUDE.md)
 
@@ -84,6 +84,42 @@ Then import directly:
 
 ```javascript
 import SwiftUI from './src/index.js';
+```
+
+### Modular Imports
+
+Choose what to include in your bundle:
+
+```javascript
+// Full package (SwiftUI + Charts) - ~58KB gzipped
+import SwiftUI from 'swiftui-for-web';
+
+// Core only (no Charts) - ~52KB gzipped
+import SwiftUI from 'swiftui-for-web/core';
+
+// Charts only (requires core)
+import { Chart, BarMark, LineMark, value } from 'swiftui-for-web/charts';
+```
+
+**Use core + charts separately:**
+```javascript
+import SwiftUI from 'swiftui-for-web/core';
+import { Chart, BarMark, value } from 'swiftui-for-web/charts';
+
+const { VStack, Text, App, Color } = SwiftUI;
+
+// Use both together
+App(() =>
+  VStack({ spacing: 20 },
+    Text('Sales Report'),
+    Chart(salesData, item =>
+      BarMark({
+        x: value("Month", item.month),
+        y: value("Sales", item.sales)
+      })
+    )
+  )
+).mount('#root');
 ```
 
 ## Running Examples

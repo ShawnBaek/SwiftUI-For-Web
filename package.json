@@ -1,6 +1,6 @@
 {
   "name": "swiftui-for-web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "A declarative UI framework that brings Apple's SwiftUI paradigm to web development. Zero dependencies, ~52KB gzipped.",
   "main": "src/index.js",
@@ -9,6 +9,14 @@
     ".": {
       "import": "./src/index.js",
       "default": "./src/index.js"
+    },
+    "./core": {
+      "import": "./src/core.js",
+      "default": "./src/core.js"
+    },
+    "./charts": {
+      "import": "./src/Charts/index.js",
+      "default": "./src/Charts/index.js"
     },
     "./src/*": "./src/*"
   },
@@ -22,7 +30,8 @@
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",
-    "example:todo": "echo 'Open http://localhost:8000/Examples/TodoApp/' && npm run serve"
+    "example:todo": "echo 'Open http://localhost:8000/Examples/TodoApp/' && npm run serve",
+    "example:charts": "echo 'Open http://localhost:8000/Examples/Charts/' && npm run serve"
   },
   "repository": {
     "type": "git",
@@ -44,7 +53,10 @@
     "components",
     "no-dependencies",
     "zero-dependencies",
-    "vanilla-js"
+    "vanilla-js",
+    "charts",
+    "swift-charts",
+    "data-visualization"
   ],
   "author": "Shawn Baek",
   "license": "ISC",
