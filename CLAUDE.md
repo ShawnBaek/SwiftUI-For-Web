@@ -24,18 +24,22 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ### Current State
 
-This project is in **active development** with core functionality complete. As of now:
+This project is in **active development** with extensive functionality complete. As of now:
 - ✅ Core View system with modifier chaining
-- ✅ Layout components (VStack, HStack, Spacer)
-- ✅ Controls (Button, TextField, SecureField, Toggle)
+- ✅ Layout components (VStack, HStack, ZStack, Spacer, Divider, GeometryReader)
+- ✅ Controls (Button, TextField, SecureField, Toggle, Slider, Stepper, Picker)
 - ✅ State management (State, Binding, ObservableObject)
-- ✅ ForEach for dynamic lists
-- ✅ Color and Font systems
+- ✅ List, ForEach, Section for dynamic lists
+- ✅ Containers (ScrollView, Group, Form, DisclosureGroup)
+- ✅ Navigation (NavigationStack, NavigationLink, TabView)
+- ✅ Shapes (Rectangle, RoundedRectangle, Circle, Ellipse, Capsule, Path)
+- ✅ Color, Font, and Gradient systems
+- ✅ Animation system (withAnimation, Animation, AnyTransition, matchedGeometryEffect)
+- ✅ Gestures (Tap, LongPress, Drag, Magnification, Rotation)
 - ✅ App mounting and refresh
-- ✅ 51 passing tests
-- ✅ 3 example apps (HelloWorld, Counter, TodoApp)
+- ✅ 4 example apps (HelloWorld, Counter, TodoApp, Netflix)
 
-**Progress: ~29% of SwiftUI components implemented**
+**Progress: ~80% of SwiftUI components implemented**
 
 ## Feature Support Status
 
@@ -48,39 +52,39 @@ This project is in **active development** with core functionality complete. As o
 | **Core** | ViewBuilder | 🔴 Planned | P1 | DSL for building views |
 | **Layout** | VStack | 🟢 Done | P0 | Flexbox column |
 | **Layout** | HStack | 🟢 Done | P0 | Flexbox row |
-| **Layout** | ZStack | 🔴 Planned | P1 | Position absolute layering |
+| **Layout** | ZStack | 🟢 Done | P1 | CSS Grid layering |
 | **Layout** | Spacer | 🟢 Done | P0 | Flex-grow element |
-| **Layout** | Divider | 🔴 Planned | P2 | HR element |
+| **Layout** | Divider | 🟢 Done | P2 | HR element |
 | **Layout** | Grid | 🔴 Planned | P2 | CSS Grid |
 | **Layout** | LazyVStack | 🔴 Planned | P3 | Virtual scrolling |
 | **Layout** | LazyHStack | 🔴 Planned | P3 | Virtual scrolling |
 | **Layout** | LazyVGrid | 🔴 Planned | P3 | CSS Grid lazy |
 | **Layout** | LazyHGrid | 🔴 Planned | P3 | CSS Grid lazy |
-| **Layout** | GeometryReader | 🔴 Planned | P2 | Parent size access |
+| **Layout** | GeometryReader | 🟢 Done | P2 | Parent size access |
 | **View** | Text | 🟢 Done | P0 | Full modifier support |
-| **View** | Image | 🔴 Planned | P1 | Img element |
-| **View** | Label | 🔴 Planned | P2 | Icon + text |
+| **View** | Image | 🟢 Done | P1 | Img element with modifiers |
+| **View** | Label | 🟢 Done | P2 | Icon + text |
 | **Control** | Button | 🟢 Done | P0 | With buttonStyle |
 | **Control** | TextField | 🟢 Done | P1 | With binding |
 | **Control** | SecureField | 🟢 Done | P2 | Password input |
 | **Control** | Toggle | 🟢 Done | P1 | 3 styles (switch/checkbox/button) |
-| **Control** | Slider | 🔴 Planned | P2 | Input range |
-| **Control** | Stepper | 🔴 Planned | P2 | +/- buttons |
-| **Control** | Picker | 🔴 Planned | P2 | Select element |
+| **Control** | Slider | 🟢 Done | P2 | Input range with tint |
+| **Control** | Stepper | 🟢 Done | P2 | +/- buttons |
+| **Control** | Picker | 🟢 Done | P2 | Multiple styles (menu/segmented/wheel) |
 | **Control** | DatePicker | 🔴 Planned | P3 | Input date |
 | **Control** | ColorPicker | 🔴 Planned | P3 | Color selector |
 | **Control** | Menu | 🔴 Planned | P2 | Dropdown menu |
-| **List** | List | 🔴 Planned | P1 | Scrollable list |
+| **List** | List | 🟢 Done | P1 | Scrollable list with selection |
 | **List** | ForEach | 🟢 Done | P0 | Array iteration with id |
-| **List** | Section | 🔴 Planned | P2 | Grouped content |
-| **Container** | ScrollView | 🔴 Planned | P1 | Overflow scroll |
-| **Container** | Group | 🔴 Planned | P1 | Logical grouping |
-| **Container** | Form | 🔴 Planned | P2 | Form container |
-| **Container** | DisclosureGroup | 🔴 Planned | P2 | Expandable sections |
-| **Navigation** | NavigationStack | 🔴 Planned | P2 | Router-based nav |
-| **Navigation** | NavigationLink | 🔴 Planned | P2 | Nav trigger |
+| **List** | Section | 🟢 Done | P2 | Grouped content in Form |
+| **Container** | ScrollView | 🟢 Done | P1 | Overflow scroll (H/V) |
+| **Container** | Group | 🟢 Done | P1 | Logical grouping |
+| **Container** | Form | 🟢 Done | P2 | Form container with sections |
+| **Container** | DisclosureGroup | 🟢 Done | P2 | Expandable sections |
+| **Navigation** | NavigationStack | 🟢 Done | P2 | Router-based nav |
+| **Navigation** | NavigationLink | 🟢 Done | P2 | Nav trigger |
 | **Navigation** | NavigationPath | 🔴 Planned | P2 | Nav state |
-| **Navigation** | TabView | 🔴 Planned | P2 | Tab interface |
+| **Navigation** | TabView | 🟢 Done | P2 | Tab bar and page styles |
 | **State** | @State | 🟢 Done | P0 | State class |
 | **State** | @Binding | 🟢 Done | P0 | Binding class |
 | **State** | @ObservableObject | 🟢 Done | P1 | ObservableObject class |
@@ -100,24 +104,28 @@ This project is in **active development** with core functionality complete. As o
 | **Modifier** | .border() | 🟢 Done | P1 | CSS border |
 | **Modifier** | .clipShape() | 🔴 Planned | P2 | Clip to shape |
 | **Modifier** | .onTapGesture() | 🟢 Done | P1 | Click handler |
-| **Modifier** | .onAppear() | 🔴 Planned | P1 | Mount lifecycle |
-| **Modifier** | .onDisappear() | 🔴 Planned | P2 | Unmount lifecycle |
-| **Shape** | Rectangle | 🔴 Planned | P1 | Div element |
-| **Shape** | RoundedRectangle | 🔴 Planned | P1 | Border radius |
-| **Shape** | Circle | 🔴 Planned | P1 | Border radius 50% |
-| **Shape** | Ellipse | 🔴 Planned | P2 | Oval shape |
-| **Shape** | Capsule | 🔴 Planned | P2 | Pill shape |
-| **Shape** | Path | 🔴 Planned | P2 | SVG paths |
+| **Modifier** | .onAppear() | 🟢 Done | P1 | Mount lifecycle |
+| **Modifier** | .onDisappear() | 🟢 Done | P2 | Unmount lifecycle |
+| **Shape** | Rectangle | 🟢 Done | P1 | Div element with fill/stroke |
+| **Shape** | RoundedRectangle | 🟢 Done | P1 | Border radius |
+| **Shape** | Circle | 🟢 Done | P1 | Border radius 50% |
+| **Shape** | Ellipse | 🟢 Done | P2 | Oval shape |
+| **Shape** | Capsule | 🟢 Done | P2 | Pill shape |
+| **Shape** | Path | 🟢 Done | P2 | SVG paths |
 | **Graphic** | Color | 🟢 Done | P0 | System colors + hex/rgb |
 | **Graphic** | Font | 🟢 Done | P0 | Presets + system() |
-| **Graphic** | LinearGradient | 🔴 Planned | P2 | CSS linear-gradient |
-| **Graphic** | RadialGradient | 🔴 Planned | P2 | CSS radial-gradient |
-| **Graphic** | AngularGradient | 🔴 Planned | P3 | CSS conic-gradient |
-| **Animation** | withAnimation | 🔴 Planned | P2 | CSS transitions |
-| **Animation** | Animation | 🔴 Planned | P2 | Animation curves |
+| **Graphic** | LinearGradient | 🟢 Done | P2 | CSS linear-gradient |
+| **Graphic** | RadialGradient | 🟢 Done | P2 | CSS radial-gradient |
+| **Graphic** | AngularGradient | 🟢 Done | P3 | CSS conic-gradient |
+| **Animation** | withAnimation | 🟢 Done | P2 | View Transition API |
+| **Animation** | Animation | 🟢 Done | P2 | Spring, easing curves |
+| **Animation** | AnyTransition | 🟢 Done | P2 | opacity, scale, slide, move |
+| **Animation** | matchedGeometryEffect | 🟢 Done | P2 | Hero animations |
 | **Gesture** | TapGesture | 🟢 Done | P1 | Via onTapGesture |
-| **Gesture** | LongPressGesture | 🔴 Planned | P2 | Long press |
-| **Gesture** | DragGesture | 🔴 Planned | P2 | Drag tracking |
+| **Gesture** | LongPressGesture | 🟢 Done | P2 | Long press |
+| **Gesture** | DragGesture | 🟢 Done | P2 | Drag tracking |
+| **Gesture** | MagnificationGesture | 🟢 Done | P2 | Pinch to zoom |
+| **Gesture** | RotationGesture | 🟢 Done | P2 | Two-finger rotation |
 | **App** | App | 🟢 Done | P1 | mount/refresh |
 | **App** | WindowGroup | 🔴 Planned | P2 | Scene container |
 
@@ -130,20 +138,22 @@ This project is in **active development** with core functionality complete. As o
 | Category | Done | Planned | Total |
 |----------|------|---------|-------|
 | Core | 2 | 1 | 3 |
-| Layout | 3 | 8 | 11 |
-| View | 1 | 2 | 3 |
-| Control | 4 | 6 | 10 |
-| List | 1 | 2 | 3 |
-| Container | 0 | 4 | 4 |
-| Navigation | 0 | 4 | 4 |
+| Layout | 6 | 5 | 11 |
+| View | 3 | 0 | 3 |
+| Control | 7 | 3 | 10 |
+| List | 3 | 0 | 3 |
+| Container | 4 | 0 | 4 |
+| Navigation | 3 | 1 | 4 |
 | State | 4 | 4 | 8 |
-| Modifier | 10 | 3 | 13 |
-| Shape | 0 | 6 | 6 |
-| Graphic | 2 | 3 | 5 |
-| Animation | 0 | 2 | 2 |
-| Gesture | 1 | 2 | 3 |
+| Modifier | 12 | 1 | 13 |
+| Shape | 6 | 0 | 6 |
+| Graphic | 5 | 0 | 5 |
+| Animation | 4 | 0 | 4 |
+| Gesture | 5 | 0 | 5 |
 | App | 1 | 1 | 2 |
-| **Total** | **29** | **48** | **77** |
+| **Total** | **65** | **16** | **81** |
+
+**Progress: ~80% of SwiftUI components implemented**
 
 ## Reference: OpenSwiftUI Project
 

@@ -4,5 +4,4 @@
  */
 
 export { ForEach, ForEachView, Range } from './ForEach.js';
-
-// List will be added in future sprint
+export { List, ListView, ListStyle } from './List.js';
