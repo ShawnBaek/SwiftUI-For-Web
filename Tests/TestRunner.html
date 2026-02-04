@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftUI-For-Web Tests</title>
+  <link rel="stylesheet" href="../src/styles/index.css">
+  <style>
+    body {
+      padding: 20px;
+    }
+    h1 {
+      font-size: var(--font-large-title);
+      margin-bottom: 20px;
+    }
+    .instructions {
+      background: var(--color-secondary-background);
+      padding: 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 20px;
+      font-size: var(--font-subheadline);
+    }
+    .instructions code {
+      font-family: 'SF Mono', Monaco, monospace;
+      background: var(--color-gray-5);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>SwiftUI-For-Web Test Runner</h1>
+
+  <div class="instructions">
+    <p>Open the browser console to see test output.</p>
+    <p style="margin-top: 8px;">Run with: <code>python -m http.server 8000</code></p>
+  </div>
+
+  <!-- Test results will be rendered here -->
+  <div id="test-output"></div>
+
+  <script type="module">
+    import { describe, it, expect, printSummary, renderResults } from './TestUtils.js';
+
+    // ==========================================================================
+    // Test Suite: TestUtils Self-Test
+    // ==========================================================================
+    describe('TestUtils', () => {
+      it('should pass basic equality test', () => {
+        expect(1 + 1).toBe(2);
+      });
+
+      it('should pass string equality test', () => {
+        expect('hello').toBe('hello');
+      });
+
+      it('should pass object equality test', () => {
+        expect({ a: 1 }).toEqual({ a: 1 });
+      });
+
+      it('should pass array equality test', () => {
+        expect([1, 2, 3]).toEqual([1, 2, 3]);
+      });
+
+      it('should pass truthy test', () => {
+        expect(true).toBeTruthy();
+        expect(1).toBeTruthy();
+        expect('hello').toBeTruthy();
+      });
+
+      it('should pass falsy test', () => {
+        expect(false).toBeFalsy();
+        expect(0).toBeFalsy();
+        expect('').toBeFalsy();
+      });
+
+      it('should pass null test', () => {
+        expect(null).toBeNull();
+      });
+
+      it('should pass undefined test', () => {
+        expect(undefined).toBeUndefined();
+      });
+
+      it('should pass defined test', () => {
+        expect('value').toBeDefined();
+      });
+
+      it('should pass contains test for arrays', () => {
+        expect([1, 2, 3]).toContain(2);
+      });
+
+      it('should pass contains test for strings', () => {
+        expect('hello world').toContain('world');
+      });
+
+      it('should pass length test', () => {
+        expect([1, 2, 3]).toHaveLength(3);
+        expect('hello').toHaveLength(5);
+      });
+
+      it('should pass negation tests', () => {
+        expect(1).not.toBe(2);
+        expect({ a: 1 }).not.toEqual({ a: 2 });
+        expect(null).not.toBeTruthy();
+      });
+
+      it('should pass greater/less than tests', () => {
+        expect(5).toBeGreaterThan(3);
+        expect(3).toBeLessThan(5);
+      });
+
+      it('should pass throw test', () => {
+        expect(() => { throw new Error('test error'); }).toThrow('test');
+      });
+
+      it('should pass instanceof test', () => {
+        expect([]).toBeInstanceOf(Array);
+        expect({}).toBeInstanceOf(Object);
+      });
+    });
+
+    // ==========================================================================
+    // Import and run component tests as they are created
+    // ==========================================================================
+    // import './Core/ViewTests.js';
+    // import './View/TextTests.js';
+    // import './Layout/StackTests.js';
+
+    // Print summary and render to DOM
+    printSummary();
+    renderResults('#test-output');
+  </script>
+</body>
+</html>

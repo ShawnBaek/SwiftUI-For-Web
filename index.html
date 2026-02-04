@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftUI for Web</title>
+  <link rel="stylesheet" href="./src/styles/index.css">
+  <style>
+    /* Demo page styles */
+    .demo-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .demo-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .demo-header h1 {
+      font-size: var(--font-large-title);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-blue);
+      margin-bottom: 8px;
+    }
+    .demo-header p {
+      font-size: var(--font-subheadline);
+      color: var(--color-secondary);
+    }
+    .demo-status {
+      background: var(--color-secondary-background);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .demo-status h2 {
+      font-size: var(--font-headline);
+      margin-bottom: 10px;
+    }
+    .demo-status code {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: var(--font-footnote);
+      background: var(--color-gray-5);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <header class="demo-header">
+      <h1>SwiftUI for Web</h1>
+      <p>A zero-dependency UI framework inspired by Apple's SwiftUI</p>
+    </header>
+
+    <div class="demo-status">
+      <h2>Project Status</h2>
+      <p>Framework is being built. Check back soon!</p>
+      <p style="margin-top: 10px;">
+        <code>Sprint 0: Project Setup</code> - In Progress
+      </p>
+    </div>
+
+    <!-- App mount point -->
+    <div id="root"></div>
+  </div>
+
+  <!-- Main application entry point -->
+  <script type="module" src="./src/index.js"></script>
+</body>
+</html>
