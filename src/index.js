@@ -17,8 +17,7 @@ export { View } from './Core/View.js';
 // =============================================================================
 export { State, createState } from './Data/State.js';
 export { Binding, createBinding } from './Data/Binding.js';
-// export { ObservableObject } from './Data/ObservableObject.js';
-// export { Published } from './Data/Published.js';
+export { ObservableObject, Published, createObservable } from './Data/ObservableObject.js';
 
 // =============================================================================
 // View Components
