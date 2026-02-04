@@ -15,8 +15,8 @@ export { View } from './Core/View.js';
 // =============================================================================
 // Data (State Management)
 // =============================================================================
-// export { State } from './Data/State.js';
-// export { Binding } from './Data/Binding.js';
+export { State, createState } from './Data/State.js';
+export { Binding, createBinding } from './Data/Binding.js';
 // export { ObservableObject } from './Data/ObservableObject.js';
 // export { Published } from './Data/Published.js';
 
