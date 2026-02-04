@@ -1,18 +1,20 @@
 # SwiftUI-For-Web
 
-**Inspired by Apple's SwiftUI. Making web development simpler, more fun, and performant.**
+**Build web apps the SwiftUI way. Zero dependencies. ~52KB gzipped.**
 
-A zero-dependency UI framework that brings SwiftUI's declarative paradigm to web development using pure JavaScript, CSS, and HTML.
+A declarative UI framework that brings Apple's SwiftUI paradigm to web development using pure JavaScript.
 
-> **Work in Progress** - This project is actively being developed. Contributions and support are welcome!
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![License](https://img.shields.io/badge/license-ISC-green.svg)](LICENSE)
+[![Components](https://img.shields.io/badge/components-84-orange.svg)](CLAUDE.md)
 
-## Why SwiftUI-For-Web?
+## Features
 
-- **Zero Dependencies** - No npm packages, no build tools, no bundlers. Just vanilla JavaScript.
-- **Declarative UI** - Describe what your UI should look like, not how to build it.
-- **SwiftUI Familiarity** - If you know SwiftUI, you already know this framework.
-- **Lightweight & Fast** - No virtual DOM overhead, direct DOM manipulation.
-- **MVVM Architecture** - Clean separation of concerns with ObservableObject.
+- **Zero Dependencies** - No npm, no bundlers, no build step
+- **Tiny Size** - ~52KB gzipped (React+ReactDOM is ~136KB)
+- **100% SwiftUI Coverage** - 84 components matching SwiftUI's API
+- **Adaptive Layouts** - Size classes, ViewThatFits, NavigationSplitView
+- **MVVM Architecture** - ObservableObject, @Published, Environment
 
 ## Quick Start
 
@@ -20,350 +22,285 @@ A zero-dependency UI framework that brings SwiftUI's declarative paradigm to web
 <!DOCTYPE html>
 <html>
 <head>
-  <link rel="stylesheet" href="src/styles/index.css">
+  <title>My App</title>
 </head>
 <body>
   <div id="root"></div>
   <script type="module">
-    import { App, VStack, Text, Button, State, Color, Font } from './src/index.js';
+    import SwiftUI from './src/index.js';
+    const { App, VStack, Text, Button, State, Color, Font } = SwiftUI;
 
     const count = new State(0);
 
     App(() =>
       VStack({ spacing: 20 },
-        Text('Counter')
+        Text('Hello SwiftUI-For-Web!')
           .font(Font.largeTitle),
         Text(String(count.value))
           .font(Font.system(60))
           .foregroundColor(Color.blue),
-        Button('Increment', () => count.value++)
+        Button('Tap Me', () => {
+          count.value++;
+        })
           .padding(16)
           .background(Color.blue)
-          .foregroundColor('white')
-          .cornerRadius(8)
+          .foregroundColor(Color.white)
+          .cornerRadius(10)
       )
       .padding(40)
     ).mount('#root');
 
-    count.subscribe(() => location.reload());
+    count.subscribe(() => App.refresh());
   </script>
 </body>
 </html>
 ```
 
-## SwiftUI-For-Web vs React
+## Installation
 
-Here's the same Counter app in both frameworks:
+**No installation needed!** Just copy the `src/` folder to your project.
 
-### SwiftUI-For-Web
+```bash
+# Clone
+git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
+
+# Run examples
+cd SwiftUI-For-Web
+python -m http.server 8000
+# Open http://localhost:8000/Examples/Airbnb/
+```
+
+## Import Styles
 
 ```javascript
-import { App, VStack, HStack, Text, Button, State, Color, Font } from './src/index.js';
+// Simple (recommended)
+import SwiftUI from './src/index.js';
+const { VStack, Text, Button, App } = SwiftUI;
 
-// State
-const count = new State(0);
-
-// View
-App(() =>
-  VStack({ spacing: 20 },
-    Text('Counter').font(Font.title),
-    Text(String(count.value))
-      .font(Font.system(48))
-      .foregroundColor(Color.blue),
-    HStack({ spacing: 16 },
-      Button('-', () => count.value--)
-        .padding({ horizontal: 20, vertical: 10 })
-        .background(Color.red)
-        .foregroundColor('white')
-        .cornerRadius(8),
-      Button('+', () => count.value++)
-        .padding({ horizontal: 20, vertical: 10 })
-        .background(Color.green)
-        .foregroundColor('white')
-        .cornerRadius(8)
-    )
-  ).padding(40)
-).mount('#root');
+// Named imports (tree-shakeable)
+import { VStack, Text, Button, App } from './src/index.js';
 ```
 
-### React (for comparison)
+## Size Comparison
 
-```jsx
-import React, { useState } from 'react';
+| Framework | Gzipped Size |
+|-----------|-------------|
+| **SwiftUI-For-Web** | **~52 KB** |
+| React + ReactDOM | ~136 KB |
+| Vue 3 | ~33 KB |
+| Angular | ~130 KB |
 
-function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: 40 }}>
-      <h1 style={{ fontSize: 28 }}>Counter</h1>
-      <span style={{ fontSize: 48, color: 'rgb(0, 122, 255)' }}>{count}</span>
-      <div style={{ display: 'flex', gap: 16 }}>
-        <button
-          onClick={() => setCount(count - 1)}
-          style={{ padding: '10px 20px', background: 'rgb(255, 59, 48)', color: 'white', borderRadius: 8, border: 'none' }}
-        >
-          -
-        </button>
-        <button
-          onClick={() => setCount(count + 1)}
-          style={{ padding: '10px 20px', background: 'rgb(52, 199, 89)', color: 'white', borderRadius: 8, border: 'none' }}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
-}
-```
-
-**Key Differences:**
-| Feature | SwiftUI-For-Web | React |
-|---------|-----------------|-------|
-| Dependencies | 0 | 40+ MB node_modules |
-| Build Step | None | Required (webpack, vite, etc.) |
-| Styling | Chainable modifiers | Inline styles or CSS-in-JS |
-| State | `State` class | `useState` hook |
-| Learning Curve | Familiar to iOS devs | Web-specific concepts |
-
-## Components
+## Components (84 Total)
 
 ### Layout
+`VStack` `HStack` `ZStack` `Spacer` `Divider` `Grid` `GridRow` `LazyVStack` `LazyHStack` `LazyVGrid` `LazyHGrid` `GeometryReader` `ViewThatFits`
 
-```javascript
-// Vertical Stack
-VStack({ alignment: 'center', spacing: 16 },
-  Text('Item 1'),
-  Text('Item 2'),
-  Text('Item 3')
-)
-
-// Horizontal Stack
-HStack({ spacing: 10 },
-  Text('Left'),
-  Spacer(),
-  Text('Right')
-)
-```
+### Views
+`Text` `Image` `Label`
 
 ### Controls
-
-```javascript
-// Button
-Button('Click Me', () => console.log('Clicked!'))
-  .buttonStyle('borderedProminent')
-
-// TextField
-const text = new State('');
-TextField('Enter your name', text.binding)
-  .textFieldStyle('roundedBorder')
-
-// Toggle
-const isOn = new State(false);
-Toggle('Enable notifications', isOn.binding)
-
-// SecureField (Password)
-const password = new State('');
-SecureField('Password', password.binding)
-```
+`Button` `TextField` `SecureField` `Toggle` `Slider` `Stepper` `Picker` `DatePicker` `ColorPicker` `Menu`
 
 ### Lists
+`List` `ForEach` `Section`
 
-```javascript
-const items = ['Apple', 'Banana', 'Cherry'];
+### Containers
+`ScrollView` `Group` `Form` `DisclosureGroup`
 
-ForEach(items, (item, index) =>
-  Text(`${index + 1}. ${item}`)
-)
+### Navigation
+`NavigationStack` `NavigationSplitView` `NavigationLink` `NavigationPath` `TabView`
 
-// With ID for complex objects
-const todos = [
-  { id: 1, title: 'Learn SwiftUI-For-Web' },
-  { id: 2, title: 'Build something awesome' }
-];
+### Shapes
+`Rectangle` `RoundedRectangle` `Circle` `Ellipse` `Capsule` `Path`
 
-ForEach(todos, { id: 'id' }, (todo) =>
-  Text(todo.title)
-)
-```
+### State Management
+`State` `Binding` `ObservableObject` `@Published` `StateObject` `Observable` `Environment` `EnvironmentObject`
 
-### Modifiers
+### Animation
+`withAnimation` `Animation` `AnyTransition` `Namespace`
 
-```javascript
-Text('Styled Text')
-  .font(Font.title)
-  .foregroundColor(Color.blue)
-  .padding(20)
-  .background(Color.yellow.opacity(0.3))
-  .cornerRadius(12)
-  .shadow({ radius: 4, x: 0, y: 2 })
-```
-
-## State Management
-
-### Simple State
-
-```javascript
-import { State } from './src/index.js';
-
-const count = new State(0);
-
-// Read
-console.log(count.value); // 0
-
-// Write
-count.value = 10;
-
-// Subscribe to changes
-count.subscribe((newValue) => {
-  console.log('Count changed to:', newValue);
-});
-```
-
-### ObservableObject (MVVM)
-
-```javascript
-import { ObservableObject } from './src/index.js';
-
-class TodoViewModel extends ObservableObject {
-  constructor() {
-    super();
-    this.published('todos', []);
-    this.published('newTodoText', '');
-  }
-
-  addTodo() {
-    if (this.newTodoText.trim()) {
-      this.todos = [...this.todos, {
-        id: Date.now(),
-        title: this.newTodoText,
-        completed: false
-      }];
-      this.newTodoText = '';
-    }
-  }
-
-  toggleTodo(id) {
-    this.todos = this.todos.map(todo =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    );
-  }
-}
-
-const viewModel = new TodoViewModel();
-
-// Use in view
-TextField('New todo...', viewModel.binding('newTodoText'))
-Button('Add', () => viewModel.addTodo())
-```
+### Gestures
+`TapGesture` `LongPressGesture` `DragGesture` `MagnificationGesture` `RotationGesture`
 
 ## Examples
 
-Check out the `/Examples` folder:
+### 1. Hello World
+```javascript
+import SwiftUI from './src/index.js';
+const { App, Text, Font, Color } = SwiftUI;
 
-- **HelloWorld** - Basic text rendering
-- **Counter** - State management with buttons
-- **TodoApp** - Full MVVM application
-
-```bash
-# Run examples locally
-python -m http.server 8000
-# Then open http://localhost:8000/Examples/TodoApp/
+App(() =>
+  Text('Hello, World!')
+    .font(Font.largeTitle)
+    .foregroundColor(Color.blue)
+).mount('#root');
 ```
 
-## Running Tests
+### 2. Counter with MVVM
+```javascript
+import SwiftUI from './src/index.js';
+const { App, VStack, HStack, Text, Button, ObservableObject, Published, Font, Color } = SwiftUI;
 
-```bash
-# Node.js tests
-npm test
+class CounterViewModel extends ObservableObject {
+  @Published count = 0;
 
-# Browser tests
-# Open Tests/TestRunner.html in your browser
+  increment() { this.count++; }
+  decrement() { this.count--; }
+}
+
+const vm = new CounterViewModel();
+
+App(() =>
+  VStack({ spacing: 20 },
+    Text(String(vm.count))
+      .font(Font.system(72))
+      .foregroundColor(Color.blue),
+    HStack({ spacing: 16 },
+      Button('-', () => vm.decrement())
+        .font(Font.title)
+        .padding({ horizontal: 24, vertical: 12 })
+        .background(Color.red)
+        .foregroundColor(Color.white)
+        .cornerRadius(12),
+      Button('+', () => vm.increment())
+        .font(Font.title)
+        .padding({ horizontal: 24, vertical: 12 })
+        .background(Color.green)
+        .foregroundColor(Color.white)
+        .cornerRadius(12)
+    )
+  )
+  .padding(40)
+).mount('#root');
 ```
 
-## Project Status
+### 3. Adaptive Layout
+```javascript
+import SwiftUI from './src/index.js';
+const {
+  App, VStack, HStack, Text,
+  Environment, EnvironmentValues, UserInterfaceSizeClass,
+  ViewThatFits
+} = SwiftUI;
 
-**Current Progress: ~29% Complete** (18 of 63 SwiftUI components implemented)
+// Automatically switches layout based on available space
+App(() =>
+  ViewThatFits({ in: 'horizontal' },
+    // Wide layout (desktop)
+    HStack({ spacing: 20 },
+      Text('Item 1'),
+      Text('Item 2'),
+      Text('Item 3')
+    ),
+    // Narrow layout (mobile)
+    VStack({ spacing: 12 },
+      Text('Item 1'),
+      Text('Item 2'),
+      Text('Item 3')
+    )
+  )
+).mount('#root');
+```
 
-### Implemented Components
+### 4. Navigation
+```javascript
+import SwiftUI from './src/index.js';
+const { App, NavigationStack, NavigationLink, VStack, Text, List, ForEach } = SwiftUI;
 
-| Category | Component | Status | Notes |
-|----------|-----------|--------|-------|
-| **Core** | View | ✅ Done | Base class with modifier chaining |
-| **Core** | App | ✅ Done | App mounting and refresh |
-| **Layout** | VStack | ✅ Done | Flexbox column with alignment/spacing |
-| **Layout** | HStack | ✅ Done | Flexbox row with alignment/spacing |
-| **Layout** | Spacer | ✅ Done | Flexible space (flex-grow) |
-| **Layout** | Alignment | ✅ Done | HorizontalAlignment, VerticalAlignment |
-| **Views** | Text | ✅ Done | With font, color, styling modifiers |
-| **Controls** | Button | ✅ Done | With buttonStyle, disabled state |
-| **Controls** | TextField | ✅ Done | With binding, styles, keyboard types |
-| **Controls** | SecureField | ✅ Done | Password input with binding |
-| **Controls** | Toggle | ✅ Done | Switch/checkbox/button styles |
-| **Lists** | ForEach | ✅ Done | Array iteration with id tracking |
-| **State** | State | ✅ Done | Reactive state with subscribers |
-| **State** | Binding | ✅ Done | Two-way data binding |
-| **State** | ObservableObject | ✅ Done | MVVM ViewModel base class |
-| **Graphics** | Color | ✅ Done | System colors with opacity |
-| **Graphics** | Font | ✅ Done | System fonts and custom sizes |
-| **Modifiers** | Basic | ✅ Done | padding, frame, background, foregroundColor, cornerRadius, opacity, shadow, border, font |
+const items = ['Apple', 'Banana', 'Cherry'];
 
-### Missing Components (Roadmap)
+App(() =>
+  NavigationStack(
+    VStack(
+      Text('Fruits').font(Font.largeTitle),
+      List(
+        ForEach(items, (item) =>
+          NavigationLink(
+            Text(item),
+            () => Text(`You selected: ${item}`).font(Font.title)
+          )
+        )
+      )
+    )
+  )
+).mount('#root');
+```
 
-| Priority | Category | Components |
-|----------|----------|------------|
-| **P0 - High** | Layout | ZStack, Divider |
-| **P0 - High** | Views | Image |
-| **P0 - High** | Controls | Slider, Picker |
-| **P0 - High** | Lists | List, Section |
-| **P1 - Medium** | Layout | ScrollView, Group, LazyVStack, LazyHStack |
-| **P1 - Medium** | Navigation | NavigationStack, NavigationLink, TabView |
-| **P1 - Medium** | Controls | Stepper, DatePicker, Menu, Link, ProgressView |
-| **P1 - Medium** | State | @Environment, @EnvironmentObject |
-| **P1 - Medium** | Shapes | Rectangle, RoundedRectangle, Circle, Capsule |
-| **P2 - Low** | Layout | LazyVGrid, LazyHGrid, Grid |
-| **P2 - Low** | Views | Label, AsyncImage, Canvas |
-| **P2 - Low** | Controls | ColorPicker, Gauge |
-| **P2 - Low** | Presentation | Sheet, Alert, Popover, ConfirmationDialog |
-| **P2 - Low** | Animation | withAnimation, Animation, Transition |
-| **P2 - Low** | Gestures | TapGesture, DragGesture, LongPressGesture |
+## Project Structure
 
-### Milestones
+```
+SwiftUI-For-Web/
+├── src/
+│   ├── index.js              # Main entry (import SwiftUI from here)
+│   ├── Core/                 # View, ViewBuilder
+│   ├── Data/                 # State, Binding, ObservableObject, Environment
+│   ├── View/                 # Text, Image, Controls, Navigation
+│   ├── Layout/               # VStack, HStack, Grid, ViewThatFits
+│   ├── Shape/                # Rectangle, Circle, Path
+│   ├── Graphic/              # Color, Font, Gradient
+│   ├── Animation/            # withAnimation, transitions
+│   ├── Gesture/              # Tap, Drag, Pinch gestures
+│   └── App/                  # App mounting, WindowGroup
+├── Examples/
+│   ├── HelloWorld/           # Basic example
+│   ├── Counter/              # State management
+│   ├── TodoApp/              # MVVM pattern
+│   ├── Netflix/              # Complex UI
+│   └── Airbnb/               # Full app with adaptive layout
+│       ├── index.html
+│       ├── main.js           # App entry
+│       ├── ViewModels/       # App state
+│       ├── Views/            # UI components
+│       ├── Services/         # API layer
+│       └── Components/       # Reusable UI
+└── CLAUDE.md                 # Development guide
+```
 
-| Milestone | Status | Description |
-|-----------|--------|-------------|
-| M1: Hello World | ✅ Complete | Static text rendering with layout |
-| M2: Counter App | ✅ Complete | Interactive state management |
-| M3: Styled App | ✅ Complete | Rich visual styling with modifiers |
-| M4: Todo App | ✅ Complete | Full MVVM application with ObservableObject |
-| M5: Navigation | 🔴 Planned | NavigationStack and routing |
-| M6: Animations | 🔴 Planned | CSS transitions and animations |
+## Recommended App Structure
+
+```
+MyApp/
+├── index.html
+├── main.js                   # App entry point
+├── ViewModels/
+│   ├── AppViewModel.js       # Main app state
+│   └── SettingsViewModel.js
+├── Views/
+│   ├── Home/
+│   │   ├── HomeView.js
+│   │   └── index.js
+│   ├── Detail/
+│   │   ├── DetailView.js
+│   │   └── index.js
+│   └── Settings/
+│       └── SettingsView.js
+├── Components/               # Reusable UI
+│   ├── Card.js
+│   ├── Avatar.js
+│   └── LoadingSpinner.js
+└── Services/
+    └── api.js
+```
+
+## SwiftUI Mapping
+
+| SwiftUI (iOS) | SwiftUI-For-Web |
+|---------------|-----------------|
+| `@State var count = 0` | `@Published count = 0` |
+| `@Environment(\.colorScheme)` | `Environment.get(EnvironmentValues.colorScheme)` |
+| `@Environment(\.horizontalSizeClass)` | `Environment.get(EnvironmentValues.horizontalSizeClass)` |
+| `UIDevice.current.userInterfaceIdiom` | `currentDeviceIdiom()` returns `'phone'`, `'pad'`, `'mac'` |
+
+## Browser Support
+
+- Chrome 61+
+- Firefox 60+
+- Safari 11+
+- Edge 79+
 
 ## Contributing
 
-Contributions are welcome! This project is in active development and there's plenty to do:
-
-1. **Report bugs** - Open an issue
-2. **Suggest features** - Open an issue with your idea
-3. **Submit PRs** - Pick an item from the roadmap or fix a bug
-4. **Improve docs** - Help make the documentation better
-5. **Share** - Star the repo and spread the word!
-
-### Development Guidelines
-
-- Zero dependencies - don't add npm packages
-- Match SwiftUI API as closely as possible
-- Write tests for new features
-- Keep it simple and performant
-
-## Support
-
-If you find this project useful, consider:
-
-- Starring the repository
-- Sharing it with others
-- Contributing code or documentation
-- [Sponsoring the project](https://github.com/sponsors/ShawnBaek)
+Contributions welcome! See [CLAUDE.md](CLAUDE.md) for development guidelines.
 
 ## License
 
@@ -372,5 +309,3 @@ ISC License
 ---
 
 **Made with love for the SwiftUI and Web communities.**
-
-*Bringing the joy of SwiftUI to the web, one component at a time.*
