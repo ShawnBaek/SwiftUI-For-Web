@@ -4,3 +4,5 @@
  */
 
 export { View, default as ViewDefault } from './View.js';
+export { Reconciler } from './Reconciler.js';
+export { ChangeTracker, createTrackedProperty } from './ChangeTracker.js';

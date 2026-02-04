@@ -22,6 +22,12 @@
  *   }
  * }
  */
+
+import { ChangeTracker } from './ChangeTracker.js';
+
+/** @type {number} Global view counter for generating unique IDs */
+let _viewIdCounter = 0;
+
 export class View {
   constructor() {
     /**
@@ -37,6 +43,112 @@ export class View {
      * @private
      */
     this._element = null;
+
+    /**
+     * Unique view identifier for reconciliation and change tracking
+     * @type {string}
+     * @private
+     */
+    this._viewId = `${this.constructor.name}_${++_viewIdCounter}`;
+
+    /**
+     * Explicit ID set via .id() modifier
+     * @type {string|null}
+     * @private
+     */
+    this._explicitId = null;
+  }
+
+  // ===========================================================================
+  // Static Debugging Methods (matches SwiftUI's Self._printChanges())
+  // ===========================================================================
+
+  /**
+   * Print what caused this view to be re-evaluated.
+   * Call this at the start of body() for debugging.
+   *
+   * @example
+   * body() {
+   *   let _ = this.constructor._printChanges(this);
+   *   // or: let _ = Self._printChanges(); (if Self is defined)
+   *   return VStack(...);
+   * }
+   *
+   * Output examples:
+   * - "ContentView: @self changed" - view struct itself changed
+   * - "ContentView: _count changed" - specific property changed
+   * - "ContentView: @identity changed" - view identity changed
+   *
+   * @param {View} [instance] - The view instance (optional, for static context)
+   * @returns {void}
+   */
+  static _printChanges(instance) {
+    const viewName = instance?.constructor?.name || this.name || 'View';
+    const viewId = instance?._viewId || `${viewName}_static`;
+
+    ChangeTracker.enableForView(viewId);
+    ChangeTracker.printChanges(viewName, viewId);
+  }
+
+  /**
+   * Log changes using structured logging (SwiftUI's _logChanges() equivalent)
+   * Uses console.info with structured data for better filtering in dev tools.
+   *
+   * @param {View} [instance] - The view instance (optional)
+   * @returns {void}
+   */
+  static _logChanges(instance) {
+    const viewName = instance?.constructor?.name || this.name || 'View';
+    const viewId = instance?._viewId || `${viewName}_static`;
+
+    ChangeTracker.enableForView(viewId);
+    ChangeTracker.logChanges(viewName, viewId);
+  }
+
+  /**
+   * Instance method for _printChanges (convenience)
+   * Use inside body(): `let _ = this._printChanges();`
+   * @returns {void}
+   */
+  _printChanges() {
+    this.constructor._printChanges(this);
+  }
+
+  /**
+   * Instance method for _logChanges (convenience)
+   * Use inside body(): `let _ = this._logChanges();`
+   * @returns {void}
+   */
+  _logChanges() {
+    this.constructor._logChanges(this);
+  }
+
+  /**
+   * Enable automatic change tracking for this view.
+   * When enabled, changes will be logged on every re-render.
+   *
+   * @returns {View} Returns `this` for chaining
+   */
+  trackChanges() {
+    ChangeTracker.enableForView(this._viewId);
+    return this;
+  }
+
+  // ===========================================================================
+  // Identity
+  // ===========================================================================
+
+  /**
+   * Set an explicit identity for this view.
+   * Used for list items and to help the reconciler track views.
+   * Matches SwiftUI's .id() modifier.
+   *
+   * @param {string|number} id - Unique identifier
+   * @returns {View} Returns `this` for chaining
+   */
+  id(identifier) {
+    this._explicitId = String(identifier);
+    return this;
   }
 
   /**

@@ -3,6 +3,11 @@
  *
  * Matches SwiftUI's @main App pattern for bootstrapping the application.
  *
+ * Features:
+ * - Full mount and unmount lifecycle
+ * - Partial updates via Reconciler (diff algorithm)
+ * - Debug mode for tracking view changes
+ *
  * @example
  * // Basic usage
  * App(() =>
@@ -19,9 +24,14 @@
  *   }
  * }
  * App(ContentView).mount('#root')
+ *
+ * // With debug mode
+ * App(ContentView).debug().mount('#root')
  */
 
 import { View } from '../Core/View.js';
+import { Reconciler } from '../Core/Reconciler.js';
+import { ChangeTracker } from '../Core/ChangeTracker.js';
 
 /**
  * App class implementation for mounting views to the DOM.
@@ -36,6 +46,41 @@ class AppInstance {
     this._content = content;
     this._rootElement = null;
     this._mountedView = null;
+    this._useReconciler = true; // Enable partial updates by default
+    this._debugMode = false;
+    this._renderCount = 0;
+  }
+
+  /**
+   * Enable debug mode - logs render information and enables change tracking.
+   *
+   * @returns {AppInstance} Returns this for chaining
+   */
+  debug() {
+    this._debugMode = true;
+    Reconciler.enableDebug();
+    return this;
+  }
+
+  /**
+   * Disable partial updates (use full re-render).
+   * Useful for debugging or when reconciliation causes issues.
+   *
+   * @returns {AppInstance} Returns this for chaining
+   */
+  disableReconciler() {
+    this._useReconciler = false;
+    return this;
+  }
+
+  /**
+   * Enable partial updates via reconciler.
+   *
+   * @returns {AppInstance} Returns this for chaining
+   */
+  enableReconciler() {
+    this._useReconciler = true;
+    return this;
   }
 
   /**
@@ -64,9 +109,20 @@ class AppInstance {
     this._mountedView = this._createView();
 
     if (this._mountedView) {
-      // Render and append to root
-      const element = this._mountedView._render();
-      this._rootElement.appendChild(element);
+      this._renderCount++;
+
+      if (this._debugMode) {
+        console.log(`[App] Mount #${this._renderCount}`);
+      }
+
+      if (this._useReconciler) {
+        // Use reconciler for initial mount
+        Reconciler.mount(this._mountedView, this._rootElement);
+      } else {
+        // Direct render
+        const element = this._mountedView._render();
+        this._rootElement.appendChild(element);
+      }
 
       // Mark as mounted
       this._rootElement.dataset.swiftuiMounted = 'true';
@@ -113,7 +169,11 @@ class AppInstance {
    */
   unmount() {
     if (this._rootElement) {
-      this._rootElement.innerHTML = '';
+      if (this._useReconciler) {
+        Reconciler.unmount(this._rootElement);
+      } else {
+        this._rootElement.innerHTML = '';
+      }
       delete this._rootElement.dataset.swiftuiMounted;
       this._mountedView = null;
     }
@@ -121,14 +181,61 @@ class AppInstance {
   }
 
   /**
-   * Re-renders the entire app.
+   * Re-renders the app with partial updates (reconciliation).
+   * Only changed parts of the view tree will be updated.
    *
    * @returns {AppInstance} Returns this for chaining
    */
   refresh() {
+    if (!this._rootElement) return this;
+
+    this._renderCount++;
+
+    // Create new view tree
+    const newView = this._createView();
+
+    if (!newView) return this;
+
+    if (this._debugMode) {
+      console.log(`[App] Refresh #${this._renderCount}`);
+    }
+
+    if (this._useReconciler) {
+      // Use reconciler for partial updates
+      Reconciler.update(newView, this._rootElement);
+    } else {
+      // Full re-render (old behavior)
+      this._rootElement.innerHTML = '';
+      const element = newView._render();
+      this._rootElement.appendChild(element);
+    }
+
+    this._mountedView = newView;
+
+    return this;
+  }
+
+  /**
+   * Force a full re-render (bypasses reconciler).
+   * Use when you know the entire UI needs to be rebuilt.
+   *
+   * @returns {AppInstance} Returns this for chaining
+   */
+  forceRefresh() {
     if (this._rootElement) {
-      this.unmount();
-      this.mount(this._rootElement);
+      this._renderCount++;
+
+      if (this._debugMode) {
+        console.log(`[App] Force Refresh #${this._renderCount}`);
+      }
+
+      this._rootElement.innerHTML = '';
+      this._mountedView = this._createView();
+
+      if (this._mountedView) {
+        const element = this._mountedView._render();
+        this._rootElement.appendChild(element);
+      }
     }
     return this;
   }
@@ -150,6 +257,29 @@ class AppInstance {
   get element() {
     return this._rootElement;
   }
+
+  /**
+   * Gets the render count (useful for debugging).
+   *
+   * @returns {number} Number of times the app has been rendered
+   */
+  get renderCount() {
+    return this._renderCount;
+  }
+
+  /**
+   * Get reconciler statistics.
+   *
+   * @returns {Object} Stats about the reconciler
+   */
+  getStats() {
+    return {
+      renderCount: this._renderCount,
+      reconcilerEnabled: this._useReconciler,
+      debugMode: this._debugMode,
+      ...Reconciler.getStats()
+    };
+  }
 }
 
 /**
@@ -168,6 +298,9 @@ class AppInstance {
  *
  * // With View class
  * App(MyContentView).mount('#root')
+ *
+ * // With debug mode
+ * App(ContentView).debug().mount('#root')
  */
 export function App(content) {
   return new AppInstance(content);
