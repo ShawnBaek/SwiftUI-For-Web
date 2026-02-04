@@ -27,8 +27,18 @@ import {
   NavigationLink,
   BackButton,
   State,
+  // SwiftUI Animation API
+  Animation,
+  AnyTransition,
+  Namespace,
   withAnimation
 } from '../../src/index.js';
+
+// =============================================================================
+// Namespace for matchedGeometryEffect (hero animations)
+// =============================================================================
+
+const heroNamespace = Namespace();
 
 // =============================================================================
 // Sample Data (using placeholder images)
@@ -206,10 +216,13 @@ function HeroBanner(movie) {
         .background('white')
         .foregroundColor('black')
         .font(Font.system(18, 'bold'))
-        .cornerRadius(4),
+        .cornerRadius(4)
+        // Implicit animation on hover (using CSS transition)
+        .animation(Animation.interactiveSpring, null),
 
         Button('ℹ More Info', () => {
-          withAnimation(() => {
+          // Spring animation for smooth page transition
+          withAnimation(Animation.spring({ response: 0.5, dampingFraction: 0.85 }), () => {
             selectedMovie.value = movie;
             showDetail.value = true;
           });
@@ -219,6 +232,7 @@ function HeroBanner(movie) {
         .foregroundColor('white')
         .font(Font.system(18, 'bold'))
         .cornerRadius(4)
+        .animation(Animation.interactiveSpring, null)
       )
       .padding({ top: 16 })
     )
@@ -229,6 +243,7 @@ function HeroBanner(movie) {
 
 /**
  * Movie Card
+ * Uses matchedGeometryEffect for hero animation when tapped
  */
 function MovieCard(movie) {
   return VStack({ spacing: 8 },
@@ -237,9 +252,12 @@ function MovieCard(movie) {
       .aspectRatio('fill')
       .frame({ width: 180, height: 270 })
       .cornerRadius(4)
+      // Hero animation: this image will animate to the detail view
+      .matchedGeometryEffect(movie.id, heroNamespace)
   )
   .onTapGesture(() => {
-    withAnimation(() => {
+    // Use SwiftUI-style spring animation
+    withAnimation(Animation.spring({ response: 0.4, dampingFraction: 0.8 }), () => {
       selectedMovie.value = movie;
       showDetail.value = true;
     });
@@ -287,6 +305,8 @@ function MovieRow(category) {
 
 /**
  * Movie Detail View
+ * Uses matchedGeometryEffect for hero animation from card
+ * Uses .transition() for view appearance
  */
 function DetailView(movie) {
   if (!movie) {
@@ -315,9 +335,10 @@ function DetailView(movie) {
 
     // Content
     VStack({ alignment: 'leading', spacing: 24 },
-      // Back button
+      // Back button with slide transition
       Button('← Back', () => {
-        withAnimation(() => {
+        // Use easeOut for dismissal (feels more natural)
+        withAnimation(Animation.easeOut(0.3), () => {
           showDetail.value = false;
           selectedMovie.value = null;
         });
@@ -325,19 +346,22 @@ function DetailView(movie) {
       .foregroundColor('white')
       .padding(16)
       .background('rgba(0,0,0,0.5)')
-      .cornerRadius(8),
+      .cornerRadius(8)
+      .transition(AnyTransition.move('leading').combined(AnyTransition.opacity)),
 
       Spacer().frame({ height: 200 }),
 
       HStack({ spacing: 32 },
-        // Poster
+        // Poster with hero animation (matches the card)
         Image(movie.poster)
           .resizable()
           .frame({ width: 250, height: 375 })
           .cornerRadius(8)
-          .shadow({ radius: 20, color: 'rgba(0,0,0,0.5)' }),
+          .shadow({ radius: 20, color: 'rgba(0,0,0,0.5)' })
+          // Hero animation: connects to the card poster
+          .matchedGeometryEffect(movie.id, heroNamespace),
 
-        // Info
+        // Info with fade + move transition
         VStack({ alignment: 'leading', spacing: 16 },
           Text(movie.title)
             .font(Font.system(42, 'bold'))
@@ -370,7 +394,8 @@ function DetailView(movie) {
               .background('white')
               .foregroundColor('black')
               .font(Font.system(18, 'bold'))
-              .cornerRadius(4),
+              .cornerRadius(4)
+              .animation(Animation.spring(), null),
 
             Button('+ My List', () => console.log('Add to list'))
               .padding({ horizontal: 24, vertical: 14 })
@@ -381,11 +406,14 @@ function DetailView(movie) {
           )
           .padding({ top: 16 })
         )
+        .transition(AnyTransition.opacity.combined(AnyTransition.move('trailing')))
       )
       .padding({ horizontal: 48 })
     )
     .padding({ top: 24 })
-  );
+  )
+  // Entire detail view uses scale + fade transition
+  .transition(AnyTransition.scale(0.95).combined(AnyTransition.opacity));
 }
 
 /**

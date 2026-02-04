@@ -61,7 +61,17 @@ export { LinearGradient, RadialGradient, AngularGradient, GradientDirection, Uni
 // =============================================================================
 // Animation
 // =============================================================================
-export { Animation, withAnimation, withAnimationTypes, isViewTransitionSupported, prefersReducedMotion } from './Animation/Animation.js';
+export {
+  Animation,
+  AnyTransition,
+  Namespace,
+  withAnimation,
+  isAnimating,
+  currentAnimation,
+  extendViewWithAnimation,
+  isViewTransitionSupported,
+  prefersReducedMotion
+} from './Animation/Animation.js';
 
 // =============================================================================
 // App
@@ -72,6 +82,13 @@ export { App, AppInstance } from './App/App.js';
 // Version Info
 // =============================================================================
 export const VERSION = '0.1.0';
+
+// =============================================================================
+// Extend View with Animation Methods
+// =============================================================================
+import { View } from './Core/View.js';
+import { extendViewWithAnimation as _extendView } from './Animation/Animation.js';
+_extendView(View);
 
 /**
  * Log framework initialization
