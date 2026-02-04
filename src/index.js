@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 0.2.0
+ * @version 0.3.0
  */
 
 // =============================================================================
@@ -18,6 +18,15 @@ export { View } from './Core/View.js';
 export { State, createState } from './Data/State.js';
 export { Binding, createBinding } from './Data/Binding.js';
 export { ObservableObject, Published, createObservable } from './Data/ObservableObject.js';
+export {
+  Environment,
+  EnvironmentObject,
+  EnvironmentValues,
+  ColorScheme,
+  LayoutDirection,
+  UserInterfaceSizeClass,
+  extendViewWithEnvironment
+} from './Data/Environment.js';
 
 // =============================================================================
 // View Components
@@ -33,6 +42,9 @@ export { Toggle, ToggleView } from './View/Control/Toggle.js';
 export { Slider, SliderView } from './View/Control/Slider.js';
 export { Stepper, StepperView } from './View/Control/Stepper.js';
 export { Picker, PickerView, PickerStyle } from './View/Control/Picker.js';
+export { Menu, MenuView } from './View/Control/Menu.js';
+export { DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
+export { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
 
 // Lists
 export { List, ListView, ListStyle } from './View/List/List.js';
@@ -58,6 +70,13 @@ export { Spacer, SpacerView } from './Layout/Spacer.js';
 export { Divider, DividerView } from './Layout/Divider.js';
 export { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
 export { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
+export {
+  Grid, GridView,
+  GridRow, GridRowView,
+  GridItem, GridItemSize,
+  LazyVGrid, LazyVGridView,
+  LazyHGrid, LazyHGridView
+} from './Layout/Grid.js';
 
 // =============================================================================
 // Shapes
@@ -116,17 +135,19 @@ export { App, AppInstance } from './App/App.js';
 // =============================================================================
 // Version Info
 // =============================================================================
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 
 // =============================================================================
-// Extend View with Animation and Gesture Methods
+// Extend View with Animation, Gesture, and Environment Methods
 // =============================================================================
 import { View } from './Core/View.js';
 import { extendViewWithAnimation as _extendViewAnimation } from './Animation/Animation.js';
 import { extendViewWithGestures as _extendViewGestures } from './Gesture/Gesture.js';
+import { extendViewWithEnvironment as _extendViewEnvironment } from './Data/Environment.js';
 
 _extendViewAnimation(View);
 _extendViewGestures(View);
+_extendViewEnvironment(View);
 
 /**
  * Log framework initialization

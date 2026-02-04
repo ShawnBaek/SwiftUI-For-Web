@@ -57,9 +57,12 @@ This project is in **active development** with extensive functionality complete.
 | **Layout** | Divider | 🟢 Done | P2 | HR element |
 | **Layout** | Grid | 🔴 Planned | P2 | CSS Grid |
 | **Layout** | LazyVStack | 🔴 Planned | P3 | Virtual scrolling |
+| **Layout** | LazyVStack | 🔴 Planned | P3 | Virtual scrolling |
 | **Layout** | LazyHStack | 🔴 Planned | P3 | Virtual scrolling |
-| **Layout** | LazyVGrid | 🔴 Planned | P3 | CSS Grid lazy |
-| **Layout** | LazyHGrid | 🔴 Planned | P3 | CSS Grid lazy |
+| **Layout** | LazyVGrid | 🟢 Done | P3 | CSS Grid lazy |
+| **Layout** | LazyHGrid | 🟢 Done | P3 | CSS Grid lazy |
+| **Layout** | Grid | 🟢 Done | P2 | CSS Grid |
+| **Layout** | GridRow | 🟢 Done | P2 | Grid row container |
 | **Layout** | GeometryReader | 🟢 Done | P2 | Parent size access |
 | **View** | Text | 🟢 Done | P0 | Full modifier support |
 | **View** | Image | 🟢 Done | P1 | Img element with modifiers |
@@ -71,9 +74,9 @@ This project is in **active development** with extensive functionality complete.
 | **Control** | Slider | 🟢 Done | P2 | Input range with tint |
 | **Control** | Stepper | 🟢 Done | P2 | +/- buttons |
 | **Control** | Picker | 🟢 Done | P2 | Multiple styles (menu/segmented/wheel) |
-| **Control** | DatePicker | 🔴 Planned | P3 | Input date |
-| **Control** | ColorPicker | 🔴 Planned | P3 | Color selector |
-| **Control** | Menu | 🔴 Planned | P2 | Dropdown menu |
+| **Control** | DatePicker | 🟢 Done | P3 | Input date |
+| **Control** | ColorPicker | 🟢 Done | P3 | Color selector |
+| **Control** | Menu | 🟢 Done | P2 | Dropdown menu |
 | **List** | List | 🟢 Done | P1 | Scrollable list with selection |
 | **List** | ForEach | 🟢 Done | P0 | Array iteration with id |
 | **List** | Section | 🟢 Done | P2 | Grouped content in Form |
@@ -90,8 +93,8 @@ This project is in **active development** with extensive functionality complete.
 | **State** | @ObservableObject | 🟢 Done | P1 | ObservableObject class |
 | **State** | @Published | 🟢 Done | P1 | published() method |
 | **State** | @StateObject | 🔴 Planned | P2 | Owned observable |
-| **State** | @EnvironmentObject | 🔴 Planned | P2 | Shared state |
-| **State** | @Environment | 🔴 Planned | P2 | System values |
+| **State** | @EnvironmentObject | 🟢 Done | P2 | Shared state |
+| **State** | @Environment | 🟢 Done | P2 | System values |
 | **State** | @Observable (iOS 17+) | 🔴 Planned | P3 | Macro-based |
 | **Modifier** | .padding() | 🟢 Done | P0 | CSS padding |
 | **Modifier** | .frame() | 🟢 Done | P0 | Width/height |
@@ -102,7 +105,7 @@ This project is in **active development** with extensive functionality complete.
 | **Modifier** | .cornerRadius() | 🟢 Done | P1 | Border radius |
 | **Modifier** | .shadow() | 🟢 Done | P2 | Box shadow |
 | **Modifier** | .border() | 🟢 Done | P1 | CSS border |
-| **Modifier** | .clipShape() | 🔴 Planned | P2 | Clip to shape |
+| **Modifier** | .clipShape() | 🟢 Done | P2 | Clip to shape |
 | **Modifier** | .onTapGesture() | 🟢 Done | P1 | Click handler |
 | **Modifier** | .onAppear() | 🟢 Done | P1 | Mount lifecycle |
 | **Modifier** | .onDisappear() | 🟢 Done | P2 | Unmount lifecycle |
@@ -138,22 +141,22 @@ This project is in **active development** with extensive functionality complete.
 | Category | Done | Planned | Total |
 |----------|------|---------|-------|
 | Core | 2 | 1 | 3 |
-| Layout | 6 | 5 | 11 |
+| Layout | 10 | 2 | 12 |
 | View | 3 | 0 | 3 |
-| Control | 7 | 3 | 10 |
+| Control | 10 | 0 | 10 |
 | List | 3 | 0 | 3 |
 | Container | 4 | 0 | 4 |
 | Navigation | 3 | 1 | 4 |
-| State | 4 | 4 | 8 |
-| Modifier | 12 | 1 | 13 |
+| State | 6 | 2 | 8 |
+| Modifier | 13 | 0 | 13 |
 | Shape | 6 | 0 | 6 |
 | Graphic | 5 | 0 | 5 |
 | Animation | 4 | 0 | 4 |
 | Gesture | 5 | 0 | 5 |
 | App | 1 | 1 | 2 |
-| **Total** | **65** | **16** | **81** |
+| **Total** | **75** | **7** | **82** |
 
-**Progress: ~80% of SwiftUI components implemented**
+**Progress: ~91% of SwiftUI components implemented**
 
 ## Reference: OpenSwiftUI Project
 
