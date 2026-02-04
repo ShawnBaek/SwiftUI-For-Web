@@ -1062,6 +1062,331 @@ const ComponentShowcase = () => {
 App(ComponentShowcase).mount('#root');
 ```
 
+## Implementation Roadmap
+
+This roadmap breaks down the project into small, incremental tasks. Each task is designed to be completed independently with tests.
+
+### Sprint 0: Project Setup (Foundation)
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 0.1 | Create directory structure | `src/`, `Tests/`, `Examples/` folders | Folders exist |
+| 0.2 | Create test utilities | `Tests/TestUtils.js` with describe/it/expect | Tests run in browser |
+| 0.3 | Create base CSS | `src/styles/reset.css`, `base.css` | Styles load |
+| 0.4 | Create index.html | Demo page with module loading | Page loads |
+| 0.5 | Create main entry point | `src/index.js` with exports | Module imports work |
+
+**Goal**: Project skeleton that can load ES modules in browser.
+
+---
+
+### Sprint 1: Core View System
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 1.1 | Create View base class | `src/Core/View.js` | View can be instantiated |
+| 1.2 | Add _render() method | Base render to DOM | Returns HTMLElement |
+| 1.3 | Add modifier support | `_modifiers` array, `modifier()` method | Modifiers chain |
+| 1.4 | Add _applyModifiers() | Apply all modifiers to element | Styles applied |
+| 1.5 | Export from index | `src/Core/index.js` | Import works |
+
+**Goal**: Base View class that supports modifier chaining.
+
+```javascript
+// After Sprint 1, this should work:
+const view = new View();
+view.modifier(someMod);
+```
+
+---
+
+### Sprint 2: Text Component
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 2.1 | Create Text class | `src/View/Text.js` extends View | Text instantiates |
+| 2.2 | Implement _render() | Create `<span>` with content | Renders span |
+| 2.3 | Add factory function | `Text('hello')` syntax | Factory works |
+| 2.4 | Write Text tests | `Tests/View/TextTests.js` | All tests pass |
+| 2.5 | Export from index | Add to `src/index.js` | Import works |
+
+**Goal**: Render text to DOM.
+
+```javascript
+// After Sprint 2:
+Text('Hello, World!')._render() // → <span>Hello, World!</span>
+```
+
+---
+
+### Sprint 3: Color & Font Types
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 3.1 | Create Color class | `src/Graphic/Color.js` | Color.blue exists |
+| 3.2 | Add system colors | blue, red, green, gray, primary, etc. | All colors defined |
+| 3.3 | Add rgba() method | Convert to CSS color string | Returns valid CSS |
+| 3.4 | Create Font class | `src/Graphic/Font.js` | Font.title exists |
+| 3.5 | Add font presets | largeTitle, title, headline, body, caption | All fonts defined |
+| 3.6 | Add Font.system() | Custom size/weight | Returns Font object |
+| 3.7 | Write tests | `Tests/Graphic/` | All tests pass |
+| 3.8 | Export from index | `src/Graphic/index.js` | Imports work |
+
+**Goal**: Type-safe color and font definitions matching SwiftUI.
+
+```javascript
+// After Sprint 3:
+Color.blue.rgba()     // → 'rgba(0, 122, 255, 1)'
+Font.title.css()      // → { fontSize: '28px', fontWeight: '400' }
+```
+
+---
+
+### Sprint 4: Basic Modifiers
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 4.1 | Create ViewModifier base | `src/Modifier/ViewModifier.js` | Base class exists |
+| 4.2 | Implement .padding() | `PaddingModifier` | Adds CSS padding |
+| 4.3 | Implement .foregroundColor() | `ForegroundColorModifier` | Sets color |
+| 4.4 | Implement .background() | `BackgroundModifier` | Sets background |
+| 4.5 | Implement .font() | `FontModifier` | Sets font styles |
+| 4.6 | Implement .frame() | `FrameModifier` | Sets width/height |
+| 4.7 | Add modifiers to View | Mixin or inheritance | View has .padding() etc |
+| 4.8 | Write modifier tests | `Tests/Modifier/` | All tests pass |
+
+**Goal**: Chainable modifiers on Text.
+
+```javascript
+// After Sprint 4:
+Text('Hello')
+  .font(Font.title)
+  .foregroundColor(Color.blue)
+  .padding(20)
+  ._render() // → styled <span>
+```
+
+---
+
+### Sprint 5: VStack & HStack
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 5.1 | Create Alignment enum | `src/Layout/Alignment.js` | Alignment.center exists |
+| 5.2 | Create VStack class | `src/Layout/Stack/VStack.js` | VStack instantiates |
+| 5.3 | Add alignment param | `VStack({ alignment: ... })` | Aligns children |
+| 5.4 | Add spacing param | `VStack({ spacing: 10 })` | Adds gap |
+| 5.5 | Implement _render() | Flexbox column with children | Renders div |
+| 5.6 | Create HStack class | `src/Layout/Stack/HStack.js` | Same as VStack |
+| 5.7 | Add factory functions | `VStack()`, `HStack()` | Factory works |
+| 5.8 | Write Stack tests | `Tests/Layout/StackTests.js` | All tests pass |
+
+**Goal**: Layout containers for arranging views.
+
+```javascript
+// After Sprint 5:
+VStack({ spacing: 10 },
+  Text('Line 1'),
+  Text('Line 2')
+)._render() // → flexbox column div
+```
+
+---
+
+### Sprint 6: Spacer & App Mount
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 6.1 | Create Spacer class | `src/Layout/Spacer.js` | Spacer instantiates |
+| 6.2 | Implement _render() | flex-grow: 1 div | Renders spacer |
+| 6.3 | Create App class | `src/App/App.js` | App instantiates |
+| 6.4 | Implement mount() | Render to DOM selector | Mounts to #root |
+| 6.5 | Write tests | `Tests/App/AppTests.js` | All tests pass |
+
+**Goal**: Complete Hello World example.
+
+```javascript
+// After Sprint 6 - Hello World works!
+App(() =>
+  VStack({ spacing: 10 },
+    Text('Hello, SwiftUI for Web!')
+      .font(Font.largeTitle)
+      .foregroundColor(Color.blue),
+    Spacer()
+  )
+).mount('#root');
+```
+
+---
+
+### Sprint 7: State Management
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 7.1 | Create State class | `src/Data/State.js` | State instantiates |
+| 7.2 | Add wrappedValue | Getter/setter | Get/set value |
+| 7.3 | Add subscribers | subscribe() method | Callbacks fire |
+| 7.4 | Add projectedValue | Returns Binding | $state works |
+| 7.5 | Create Binding class | `src/Data/Binding.js` | Two-way binding |
+| 7.6 | Implement re-render | State change triggers update | UI updates |
+| 7.7 | Write State tests | `Tests/Data/StateTests.js` | All tests pass |
+
+**Goal**: Reactive state that updates UI.
+
+```javascript
+// After Sprint 7:
+const count = new State(0);
+count.wrappedValue = 1; // UI re-renders
+```
+
+---
+
+### Sprint 8: Button Component
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 8.1 | Create Button class | `src/View/Control/Button.js` | Button instantiates |
+| 8.2 | Add label and action | `Button('Click', () => {})` | Stores action |
+| 8.3 | Implement _render() | `<button>` with click handler | Renders button |
+| 8.4 | Add button modifiers | .buttonStyle(), etc. | Styles work |
+| 8.5 | Write Button tests | `Tests/View/Control/ButtonTests.js` | All tests pass |
+
+**Goal**: Counter example works.
+
+```javascript
+// After Sprint 8 - Counter works!
+const count = new State(0);
+VStack(
+  Text(String(count.wrappedValue)),
+  Button('+', () => count.wrappedValue++)
+)
+```
+
+---
+
+### Sprint 9: More Modifiers
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 9.1 | Implement .cornerRadius() | Border radius | Rounds corners |
+| 9.2 | Implement .opacity() | CSS opacity | Sets opacity |
+| 9.3 | Implement .border() | CSS border | Adds border |
+| 9.4 | Implement .shadow() | Box shadow | Adds shadow |
+| 9.5 | Implement .onTapGesture() | Click handler | Fires callback |
+| 9.6 | Write tests | Modifier tests | All pass |
+
+**Goal**: Rich styling options.
+
+---
+
+### Sprint 10: ForEach & List Basics
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 10.1 | Create ForEach class | `src/View/List/ForEach.js` | ForEach instantiates |
+| 10.2 | Implement iteration | Map array to views | Renders children |
+| 10.3 | Add id parameter | `ForEach(items, { id: 'id' })` | Tracks identity |
+| 10.4 | Create List class | `src/View/List/List.js` | Scrollable list |
+| 10.5 | Write tests | `Tests/View/List/` | All pass |
+
+**Goal**: Render dynamic lists.
+
+```javascript
+// After Sprint 10:
+ForEach(['A', 'B', 'C'], item => Text(item))
+```
+
+---
+
+### Sprint 11: TextField
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 11.1 | Create TextField class | `src/View/Control/TextField.js` | TextField instantiates |
+| 11.2 | Add placeholder | First parameter | Shows placeholder |
+| 11.3 | Add text binding | `TextField('...', $text)` | Two-way binding |
+| 11.4 | Implement _render() | `<input type="text">` | Renders input |
+| 11.5 | Write tests | `Tests/View/Control/TextFieldTests.js` | All pass |
+
+**Goal**: Text input with binding.
+
+---
+
+### Sprint 12: Toggle
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 12.1 | Create Toggle class | `src/View/Control/Toggle.js` | Toggle instantiates |
+| 12.2 | Add isOn binding | `Toggle($isOn)` | Two-way binding |
+| 12.3 | Implement _render() | Checkbox or switch | Renders toggle |
+| 12.4 | Write tests | `Tests/View/Control/ToggleTests.js` | All pass |
+
+**Goal**: Boolean toggle with binding.
+
+---
+
+### Sprint 13: Complete Todo Example
+
+| Task | Description | Deliverable | Test |
+|------|-------------|-------------|------|
+| 13.1 | Create ObservableObject | `src/Data/ObservableObject.js` | Base class |
+| 13.2 | Create @Published | Property decorator pattern | Auto-notify |
+| 13.3 | Build TodoApp example | `Examples/TodoApp/` | Example runs |
+| 13.4 | Test MVVM pattern | Integration test | All works |
+
+**Goal**: Full MVVM Todo app working.
+
+---
+
+### Future Sprints (P1-P3 Features)
+
+| Sprint | Features |
+|--------|----------|
+| 14 | ZStack, Image, Divider |
+| 15 | ScrollView, Group |
+| 16 | NavigationStack, NavigationLink |
+| 17 | Shapes (Rectangle, Circle, Capsule) |
+| 18 | Animation basics (withAnimation) |
+| 19 | @Environment, @EnvironmentObject |
+| 20 | Slider, Stepper, Picker |
+| 21 | Gestures (tap, long press, drag) |
+
+---
+
+### Progress Tracking
+
+Update this section as sprints are completed:
+
+| Sprint | Status | Date Completed |
+|--------|--------|----------------|
+| Sprint 0 | 🔴 Not Started | - |
+| Sprint 1 | 🔴 Not Started | - |
+| Sprint 2 | 🔴 Not Started | - |
+| Sprint 3 | 🔴 Not Started | - |
+| Sprint 4 | 🔴 Not Started | - |
+| Sprint 5 | 🔴 Not Started | - |
+| Sprint 6 | 🔴 Not Started | - |
+| Sprint 7 | 🔴 Not Started | - |
+| Sprint 8 | 🔴 Not Started | - |
+| Sprint 9 | 🔴 Not Started | - |
+| Sprint 10 | 🔴 Not Started | - |
+| Sprint 11 | 🔴 Not Started | - |
+| Sprint 12 | 🔴 Not Started | - |
+| Sprint 13 | 🔴 Not Started | - |
+
+**Legend:** 🟢 Complete | 🟡 In Progress | 🔴 Not Started
+
+---
+
+### Milestone Checkpoints
+
+| Milestone | Sprints | Deliverable |
+|-----------|---------|-------------|
+| **M1: Hello World** | 0-6 | Static text rendering with layout |
+| **M2: Counter App** | 7-8 | Interactive state management |
+| **M3: Styled App** | 9 | Rich visual styling |
+| **M4: Todo App** | 10-13 | Full MVVM application |
+
 ## Development Workflow
 
 ### Getting Started
