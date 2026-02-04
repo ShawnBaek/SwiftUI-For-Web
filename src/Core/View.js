@@ -386,6 +386,96 @@ export class View {
       }
     });
   }
+
+  /**
+   * Clip the view to a shape.
+   *
+   * @param {Object|string} shape - Shape to clip to (Circle, RoundedRectangle, etc.) or shape name
+   * @returns {View} Returns `this` for chaining
+   */
+  clipShape(shape) {
+    return this.modifier({
+      apply(element) {
+        // Handle shape objects
+        if (shape && shape.constructor) {
+          const shapeName = shape.constructor.name;
+
+          if (shapeName === 'CircleView' || shape._shapeName === 'circle') {
+            element.style.borderRadius = '50%';
+            element.style.overflow = 'hidden';
+          } else if (shapeName === 'CapsuleView' || shape._shapeName === 'capsule') {
+            element.style.borderRadius = '9999px';
+            element.style.overflow = 'hidden';
+          } else if (shapeName === 'RoundedRectangleView' || shape._shapeName === 'rounded-rectangle') {
+            const radius = shape._cornerRadius ?? 10;
+            element.style.borderRadius = `${radius}px`;
+            element.style.overflow = 'hidden';
+          } else if (shapeName === 'RectangleView' || shape._shapeName === 'rectangle') {
+            element.style.borderRadius = '0';
+            element.style.overflow = 'hidden';
+          } else if (shapeName === 'EllipseView' || shape._shapeName === 'ellipse') {
+            element.style.borderRadius = '50%';
+            element.style.overflow = 'hidden';
+          }
+        }
+
+        // Handle string shape names
+        if (typeof shape === 'string') {
+          switch (shape.toLowerCase()) {
+            case 'circle':
+              element.style.borderRadius = '50%';
+              break;
+            case 'capsule':
+              element.style.borderRadius = '9999px';
+              break;
+            case 'rectangle':
+              element.style.borderRadius = '0';
+              break;
+          }
+          element.style.overflow = 'hidden';
+        }
+      }
+    });
+  }
+
+  /**
+   * Set the content shape for hit testing.
+   *
+   * @param {Object} shape - Shape to use for content area
+   * @param {boolean} eoFill - Use even-odd fill rule
+   * @returns {View} Returns `this` for chaining
+   */
+  contentShape(shape, eoFill = false) {
+    // For web, contentShape is primarily for hit testing
+    // We can approximate this with pointer-events and clip-path
+    return this.clipShape(shape);
+  }
+
+  /**
+   * Mask the view with another view or shape.
+   *
+   * @param {View|Object} mask - View or shape to use as mask
+   * @param {string} alignment - Alignment of mask
+   * @returns {View} Returns `this` for chaining
+   */
+  mask(mask, alignment = 'center') {
+    return this.modifier({
+      apply(element) {
+        // For shapes, we can use CSS clip-path or mask-image
+        if (mask && mask.constructor) {
+          const shapeName = mask.constructor.name;
+
+          if (shapeName === 'CircleView') {
+            element.style.clipPath = 'circle(50%)';
+          } else if (shapeName === 'EllipseView') {
+            element.style.clipPath = 'ellipse(50% 50%)';
+          } else if (shapeName === 'RectangleView') {
+            element.style.clipPath = 'inset(0)';
+          }
+        }
+      }
+    });
+  }
 }
 
 export default View;
