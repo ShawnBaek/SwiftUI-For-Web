@@ -107,7 +107,7 @@ const ChartSection = (title, description, chartView) => {
 // 1. Bar Chart
 const BarChartExample = () => {
   return Chart(salesData, item =>
-    new BarMark({
+    BarMark({
       x: value('Month', item.month),
       y: value('Sales', item.sales)
     })
@@ -127,7 +127,7 @@ const GroupedBarChartExample = () => {
   ]);
 
   return Chart(groupedData, item =>
-    new BarMark({
+    BarMark({
       x: value('Month', item.month),
       y: value('Value', item.value)
     })
@@ -141,7 +141,7 @@ const GroupedBarChartExample = () => {
 // 3. Line Chart
 const LineChartExample = () => {
   return Chart(stockData, item =>
-    new LineMark({
+    LineMark({
       x: value('Day', item.day),
       y: value('Price', item.price)
     })
@@ -155,7 +155,7 @@ const LineChartExample = () => {
 // 4. Multi-Series Line Chart
 const MultiLineChartExample = () => {
   return Chart(temperatureData, item =>
-    new LineMark({
+    LineMark({
       x: value('Month', item.month),
       y: value('Temperature', item.temp)
     })
@@ -169,7 +169,7 @@ const MultiLineChartExample = () => {
 // 5. Area Chart
 const AreaChartExample = () => {
   return Chart(stockData, item =>
-    new AreaMark({
+    AreaMark({
       x: value('Day', item.day),
       y: value('Volume', item.volume)
     })
@@ -182,14 +182,14 @@ const AreaChartExample = () => {
 // 6. Line + Point Chart (Combo)
 const ComboChartExample = () => {
   return Chart(stockData, item => [
-    new LineMark({
+    LineMark({
       x: value('Day', item.day),
       y: value('Price', item.price)
     })
     .foregroundStyle(Color.hex('#FF9500'))
     .interpolationMethod('catmullRom'),
 
-    new PointMark({
+    PointMark({
       x: value('Day', item.day),
       y: value('Price', item.price)
     })
@@ -202,7 +202,7 @@ const ComboChartExample = () => {
 // 7. Scatter Plot
 const ScatterPlotExample = () => {
   return Chart(scatterData, item =>
-    new PointMark({
+    PointMark({
       x: value('X', item.x),
       y: value('Y', item.y)
     })
@@ -216,7 +216,7 @@ const ScatterPlotExample = () => {
 // 8. Pie Chart
 const PieChartExample = () => {
   return Chart(marketShareData, item =>
-    new SectorMark({
+    SectorMark({
       angle: value('Share', item.share)
     })
     .foregroundStyle({ by: value('Company', item.company) })
@@ -228,7 +228,7 @@ const PieChartExample = () => {
 // 9. Donut Chart
 const DonutChartExample = () => {
   return Chart(marketShareData, item =>
-    new SectorMark({
+    SectorMark({
       angle: value('Share', item.share),
       innerRadius: MarkDimension.ratio(0.5),
       outerRadius: MarkDimension.ratio(1.0)
@@ -245,14 +245,14 @@ const BarWithRuleExample = () => {
 
   return Chart([
     ...salesData.map(item =>
-      new BarMark({
+      BarMark({
         x: value('Month', item.month),
         y: value('Sales', item.sales)
       })
       .foregroundStyle(Color.hex('#007AFF'))
       .cornerRadius(4)
     ),
-    new RuleMark({
+    RuleMark({
       y: value('Target', targetValue)
     })
     .foregroundStyle(Color.hex('#FF3B30'))

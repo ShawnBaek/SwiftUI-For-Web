@@ -33,50 +33,69 @@
  *   )
  */
 
-// Core
-export { PlottableValue, value } from './PlottableValue.js';
-export { Mark } from './Mark.js';
-export { Chart, createChart } from './Chart.js';
+// Import classes
+import { PlottableValue, value } from './PlottableValue.js';
+import { Mark } from './Mark.js';
+import { Chart as ChartClass, createChart } from './Chart.js';
+import { BarMark as BarMarkClass, createBarMark } from './BarMark.js';
+import { LineMark as LineMarkClass, createLineMark } from './LineMark.js';
+import { PointMark as PointMarkClass, createPointMark } from './PointMark.js';
+import { AreaMark as AreaMarkClass, createAreaMark } from './AreaMark.js';
+import { RuleMark as RuleMarkClass, createRuleMark } from './RuleMark.js';
+import { RectangleMark as RectangleMarkClass, createRectangleMark } from './RectangleMark.js';
+import { SectorMark as SectorMarkClass, createSectorMark, MarkDimension } from './SectorMark.js';
 
-// Marks
-export { BarMark, createBarMark } from './BarMark.js';
-export { LineMark, createLineMark } from './LineMark.js';
-export { PointMark, createPointMark } from './PointMark.js';
-export { AreaMark, createAreaMark } from './AreaMark.js';
-export { RuleMark, createRuleMark } from './RuleMark.js';
-export { RectangleMark, createRectangleMark } from './RectangleMark.js';
-export { SectorMark, createSectorMark, MarkDimension } from './SectorMark.js';
+// Export factory functions (callable without 'new')
+export function Chart(dataOrContent, contentBuilder) {
+  return new ChartClass(dataOrContent, contentBuilder);
+}
 
-/**
- * Convenience factory functions matching Swift Charts syntax
- * These allow: BarMark({ x: value(...), y: value(...) })
- */
-import { BarMark as BarMarkClass } from './BarMark.js';
-import { LineMark as LineMarkClass } from './LineMark.js';
-import { PointMark as PointMarkClass } from './PointMark.js';
-import { AreaMark as AreaMarkClass } from './AreaMark.js';
-import { RuleMark as RuleMarkClass } from './RuleMark.js';
-import { RectangleMark as RectangleMarkClass } from './RectangleMark.js';
-import { SectorMark as SectorMarkClass } from './SectorMark.js';
-import { Chart as ChartClass } from './Chart.js';
-import { value as valueFunc } from './PlottableValue.js';
+export function BarMark(options) {
+  return new BarMarkClass(options);
+}
 
-// Re-export as callable functions
+export function LineMark(options) {
+  return new LineMarkClass(options);
+}
+
+export function PointMark(options) {
+  return new PointMarkClass(options);
+}
+
+export function AreaMark(options) {
+  return new AreaMarkClass(options);
+}
+
+export function RuleMark(options) {
+  return new RuleMarkClass(options);
+}
+
+export function RectangleMark(options) {
+  return new RectangleMarkClass(options);
+}
+
+export function SectorMark(options) {
+  return new SectorMarkClass(options);
+}
+
+// Re-export other items
+export { PlottableValue, value };
+export { Mark };
+export { MarkDimension };
+export { createChart, createBarMark, createLineMark, createPointMark, createAreaMark, createRuleMark, createRectangleMark, createSectorMark };
+
+// Charts namespace
 export const Charts = {
-  Chart: (dataOrContent, contentBuilder) => new ChartClass(dataOrContent, contentBuilder),
-  BarMark: (options) => new BarMarkClass(options),
-  LineMark: (options) => new LineMarkClass(options),
-  PointMark: (options) => new PointMarkClass(options),
-  AreaMark: (options) => new AreaMarkClass(options),
-  RuleMark: (options) => new RuleMarkClass(options),
-  RectangleMark: (options) => new RectangleMarkClass(options),
-  SectorMark: (options) => new SectorMarkClass(options),
-  value: valueFunc,
-  MarkDimension: {
-    ratio: (val) => ({ ratio: val }),
-    fixed: (val) => ({ value: val }),
-    inset: (val) => ({ inset: val })
-  }
+  Chart,
+  BarMark,
+  LineMark,
+  PointMark,
+  AreaMark,
+  RuleMark,
+  RectangleMark,
+  SectorMark,
+  value,
+  MarkDimension
 };
 
 export default Charts;
