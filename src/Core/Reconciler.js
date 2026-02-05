@@ -124,6 +124,11 @@ class ReconcilerClass {
       return view.children.filter(c => c instanceof View);
     }
 
+    // Check for _children property (VStack, HStack, ZStack, etc.)
+    if (view._children && Array.isArray(view._children)) {
+      return view._children.filter(c => c instanceof View);
+    }
+
     // Check for content property (stacks, etc.)
     if (view._content && Array.isArray(view._content)) {
       return view._content.filter(c => c instanceof View);
@@ -162,6 +167,9 @@ class ReconcilerClass {
     container.innerHTML = '';
     container.appendChild(tree.element);
 
+    // Link child elements to VNodes by walking both trees
+    this._linkElements(tree, tree.element);
+
     // Store tree for future reconciliation
     this._trees.set(container, tree);
 
@@ -170,6 +178,33 @@ class ReconcilerClass {
     }
 
     return tree;
+  }
+
+  /**
+   * Recursively link DOM elements to VNodes.
+   * SwiftUI matches children by position index (TupleView pattern).
+   * @param {VNode} node - Current VNode
+   * @param {HTMLElement} element - Current DOM element
+   */
+  _linkElements(node, element) {
+    if (!node || !element) return;
+
+    node.element = element;
+
+    // Get child elements (direct children of this container)
+    const childElements = Array.from(element.children);
+
+    // Match VNode children to DOM children by position index
+    // This mirrors SwiftUI's TupleView behavior where children
+    // at the same index are considered the same identity
+    for (let i = 0; i < node.children.length; i++) {
+      const childNode = node.children[i];
+      const childElement = childElements[i];
+
+      if (childNode && childElement) {
+        this._linkElements(childNode, childElement);
+      }
+    }
   }
 
   /**
@@ -194,6 +229,16 @@ class ReconcilerClass {
 
     if (this._debug) {
       console.log('[Reconciler] Patches:', patches);
+      console.log('[Reconciler] Patches count:', patches.length);
+      patches.forEach((p, i) => {
+        console.log(`[Reconciler] Patch ${i}: type=${p.type}, path=${p.path}`);
+        if (p.newNode) {
+          console.log(`[Reconciler] Patch ${i}: newNode.type=${p.newNode.type}, content=${p.newNode.view?._content}`);
+        }
+        if (p.oldNode) {
+          console.log(`[Reconciler] Patch ${i}: oldNode.type=${p.oldNode.type}, content=${p.oldNode.view?._content}, element=${p.oldNode.element?.tagName}`);
+        }
+      });
     }
 
     // Apply patches

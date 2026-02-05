@@ -22,14 +22,15 @@ export function ListingGrid() {
   }
 
   return VStack({ spacing: 24 },
-    // Grid
+    // Grid - Responsive columns based on viewport width
+    // Small screen (<480px): 1 card, Tablet (<1024px): 2 cards, Desktop: up to 8 cards
     Group(
       ...vm.listings.map(listing => ListingCard(listing))
     )
     .modifier({
       apply(el) {
         el.style.display = 'grid';
-        el.style.gridTemplateColumns = `repeat(auto-fill, minmax(${vm.isMobile ? '100%' : '280px'}, 1fr))`;
+        el.style.gridTemplateColumns = `repeat(${vm.gridColumns}, 1fr)`;
         el.style.gap = '24px';
         el.style.width = '100%';
       }

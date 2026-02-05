@@ -123,15 +123,45 @@ function getLayoutInfo() {
   const isMobile = horizontalSizeClass === UserInterfaceSizeClass.compact;
   const width = window.innerWidth;
 
+  // Calculate responsive columns for grid layout
+  // Small screen (<480px): 1 card full width
+  // Tablet (480px-1023px): 2 cards per row
+  // Desktop (>=1024px): up to 8 cards per row
+  let gridColumns;
+  if (width < 480) {
+    gridColumns = 1;
+  } else if (width < 1024) {
+    gridColumns = 2;
+  } else if (width < 1440) {
+    gridColumns = 4;
+  } else if (width < 1920) {
+    gridColumns = 6;
+  } else {
+    gridColumns = 8;
+  }
+
+  // Card dimensions maintain 2:3 aspect ratio
+  const horizontalPadding = isMobile ? 16 : (width < 1024 ? 32 : 48);
+  const gridGap = isMobile ? 8 : 12;
+  const availableWidth = width - (horizontalPadding * 2) - (gridGap * (gridColumns - 1));
+  const gridCardWidth = Math.floor(availableWidth / gridColumns);
+  const gridCardHeight = Math.floor(gridCardWidth * 1.5); // 2:3 aspect ratio
+
   return {
     isMobile,
     isTablet: width >= 768 && width < 1024,
     isDesktop: width >= 1024,
     horizontalSizeClass,
+    // Original carousel card sizes
     cardWidth: isMobile ? 120 : (width < 1024 ? 150 : 180),
     cardHeight: isMobile ? 180 : (width < 1024 ? 225 : 270),
+    // Grid layout sizes
+    gridColumns,
+    gridCardWidth,
+    gridCardHeight,
+    gridGap,
     heroHeight: isMobile ? 400 : (width < 1024 ? 500 : 600),
-    horizontalPadding: isMobile ? 16 : (width < 1024 ? 32 : 48),
+    horizontalPadding,
     // Expanded card size
     expandedWidth: isMobile ? Math.min(width - 40, 340) : Math.min(width * 0.5, 500),
     expandedHeight: isMobile ? Math.min(window.innerHeight - 100, 500) : Math.min(window.innerHeight - 100, 700)
@@ -306,24 +336,83 @@ function MovieCard(movie) {
 }
 
 /**
- * Movie Row/Carousel
+ * Movie Card for Grid Layout (responsive sizing)
+ */
+function MovieCardGrid(movie) {
+  const layout = getLayoutInfo();
+  const cardId = `card-grid-${movie.id}`;
+
+  return VStack({ spacing: 0 },
+    Image(movie.poster)
+      .resizable()
+      .aspectRatio('fill')
+      .frame({ width: '100%', height: layout.gridCardHeight })
+      .cornerRadius(6)
+  )
+  .modifier({
+    apply(el) {
+      el.id = cardId;
+      el.style.cursor = 'pointer';
+      el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+      el.style.aspectRatio = '2/3';
+
+      el.addEventListener('mouseenter', () => {
+        el.style.transform = 'scale(1.05)';
+        el.style.boxShadow = '0 8px 25px rgba(0,0,0,0.5)';
+        el.style.zIndex = '10';
+      });
+
+      el.addEventListener('mouseleave', () => {
+        el.style.transform = 'scale(1)';
+        el.style.boxShadow = 'none';
+        el.style.zIndex = '1';
+      });
+
+      el.addEventListener('click', () => {
+        const rect = el.getBoundingClientRect();
+        cardRect.value = {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          width: rect.width,
+          height: rect.height
+        };
+        selectedMovie.value = movie;
+        showDetail.value = true;
+      });
+    }
+  });
+}
+
+/**
+ * Movie Row - Responsive Grid Layout
+ * - Small screen: 1 card full width
+ * - Tablet: 2-4 cards per row
+ * - Desktop: up to 8 cards per row
  */
 function MovieRow(category) {
   const layout = getLayoutInfo();
 
-  return VStack({ alignment: 'leading', spacing: 8 },
+  return VStack({ alignment: 'leading', spacing: 12 },
     Text(category.title)
       .font(Font.system(layout.isMobile ? 16 : 20, 'bold'))
       .foregroundColor('white')
       .padding({ left: layout.horizontalPadding }),
 
-    ScrollView({ axis: 'horizontal', showsIndicators: false },
-      HStack({ spacing: layout.isMobile ? 8 : 12 },
-        Spacer().frame({ width: layout.horizontalPadding - 8 }),
-        ForEach(category.items, { id: 'id' }, (movie) => MovieCard(movie)),
-        Spacer().frame({ width: layout.horizontalPadding - 8 })
-      )
-    )
+    // Responsive grid container
+    new View().modifier({
+      apply(el) {
+        el.style.display = 'grid';
+        el.style.gridTemplateColumns = `repeat(${layout.gridColumns}, 1fr)`;
+        el.style.gap = `${layout.gridGap}px`;
+        el.style.padding = `0 ${layout.horizontalPadding}px`;
+
+        // Render movie cards into the grid
+        category.items.slice(0, layout.gridColumns).forEach(movie => {
+          const cardView = MovieCardGrid(movie);
+          el.appendChild(cardView._render());
+        });
+      }
+    })
   ).padding({ vertical: layout.isMobile ? 12 : 16 });
 }
 
@@ -636,7 +725,16 @@ selectedMovie.subscribe(() => {
   }
 });
 
-// Re-render on window resize
+// Re-render on window resize (debounced)
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    app.refresh();
+  }, 150);
+});
+
+// Also subscribe to Environment changes
 Environment.subscribe(EnvironmentValues.horizontalSizeClass, () => {
   app.refresh();
 });

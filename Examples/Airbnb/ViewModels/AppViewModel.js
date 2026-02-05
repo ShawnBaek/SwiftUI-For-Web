@@ -129,26 +129,29 @@ export class AppViewModel extends ObservableObject {
   }
 
   /**
-   * Get grid columns based on size class and device idiom
-   * Similar to SwiftUI's adaptive grid with columns that adjust to available space
+   * Get grid columns based on window width
+   * Responsive breakpoints:
+   * - Small screen (<480px): 1 card full width
+   * - Tablet (480px-1023px): 2 cards per row
+   * - Desktop (>=1024px): up to 8 cards per row
    */
   get gridColumns() {
-    // Compact horizontal = phone-like = 1 column
-    if (this.horizontalSizeClass === UserInterfaceSizeClass.compact) {
+    const width = window.innerWidth;
+
+    // Small screen: 1 card full width
+    if (width < 480) {
       return 1;
     }
 
-    // Regular horizontal, check device idiom for more columns
-    const width = window.innerWidth;
-    if (this.deviceIdiom === UserInterfaceIdiom.pad) {
-      return width >= 1024 ? 3 : 2;
+    // Tablet: 2 cards per row
+    if (width < 1024) {
+      return 2;
     }
 
-    // Desktop (mac idiom) - more columns based on width
-    if (width < 1440) return 3;
-    if (width < 1920) return 4;
-    if (width < 2560) return 5;
-    return 6;
+    // Desktop: more columns based on width (up to 8)
+    if (width < 1440) return 4;
+    if (width < 1920) return 6;
+    return 8;
   }
 
   async loadListings(reset = true) {

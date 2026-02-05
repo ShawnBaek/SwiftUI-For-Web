@@ -73,7 +73,19 @@ export class SectionView extends View {
       headerContainer.style.textTransform = 'uppercase';
       headerContainer.style.letterSpacing = '0.5px';
 
-      const headerView = this._header();
+      // Handle header as function, View, or string
+      let headerView = null;
+      if (typeof this._header === 'function') {
+        headerView = this._header();
+      } else if (this._header instanceof View) {
+        headerView = this._header;
+      } else if (typeof this._header === 'string') {
+        // Create a text span for string headers
+        const textSpan = document.createElement('span');
+        textSpan.textContent = this._header;
+        headerContainer.appendChild(textSpan);
+      }
+
       if (headerView instanceof View) {
         const rendered = headerView._render();
         // Inherit text styles

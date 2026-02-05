@@ -58,9 +58,18 @@ function MainApp() {
 }
 
 // Mount the app
-App(MainApp).mount('#root');
+const app = App(MainApp).mount('#root');
 
 // Set up reactive updates
 vm.subscribe(() => {
-  App(MainApp).refresh('#root');
+  app.refresh();
+});
+
+// Re-render on window resize (debounced) for responsive grid
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    app.refresh();
+  }, 150);
 });
