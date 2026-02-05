@@ -1,18 +1,18 @@
 /**
- * SwiftUI-For-Web
+ * SwiftUI-For-Web Core Module (without Charts)
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
- * @module SwiftUI-For-Web
- * @version 1.0.0
+ * @module SwiftUI-For-Web/core
+ * @version 1.1.0
  *
  * @example
- * // Simple import (recommended)
- * import SwiftUI from 'swiftui-for-web';
+ * // Import core only (smaller bundle, no Charts)
+ * import SwiftUI from 'swiftui-for-web/core';
  * const { VStack, Text, Button, App } = SwiftUI;
  *
  * @example
- * // Named imports (also supported)
- * import { VStack, Text, Button, App } from 'swiftui-for-web';
+ * // Import Charts separately if needed
+ * import { Chart, BarMark, value } from 'swiftui-for-web/charts';
  */
 
 // =============================================================================
@@ -154,24 +154,6 @@ import {
 } from './Animation/Animation.js';
 
 // =============================================================================
-// Charts (Swift Charts for Web)
-// =============================================================================
-import {
-  Chart, createChart,
-  BarMark, createBarMark,
-  LineMark, createLineMark,
-  PointMark, createPointMark,
-  AreaMark, createAreaMark,
-  RuleMark, createRuleMark,
-  RectangleMark, createRectangleMark,
-  SectorMark, createSectorMark,
-  PlottableValue, value,
-  Mark,
-  MarkDimension,
-  Charts
-} from './Charts/index.js';
-
-// =============================================================================
 // Gestures
 // =============================================================================
 import {
@@ -200,7 +182,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // =============================================================================
 // Extend View with Animation, Gesture, and Environment Methods
@@ -210,13 +192,9 @@ extendViewWithGestures(View);
 extendViewWithEnvironment(View);
 
 // =============================================================================
-// Default Export - Simple unified namespace
+// Default Export - Core SwiftUI (without Charts)
 // =============================================================================
-/**
- * SwiftUI-For-Web unified namespace
- * Import everything with: import SwiftUI from 'swiftui-for-web'
- */
-const SwiftUI = {
+const SwiftUICore = {
   // Version
   VERSION,
 
@@ -326,28 +304,14 @@ const SwiftUI = {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView,
-
-  // Charts (Swift Charts for Web)
-  Chart, createChart,
-  BarMark, createBarMark,
-  LineMark, createLineMark,
-  PointMark, createPointMark,
-  AreaMark, createAreaMark,
-  RuleMark, createRuleMark,
-  RectangleMark, createRectangleMark,
-  SectorMark, createSectorMark,
-  PlottableValue, value,
-  Mark,
-  MarkDimension,
-  Charts
+  DocumentGroup, DocumentGroupView
 };
 
 // Default export
-export default SwiftUI;
+export default SwiftUICore;
 
 // =============================================================================
-// Named Exports (for backward compatibility and tree-shaking)
+// Named Exports
 // =============================================================================
 export {
   VERSION,
@@ -462,19 +426,5 @@ export {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView,
-
-  // Charts (Swift Charts for Web)
-  Chart, createChart,
-  BarMark, createBarMark,
-  LineMark, createLineMark,
-  PointMark, createPointMark,
-  AreaMark, createAreaMark,
-  RuleMark, createRuleMark,
-  RectangleMark, createRectangleMark,
-  SectorMark, createSectorMark,
-  PlottableValue, value,
-  Mark,
-  MarkDimension,
-  Charts
+  DocumentGroup, DocumentGroupView
 };
