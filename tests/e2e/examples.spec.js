@@ -198,6 +198,39 @@ test.describe('Examples Rendering', () => {
     });
   });
 
+  test.describe('TestShowcase Example', () => {
+    test('should render all component sections', async ({ page }) => {
+      await page.goto('/Examples/TestShowcase/');
+
+      await page.waitForSelector('[data-testid="test-showcase"]', { timeout: 5000 });
+
+      // Check all sections are visible
+      await expect(page.locator('[data-testid="layout-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="view-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="control-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="list-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="container-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="shape-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="navigation-section"]')).toBeVisible();
+      await expect(page.locator('[data-testid="state-section"]')).toBeVisible();
+    });
+
+    test('should have interactive state management', async ({ page }) => {
+      await page.goto('/Examples/TestShowcase/');
+      await page.waitForSelector('[data-testid="counter-increment"]', { timeout: 5000 });
+
+      // Test counter
+      const value = page.locator('[data-testid="counter-value"]');
+      const initialValue = await value.textContent();
+
+      await page.locator('[data-testid="counter-increment"]').click();
+      await page.waitForTimeout(100);
+
+      const newValue = await value.textContent();
+      expect(parseInt(newValue, 10)).toBe(parseInt(initialValue, 10) + 1);
+    });
+  });
+
 });
 
 test.describe('No Console Errors', () => {
@@ -208,6 +241,7 @@ test.describe('No Console Errors', () => {
     { name: 'Charts', path: '/Examples/Charts/' },
     { name: 'Airbnb', path: '/Examples/Airbnb/' },
     { name: 'Netflix', path: '/Examples/Netflix/' },
+    { name: 'TestShowcase', path: '/Examples/TestShowcase/' },
   ];
 
   for (const example of examples) {
