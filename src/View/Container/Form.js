@@ -189,5 +189,4 @@ export function Form(...children) {
   return new FormView(...children);
 }
 
-export { FormStyle };
 export default Form;

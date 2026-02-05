@@ -31,6 +31,8 @@
   ],
   "scripts": {
     "test": "node run-tests.js",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui",
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",
@@ -67,5 +69,12 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "directories": {
+    "doc": "docs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.1",
+    "playwright": "^1.58.1"
+  }
 }

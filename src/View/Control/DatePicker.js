@@ -238,5 +238,4 @@ export function DatePicker(...args) {
   return new DatePickerView(...args);
 }
 
-export { DatePickerComponents, DatePickerStyle };
 export default DatePicker;

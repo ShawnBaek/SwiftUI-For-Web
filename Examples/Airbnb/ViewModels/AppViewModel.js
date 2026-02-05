@@ -7,7 +7,7 @@
 
 import SwiftUI from '../../../src/index.js';
 const {
-  ObservableObject, Published,
+  ObservableObject,
   Environment, EnvironmentValues,
   UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom
 } = SwiftUI;
@@ -15,40 +15,41 @@ const {
 import { api } from '../Services/api.js';
 
 export class AppViewModel extends ObservableObject {
-  // Search state
-  @Published searchLocation = '';
-  @Published searchSuggestions = [];
-  @Published checkInDate = null;
-  @Published checkOutDate = null;
-  @Published guestCount = 1;
-
-  // Filter state
-  @Published selectedCategory = 'all';
-  @Published minPrice = 0;
-  @Published maxPrice = 1000;
-  @Published selectedAmenities = [];
-  @Published instantBookOnly = false;
-  @Published superhostOnly = false;
-  @Published bedroomCount = 0;
-  @Published bedCount = 0;
-  @Published bathroomCount = 0;
-
-  // UI state
-  @Published listings = [];
-  @Published isLoading = true;
-  @Published showFilters = false;
-  @Published showSearch = false;
-  @Published selectedListing = null;
-  @Published showBooking = false;
-  @Published currentPage = 1;
-  @Published hasMore = true;
-  @Published favorites = new Set();
-
-  // Categories
-  @Published categories = [];
-
   constructor() {
     super();
+
+    // Search state
+    this.published('searchLocation', '');
+    this.published('searchSuggestions', []);
+    this.published('checkInDate', null);
+    this.published('checkOutDate', null);
+    this.published('guestCount', 1);
+
+    // Filter state
+    this.published('selectedCategory', 'all');
+    this.published('minPrice', 0);
+    this.published('maxPrice', 1000);
+    this.published('selectedAmenities', []);
+    this.published('instantBookOnly', false);
+    this.published('superhostOnly', false);
+    this.published('bedroomCount', 0);
+    this.published('bedCount', 0);
+    this.published('bathroomCount', 0);
+
+    // UI state
+    this.published('listings', []);
+    this.published('isLoading', true);
+    this.published('showFilters', false);
+    this.published('showSearch', false);
+    this.published('selectedListing', null);
+    this.published('showBooking', false);
+    this.published('currentPage', 1);
+    this.published('hasMore', true);
+    this.published('favorites', new Set());
+
+    // Categories
+    this.published('categories', []);
+
     this.init();
     this._setupEnvironmentListeners();
   }
