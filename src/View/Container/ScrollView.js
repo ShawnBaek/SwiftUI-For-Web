@@ -263,6 +263,6 @@ export function ScrollView(options, ...content) {
 }
 
 // Export class and Axis enum
-export { ScrollViewView, Axis };
+export { ScrollViewView };
 
 export default ScrollView;

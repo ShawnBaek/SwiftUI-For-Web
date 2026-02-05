@@ -205,5 +205,5 @@ export function Label(titleOrOptions, options = {}) {
   return new LabelView(titleOrOptions, options);
 }
 
-export { LabelStyle, SystemIcons };
+export { SystemIcons };
 export default Label;

@@ -180,5 +180,4 @@ export function GeometryReader(builder) {
   return new GeometryReaderView(builder);
 }
 
-export { GeometryProxy };
 export default GeometryReader;

@@ -544,7 +544,6 @@ const extendViewWithGestures = (ViewClass) => {
 };
 
 export {
-  GestureBase,
   extendViewWithGestures
 };
 

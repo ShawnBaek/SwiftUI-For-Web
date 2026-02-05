@@ -348,5 +348,4 @@ View.prototype.tabItem = function (builder) {
   return this;
 };
 
-export { TabViewStyle };
 export default TabView;

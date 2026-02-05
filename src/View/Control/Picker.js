@@ -409,5 +409,4 @@ View.prototype.tag = function (value) {
   return this;
 };
 
-export { PickerStyle };
 export default Picker;
