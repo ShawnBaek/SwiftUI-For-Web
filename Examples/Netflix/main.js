@@ -31,6 +31,21 @@ import {
   UserInterfaceSizeClass
 } from '../../src/index.js';
 
+import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../src/Core/Renderer.js';
+
+/**
+ * Helper function to render either a descriptor or a legacy View
+ */
+function renderView(view) {
+  if (view && view.$$typeof === VIEW_DESCRIPTOR) {
+    return renderDescriptor(view);
+  } else if (view && typeof view._render === 'function') {
+    return view._render();
+  }
+  return null;
+}
+
 // =============================================================================
 // Sample Data (using placeholder images)
 // =============================================================================
@@ -409,7 +424,10 @@ function MovieRow(category) {
         // Render movie cards into the grid
         category.items.slice(0, layout.gridColumns).forEach(movie => {
           const cardView = MovieCardGrid(movie);
-          el.appendChild(cardView._render());
+          const rendered = renderView(cardView);
+          if (rendered) {
+            el.appendChild(rendered);
+          }
         });
       }
     })
@@ -428,6 +446,12 @@ function ExpandedCardOverlay() {
 
   return new View().modifier({
     apply(el) {
+      // Clean up any existing expanded cards before creating a new one
+      const existingCards = document.querySelectorAll('#expanded-card');
+      if (existingCards.length > 0) {
+        existingCards.forEach(card => card.parentElement?.remove());
+      }
+
       // Create overlay container
       el.style.cssText = `
         position: fixed;
@@ -713,15 +737,26 @@ function NetflixApp() {
 const app = App(() => NetflixApp());
 app.mount('#root');
 
+// Debounced refresh to prevent multiple renders from rapid state changes
+let refreshPending = false;
+function debouncedRefresh() {
+  if (refreshPending) return;
+  refreshPending = true;
+  requestAnimationFrame(() => {
+    refreshPending = false;
+    app.refresh();
+  });
+}
+
 // Re-render on state changes
 showDetail.subscribe(() => {
-  app.refresh();
+  debouncedRefresh();
 });
 
 selectedMovie.subscribe(() => {
   // Only refresh if not showing detail (closing handled by closeCard)
   if (!showDetail.value) {
-    app.refresh();
+    debouncedRefresh();
   }
 });
 

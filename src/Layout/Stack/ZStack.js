@@ -2,178 +2,91 @@
  * ZStack - A view that overlays its children, aligning them on both axes.
  *
  * Matches SwiftUI's ZStack for layered layout composition.
- * Children are stacked from back to front (first child at bottom, last at top).
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * // Basic usage - image with text overlay
  * ZStack(
- *   Image('background.jpg').resizable(),
+ *   Image('background.jpg'),
  *   Text('Overlay Text')
  *     .foregroundColor('white')
  * )
  *
  * // With alignment
- * ZStack({ alignment: Alignment.bottomLeading },
+ * ZStack({ alignment: 'bottomLeading' },
  *   Image('photo.jpg'),
  *   Text('Caption')
  * )
  */
 
-import { View } from '../../Core/View.js';
-import { Alignment, alignmentToCSS } from '../Alignment.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../../Core/ViewDescriptor.js';
 
 /**
- * ZStack view class implementation.
- * @extends View
+ * Create a chainable descriptor with modifier methods
  */
-class ZStackView extends View {
-  /**
-   * Creates a new ZStack.
-   *
-   * @param {Object} [options] - Stack options or first child
-   * @param {string} [options.alignment='center'] - Alignment of children within the stack
-   * @param {...View} children - Child views (stacked back to front)
-   */
-  constructor(options = {}, ...children) {
-    super();
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-    // Handle case where first argument is a View (no options provided)
-    if (options instanceof View || typeof options === 'function') {
-      children = [options, ...children];
-      options = {};
-    }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
+  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
+  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
+  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
+  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
+  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
+  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-    // Handle case where options is an array (children passed as array)
-    if (Array.isArray(options)) {
-      children = options;
-      options = {};
-    }
-
-    this._alignment = options.alignment ?? Alignment.center;
-    this._children = children.flat().filter(child => child != null);
-  }
-
-  /**
-   * ZStack returns itself as the body (container view).
-   *
-   * @returns {ZStackView} Returns this
-   */
-  body() {
-    return this;
-  }
-
-  /**
-   * Get CSS properties for alignment
-   *
-   * @param {string} alignment - Alignment value
-   * @returns {Object} CSS properties for justifyContent and alignItems
-   * @private
-   */
-  _getAlignmentCSS(alignment) {
-    // Map SwiftUI alignment to CSS flexbox properties
-    const alignmentMap = {
-      // Center (default)
-      'center': { justifyContent: 'center', alignItems: 'center' },
-
-      // Edges
-      'top': { justifyContent: 'center', alignItems: 'flex-start' },
-      'bottom': { justifyContent: 'center', alignItems: 'flex-end' },
-      'leading': { justifyContent: 'flex-start', alignItems: 'center' },
-      'trailing': { justifyContent: 'flex-end', alignItems: 'center' },
-
-      // Corners
-      'topLeading': { justifyContent: 'flex-start', alignItems: 'flex-start' },
-      'topTrailing': { justifyContent: 'flex-end', alignItems: 'flex-start' },
-      'bottomLeading': { justifyContent: 'flex-start', alignItems: 'flex-end' },
-      'bottomTrailing': { justifyContent: 'flex-end', alignItems: 'flex-end' }
-    };
-
-    return alignmentMap[alignment] || alignmentMap['center'];
-  }
-
-  /**
-   * Renders the ZStack to a DOM element.
-   *
-   * @returns {HTMLDivElement} The rendered container element
-   * @protected
-   */
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'ZStack';
-
-    // Use CSS Grid for stacking - all children in same cell
-    container.style.display = 'grid';
-    container.style.gridTemplateAreas = '"stack"';
-
-    // Get alignment CSS
-    const alignCSS = this._getAlignmentCSS(this._alignment);
-    container.style.justifyItems = alignCSS.justifyContent;
-    container.style.alignItems = alignCSS.alignItems;
-
-    // Render and append children
-    this._children.forEach((child, index) => {
-      let element = null;
-
-      if (child instanceof View) {
-        element = child._render();
-      } else if (typeof child === 'function') {
-        const result = child();
-        if (result instanceof View) {
-          element = result._render();
-        }
-      }
-
-      if (element) {
-        // Place all children in the same grid cell
-        element.style.gridArea = 'stack';
-        // Later children render on top (higher z-index)
-        element.style.zIndex = String(index);
-        container.appendChild(element);
-      }
-    });
-
-    return this._applyModifiers(container);
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for creating ZStack views.
- * Provides cleaner syntax without the `new` keyword.
+ * ZStack - Layered stack layout (z-axis)
  *
- * @param {Object|View} [options] - Stack options or first child view
- * @param {string} [options.alignment] - Alignment of children ('center', 'top', 'bottom', 'leading', 'trailing', 'topLeading', 'topTrailing', 'bottomLeading', 'bottomTrailing')
- * @param {...View} children - Child views to stack (back to front)
- * @returns {ZStackView} A new ZStack instance
- *
- * @example
- * // Image with gradient overlay
- * ZStack(
- *   Image('hero.jpg')
- *     .resizable()
- *     .aspectRatio('fill'),
- *   LinearGradient(['transparent', 'black'], { direction: 'toBottom' }),
- *   VStack(
- *     Spacer(),
- *     Text('Movie Title').font(Font.largeTitle).foregroundColor('white')
- *   ).padding(20)
- * )
- *
- * // Badge on corner
- * ZStack({ alignment: 'topTrailing' },
- *   Image('product.jpg').frame({ width: 100, height: 100 }),
- *   Text('NEW')
- *     .font(Font.caption)
- *     .padding(4)
- *     .background(Color.red)
- *     .foregroundColor('white')
- *     .cornerRadius(4)
- * )
+ * @param {Object|...Object} optionsOrChildren - Options or first child
+ * @param {...Object} children - Child views
+ * @returns {Object} Chainable view descriptor
  */
-export function ZStack(options, ...children) {
-  return new ZStackView(options, ...children);
-}
+export function ZStack(optionsOrChildren, ...children) {
+  let options = {};
+  let actualChildren = children;
 
-// Export the class for those who want to extend it
-export { ZStackView };
+  // Handle different call signatures
+  if (optionsOrChildren && typeof optionsOrChildren === 'object') {
+    // Check if it's a descriptor or view (has type or $$typeof or _render)
+    const isView = optionsOrChildren.$$typeof ||
+                   optionsOrChildren.type ||
+                   optionsOrChildren._render ||
+                   Array.isArray(optionsOrChildren);
+
+    if (!isView) {
+      options = optionsOrChildren;
+    } else {
+      actualChildren = [optionsOrChildren, ...children];
+    }
+  } else if (optionsOrChildren != null) {
+    actualChildren = [optionsOrChildren, ...children];
+  }
+
+  // Flatten and filter children
+  actualChildren = actualChildren.flat().filter(c => c != null);
+
+  return chainable(createDescriptor('ZStack', {
+    alignment: options.alignment ?? 'center'
+  }, actualChildren));
+}
 
 export default ZStack;

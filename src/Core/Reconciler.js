@@ -9,6 +9,10 @@
  * - Diffing: Compare old and new view trees to find changes
  * - Patching: Apply only the necessary DOM mutations
  *
+ * Supports both:
+ * - Legacy View class instances (backward compatibility)
+ * - New immutable view descriptors (recommended)
+ *
  * SwiftUI uses similar concepts:
  * - Structural identity (position in view hierarchy)
  * - Explicit identity (via .id() modifier)
@@ -17,20 +21,27 @@
 
 import { View } from './View.js';
 import { ChangeTracker } from './ChangeTracker.js';
+import {
+  isDescriptor,
+  isLegacyView,
+  descriptorsEqual,
+  isMemoized
+} from './ViewDescriptor.js';
+import { render as renderDescriptor } from './Renderer.js';
 
 /**
  * View node in the virtual tree
  */
 class VNode {
   constructor(view, key = null) {
-    /** @type {View} The view instance */
+    /** @type {View|Object} The view instance or descriptor */
     this.view = view;
 
     /** @type {string|null} Explicit key/id */
     this.key = key;
 
     /** @type {string} View type name */
-    this.type = view?.constructor?.name || 'Unknown';
+    this.type = this._getType(view);
 
     /** @type {VNode[]} Child nodes */
     this.children = [];
@@ -40,6 +51,16 @@ class VNode {
 
     /** @type {string} Computed identity (type + position + key) */
     this.identity = '';
+
+    /** @type {boolean} Whether this node uses descriptors */
+    this.isDescriptor = isDescriptor(view);
+  }
+
+  _getType(view) {
+    if (isDescriptor(view)) {
+      return view.type;
+    }
+    return view?.constructor?.name || 'Unknown';
   }
 }
 
@@ -81,8 +102,8 @@ class ReconcilerClass {
   }
 
   /**
-   * Build a virtual node tree from a view
-   * @param {View} view - Root view
+   * Build a virtual node tree from a view or descriptor
+   * @param {View|Object} view - Root view or descriptor
    * @param {string} parentPath - Path from root
    * @param {number} index - Index among siblings
    * @returns {VNode}
@@ -90,19 +111,23 @@ class ReconcilerClass {
   buildTree(view, parentPath = '', index = 0) {
     if (!view) return null;
 
-    const key = view._explicitId || null;
+    // Get key from descriptor or view
+    const key = isDescriptor(view)
+      ? view.key
+      : (view._explicitId || null);
+
     const node = new VNode(view, key);
 
     // Compute identity
-    const pathSegment = key ? `[${key}]` : `[${index}]`;
+    const pathSegment = key != null ? `[${key}]` : `[${index}]`;
     node.identity = `${parentPath}/${node.type}${pathSegment}`;
 
-    // Assign view ID for change tracking
-    if (!view._viewId) {
+    // For legacy views, assign view ID for change tracking
+    if (!isDescriptor(view) && !view._viewId) {
       view._viewId = node.identity;
     }
 
-    // Get children if this is a container view
+    // Get children
     const children = this._getViewChildren(view);
     node.children = children.map((child, i) =>
       this.buildTree(child, node.identity, i)
@@ -112,26 +137,32 @@ class ReconcilerClass {
   }
 
   /**
-   * Extract children from a view
-   * @param {View} view
-   * @returns {View[]}
+   * Extract children from a view or descriptor
+   * @param {View|Object} view
+   * @returns {Array}
    */
   _getViewChildren(view) {
     if (!view) return [];
 
+    // Handle descriptors
+    if (isDescriptor(view)) {
+      return view.children || [];
+    }
+
+    // Handle legacy View instances
     // Check for explicit children property
     if (view.children && Array.isArray(view.children)) {
-      return view.children.filter(c => c instanceof View);
+      return view.children.filter(c => c instanceof View || isDescriptor(c));
     }
 
     // Check for _children property (VStack, HStack, ZStack, etc.)
     if (view._children && Array.isArray(view._children)) {
-      return view._children.filter(c => c instanceof View);
+      return view._children.filter(c => c instanceof View || isDescriptor(c));
     }
 
     // Check for content property (stacks, etc.)
     if (view._content && Array.isArray(view._content)) {
-      return view._content.filter(c => c instanceof View);
+      return view._content.filter(c => c instanceof View || isDescriptor(c));
     }
 
     // Try to get body and extract children
@@ -139,9 +170,9 @@ class ReconcilerClass {
       const body = view.body();
       if (body && body !== view) {
         if (Array.isArray(body)) {
-          return body.filter(c => c instanceof View);
+          return body.filter(c => c instanceof View || isDescriptor(c));
         }
-        if (body instanceof View) {
+        if (body instanceof View || isDescriptor(body)) {
           return [body];
         }
       }
@@ -153,8 +184,20 @@ class ReconcilerClass {
   }
 
   /**
+   * Render a view or descriptor to DOM
+   * @param {View|Object} view
+   * @returns {HTMLElement}
+   */
+  _renderView(view) {
+    if (isDescriptor(view)) {
+      return renderDescriptor(view);
+    }
+    return view._render();
+  }
+
+  /**
    * Mount a view tree to a DOM element
-   * @param {View} view - Root view
+   * @param {View|Object} view - Root view or descriptor
    * @param {HTMLElement} container - Target container
    * @returns {VNode} The mounted tree
    */
@@ -163,7 +206,7 @@ class ReconcilerClass {
     const tree = this.buildTree(view);
 
     // Render to DOM
-    tree.element = view._render();
+    tree.element = this._renderView(view);
     container.innerHTML = '';
     container.appendChild(tree.element);
 
@@ -209,7 +252,7 @@ class ReconcilerClass {
 
   /**
    * Update a mounted view tree
-   * @param {View} newView - New root view
+   * @param {View|Object} newView - New root view or descriptor
    * @param {HTMLElement} container - Target container
    * @returns {VNode} The updated tree
    */
@@ -230,15 +273,6 @@ class ReconcilerClass {
     if (this._debug) {
       console.log('[Reconciler] Patches:', patches);
       console.log('[Reconciler] Patches count:', patches.length);
-      patches.forEach((p, i) => {
-        console.log(`[Reconciler] Patch ${i}: type=${p.type}, path=${p.path}`);
-        if (p.newNode) {
-          console.log(`[Reconciler] Patch ${i}: newNode.type=${p.newNode.type}, content=${p.newNode.view?._content}`);
-        }
-        if (p.oldNode) {
-          console.log(`[Reconciler] Patch ${i}: oldNode.type=${p.oldNode.type}, content=${p.oldNode.view?._content}, element=${p.oldNode.element?.tagName}`);
-        }
-      });
     }
 
     // Apply patches
@@ -251,7 +285,7 @@ class ReconcilerClass {
   }
 
   /**
-   * Diff two virtual trees
+   * Diff two virtual trees with keyed child optimization
    * @param {VNode} oldNode
    * @param {VNode} newNode
    * @param {string} path
@@ -285,8 +319,19 @@ class ReconcilerClass {
       return patches;
     }
 
-    // Different type or key - replace
-    if (oldNode.type !== newNode.type || oldNode.key !== newNode.key) {
+    // Different type - replace
+    if (oldNode.type !== newNode.type) {
+      patches.push({
+        type: 'REPLACE',
+        path,
+        oldNode,
+        newNode
+      });
+      return patches;
+    }
+
+    // Different key - replace (identity changed)
+    if (oldNode.key !== newNode.key) {
       patches.push({
         type: 'REPLACE',
         path,
@@ -294,16 +339,16 @@ class ReconcilerClass {
         newNode
       });
 
-      // Track identity change
-      if (newNode.view && newNode.view._viewId) {
+      // Track identity change for legacy views
+      if (!newNode.isDescriptor && newNode.view?._viewId) {
         ChangeTracker.recordIdentityChange(newNode.view._viewId);
       }
 
       return patches;
     }
 
-    // Same type - check if view content changed
-    if (this._viewChanged(oldNode.view, newNode.view)) {
+    // Same type and key - check if content changed
+    if (this._viewChanged(oldNode, newNode)) {
       patches.push({
         type: 'UPDATE',
         path,
@@ -311,8 +356,8 @@ class ReconcilerClass {
         newNode
       });
 
-      // Track self change
-      if (newNode.view && newNode.view._viewId) {
+      // Track self change for legacy views
+      if (!newNode.isDescriptor && newNode.view?._viewId) {
         ChangeTracker.recordSelfChange(newNode.view._viewId);
       }
     }
@@ -320,15 +365,83 @@ class ReconcilerClass {
     // Carry over the DOM element reference
     newNode.element = oldNode.element;
 
-    // Diff children
-    const maxChildren = Math.max(oldNode.children.length, newNode.children.length);
-    for (let i = 0; i < maxChildren; i++) {
-      const childPatches = this._diff(
-        oldNode.children[i],
-        newNode.children[i],
-        `${path}/${i}`
-      );
+    // Diff children with keyed optimization
+    const childPatches = this._diffChildren(oldNode.children, newNode.children, path);
+    patches.push(...childPatches);
+
+    return patches;
+  }
+
+  /**
+   * Diff children with keyed optimization
+   * Uses a two-pass algorithm for O(n) complexity with keys
+   * @param {VNode[]} oldChildren
+   * @param {VNode[]} newChildren
+   * @param {string} parentPath
+   * @returns {Array} Child patches
+   */
+  _diffChildren(oldChildren, newChildren, parentPath) {
+    const patches = [];
+
+    // Build map of keyed old children for O(1) lookup
+    const oldKeyedChildren = new Map();
+    const oldUnkeyedChildren = [];
+
+    for (let i = 0; i < oldChildren.length; i++) {
+      const child = oldChildren[i];
+      if (child.key != null) {
+        oldKeyedChildren.set(child.key, { node: child, index: i });
+      } else {
+        oldUnkeyedChildren.push({ node: child, index: i });
+      }
+    }
+
+    // Track which old children have been matched
+    const matchedOldIndices = new Set();
+    let unkeyedIndex = 0;
+
+    // First pass: match new children to old children
+    for (let i = 0; i < newChildren.length; i++) {
+      const newChild = newChildren[i];
+      const path = `${parentPath}/${i}`;
+
+      let oldChild = null;
+
+      if (newChild.key != null) {
+        // Keyed child - look up by key
+        const oldKeyed = oldKeyedChildren.get(newChild.key);
+        if (oldKeyed) {
+          oldChild = oldKeyed.node;
+          matchedOldIndices.add(oldKeyed.index);
+        }
+      } else {
+        // Unkeyed child - match by position among unkeyed
+        while (unkeyedIndex < oldUnkeyedChildren.length) {
+          const candidate = oldUnkeyedChildren[unkeyedIndex];
+          if (!matchedOldIndices.has(candidate.index)) {
+            oldChild = candidate.node;
+            matchedOldIndices.add(candidate.index);
+            unkeyedIndex++;
+            break;
+          }
+          unkeyedIndex++;
+        }
+      }
+
+      // Diff this child pair
+      const childPatches = this._diff(oldChild, newChild, path);
       patches.push(...childPatches);
+    }
+
+    // Second pass: remove unmatched old children
+    for (let i = 0; i < oldChildren.length; i++) {
+      if (!matchedOldIndices.has(i)) {
+        patches.push({
+          type: 'REMOVE',
+          path: `${parentPath}/${i}`,
+          node: oldChildren[i]
+        });
+      }
     }
 
     return patches;
@@ -336,13 +449,26 @@ class ReconcilerClass {
 
   /**
    * Check if a view's content has changed
-   * @param {View} oldView
-   * @param {View} newView
+   * @param {VNode} oldNode
+   * @param {VNode} newNode
    * @returns {boolean}
    */
-  _viewChanged(oldView, newView) {
+  _viewChanged(oldNode, newNode) {
+    const oldView = oldNode.view;
+    const newView = newNode.view;
+
     if (!oldView || !newView) return true;
 
+    // For descriptors, use fast equality check
+    if (isDescriptor(oldView) && isDescriptor(newView)) {
+      // Memoized descriptors are considered unchanged
+      if (isMemoized(newView)) {
+        return false;
+      }
+      return !descriptorsEqual(oldView, newView);
+    }
+
+    // For legacy views, check properties
     // Check text content for Text views
     if (oldView._content !== undefined && newView._content !== undefined) {
       return oldView._content !== newView._content;
@@ -382,7 +508,7 @@ class ReconcilerClass {
 
     // If root needs full replace or too many patches, do full re-render
     const rootReplace = replacePatches.some(p => p.path === '');
-    const tooManyPatches = patches.length > 10;
+    const tooManyPatches = patches.length > 20; // Increased threshold
 
     if (rootReplace || tooManyPatches) {
       if (this._debug) {
@@ -390,10 +516,13 @@ class ReconcilerClass {
       }
 
       // Full re-render
-      const element = newTree.view._render();
+      const element = this._renderView(newTree.view);
       container.innerHTML = '';
       container.appendChild(element);
       newTree.element = element;
+
+      // Re-link elements
+      this._linkElements(newTree, element);
       return;
     }
 
@@ -427,13 +556,16 @@ class ReconcilerClass {
 
     if (oldNode.element && newNode.view) {
       // Re-render just this node
-      const newElement = newNode.view._render();
+      const newElement = this._renderView(newNode.view);
 
       if (oldNode.element.parentNode) {
         oldNode.element.parentNode.replaceChild(newElement, oldNode.element);
       }
 
       newNode.element = newElement;
+
+      // Re-link child elements
+      this._linkElements(newNode, newElement);
 
       if (this._debug) {
         console.log(`[Reconciler] Updated: ${newNode.type}`);
@@ -466,7 +598,7 @@ class ReconcilerClass {
     const { node } = patch;
 
     if (node.view) {
-      const element = node.view._render();
+      const element = this._renderView(node.view);
       node.element = element;
 
       // Find parent and insert position
@@ -487,13 +619,16 @@ class ReconcilerClass {
     const { oldNode, newNode } = patch;
 
     if (oldNode.element && newNode.view) {
-      const newElement = newNode.view._render();
+      const newElement = this._renderView(newNode.view);
 
       if (oldNode.element.parentNode) {
         oldNode.element.parentNode.replaceChild(newElement, oldNode.element);
       }
 
       newNode.element = newElement;
+
+      // Re-link child elements
+      this._linkElements(newNode, newElement);
 
       if (this._debug) {
         console.log(`[Reconciler] Replaced: ${oldNode.type} -> ${newNode.type}`);
@@ -513,6 +648,7 @@ class ReconcilerClass {
     const indent = '  '.repeat(depth);
     let str = `${indent}${node.type}`;
     if (node.key) str += ` [key=${node.key}]`;
+    if (node.isDescriptor) str += ' (descriptor)';
     str += '\n';
 
     for (const child of node.children) {

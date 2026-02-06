@@ -2,6 +2,7 @@
  * Spacer - A flexible space that expands along the major axis of its parent.
  *
  * Matches SwiftUI's Spacer for flexible layout spacing.
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * // Push content to edges
@@ -22,65 +23,38 @@
  * Spacer({ minLength: 20 })
  */
 
-import { View } from '../Core/View.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../Core/ViewDescriptor.js';
 
 /**
- * Spacer view class implementation.
- * @extends View
+ * Create a chainable descriptor with modifier methods
  */
-class SpacerView extends View {
-  /**
-   * Creates a new Spacer.
-   *
-   * @param {Object} [options] - Spacer options
-   * @param {number} [options.minLength] - Minimum length in pixels
-   */
-  constructor(options = {}) {
-    super();
-    this._minLength = options.minLength ?? null;
-  }
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-  /**
-   * Spacer returns itself as the body (leaf view).
-   *
-   * @returns {SpacerView} Returns this
-   */
-  body() {
-    return this;
-  }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-  /**
-   * Renders the Spacer to a DOM element.
-   *
-   * @returns {HTMLDivElement} The rendered spacer element
-   * @protected
-   */
-  _render() {
-    const spacer = document.createElement('div');
-    spacer.dataset.view = 'Spacer';
-
-    // Flex grow to take available space
-    spacer.style.flexGrow = '1';
-    spacer.style.flexShrink = '1';
-    spacer.style.flexBasis = '0';
-
-    // Apply minimum length if specified
-    if (this._minLength !== null) {
-      spacer.style.minWidth = `${this._minLength}px`;
-      spacer.style.minHeight = `${this._minLength}px`;
-    }
-
-    return this._applyModifiers(spacer);
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for creating Spacer views.
- * Provides cleaner syntax without the `new` keyword.
+ * Spacer - Flexible space
  *
  * @param {Object} [options] - Spacer options
  * @param {number} [options.minLength] - Minimum length in pixels
- * @returns {SpacerView} A new Spacer instance
+ * @returns {Object} Chainable view descriptor
  *
  * @example
  * // Default spacer
@@ -89,11 +63,10 @@ class SpacerView extends View {
  * // With minimum length
  * Spacer({ minLength: 16 })
  */
-export function Spacer(options) {
-  return new SpacerView(options);
+export function Spacer(options = {}) {
+  return chainable(createDescriptor('Spacer', {
+    minLength: options.minLength ?? null
+  }));
 }
-
-// Export the class for those who want to extend it
-export { SpacerView };
 
 export default Spacer;

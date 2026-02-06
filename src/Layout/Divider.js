@@ -2,6 +2,7 @@
  * Divider - A visual separator between views
  *
  * Matches SwiftUI's Divider view that creates a horizontal or vertical line.
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * VStack(
@@ -11,63 +12,42 @@
  * )
  */
 
-import { View } from '../Core/View.js';
-import { Color } from '../Graphic/Color.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../Core/ViewDescriptor.js';
 
 /**
- * Divider view class
+ * Create a chainable descriptor with modifier methods
  */
-export class DividerView extends View {
-  constructor() {
-    super();
-    this._orientation = 'horizontal';
-    this._color = null;
-    this._thickness = 1;
-  }
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-  /**
-   * Set the orientation (for use inside HStack/VStack)
-   * In VStack, divider is horizontal. In HStack, divider is vertical.
-   * @private
-   */
-  _setOrientation(orientation) {
-    this._orientation = orientation;
-    return this;
-  }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-  _render() {
-    const el = document.createElement('hr');
-    el.dataset.view = 'divider';
-
-    // Reset default hr styles
-    el.style.margin = '0';
-    el.style.padding = '0';
-    el.style.border = 'none';
-
-    if (this._orientation === 'horizontal') {
-      el.style.width = '100%';
-      el.style.height = `${this._thickness}px`;
-      el.style.backgroundColor = this._color
-        ? (typeof this._color.rgba === 'function' ? this._color.rgba() : this._color)
-        : 'rgba(60, 60, 67, 0.3)'; // SwiftUI default separator color
-    } else {
-      el.style.width = `${this._thickness}px`;
-      el.style.height = '100%';
-      el.style.minHeight = '1px';
-      el.style.backgroundColor = this._color
-        ? (typeof this._color.rgba === 'function' ? this._color.rgba() : this._color)
-        : 'rgba(60, 60, 67, 0.3)';
-    }
-
-    return this._applyModifiers(el);
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for Divider
+ * Divider - Visual separator
+ *
+ * @returns {Object} Chainable view descriptor
+ *
+ * @example
+ * Divider()
  */
 export function Divider() {
-  return new DividerView();
+  return chainable(createDescriptor('Divider', {}));
 }
 
 export default Divider;

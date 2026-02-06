@@ -16,6 +16,20 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
+import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
+
+/**
+ * Helper to render both View instances and descriptors
+ */
+function renderChild(child) {
+  if (child instanceof View) {
+    return child._render();
+  } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
+    return renderDescriptor(child);
+  }
+  return null;
+}
 
 /**
  * List style enum
@@ -138,15 +152,16 @@ export class ListView extends View {
     if (this._data && this._rowBuilder) {
       // Data-driven list
       for (const item of this._data) {
-        const row = this._createListRow(this._rowBuilder(item), item);
+        const rowContent = this._rowBuilder(item);
+        const row = this._createListRow(rowContent, item);
         el.appendChild(row);
       }
     } else {
       // Children-based list
       for (const child of this._children) {
-        if (child instanceof View) {
-          const renderedChild = child._render();
-          const row = this._createListRow(renderedChild, null);
+        const rendered = renderChild(child);
+        if (rendered) {
+          const row = this._createListRow(rendered, null);
           el.appendChild(row);
         }
       }
@@ -197,8 +212,11 @@ export class ListView extends View {
     // Append content
     if (content instanceof HTMLElement) {
       row.appendChild(content);
-    } else if (content instanceof View) {
-      row.appendChild(content._render());
+    } else {
+      const rendered = renderChild(content);
+      if (rendered) {
+        row.appendChild(rendered);
+      }
     }
 
     return row;

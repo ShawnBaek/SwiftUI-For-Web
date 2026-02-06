@@ -18,6 +18,20 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
+import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
+
+/**
+ * Helper to render both View instances and descriptors
+ */
+function renderChild(child) {
+  if (child instanceof View) {
+    return child._render();
+  } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
+    return renderDescriptor(child);
+  }
+  return null;
+}
 
 /**
  * Form style enum
@@ -86,8 +100,8 @@ export class SectionView extends View {
         headerContainer.appendChild(textSpan);
       }
 
-      if (headerView instanceof View) {
-        const rendered = headerView._render();
+      const rendered = renderChild(headerView);
+      if (rendered) {
         // Inherit text styles
         rendered.style.fontSize = 'inherit';
         rendered.style.color = 'inherit';
@@ -107,7 +121,8 @@ export class SectionView extends View {
     content.style.overflow = 'hidden';
 
     this._children.forEach((child, index) => {
-      if (child instanceof View) {
+      const rendered = renderChild(child);
+      if (rendered) {
         const row = document.createElement('div');
         row.style.padding = '11px 16px';
 
@@ -116,7 +131,7 @@ export class SectionView extends View {
           row.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
         }
 
-        row.appendChild(child._render());
+        row.appendChild(rendered);
         content.appendChild(row);
       }
     });
@@ -132,11 +147,11 @@ export class SectionView extends View {
       footerContainer.style.color = 'rgba(60, 60, 67, 0.6)';
 
       const footerView = this._footer();
-      if (footerView instanceof View) {
-        const rendered = footerView._render();
-        rendered.style.fontSize = 'inherit';
-        rendered.style.color = 'inherit';
-        footerContainer.appendChild(rendered);
+      const footerRendered = renderChild(footerView);
+      if (footerRendered) {
+        footerRendered.style.fontSize = 'inherit';
+        footerRendered.style.color = 'inherit';
+        footerContainer.appendChild(footerRendered);
       }
 
       section.appendChild(footerContainer);
@@ -185,8 +200,9 @@ export class FormView extends View {
 
     // Render children
     for (const child of this._children) {
-      if (child instanceof View) {
-        form.appendChild(child._render());
+      const rendered = renderChild(child);
+      if (rendered) {
+        form.appendChild(rendered);
       }
     }
 

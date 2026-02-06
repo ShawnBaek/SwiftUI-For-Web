@@ -25,6 +25,20 @@
 
 import { View } from '../Core/View.js';
 import { Alignment } from './Alignment.js';
+import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../Core/Renderer.js';
+
+/**
+ * Helper to render both View instances and descriptors
+ */
+function renderChild(child) {
+  if (child instanceof View) {
+    return child._render();
+  } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
+    return renderDescriptor(child);
+  }
+  return null;
+}
 
 /**
  * GridItem size type
@@ -124,8 +138,9 @@ export class GridRowView extends View {
     row.style.display = 'contents'; // Let CSS Grid handle layout
 
     this._children.forEach(child => {
-      if (child instanceof View) {
-        row.appendChild(child._render());
+      const rendered = renderChild(child);
+      if (rendered) {
+        row.appendChild(rendered);
       }
     });
 
@@ -182,8 +197,9 @@ export class GridView extends View {
 
     // Render children
     this._children.forEach(child => {
-      if (child instanceof View) {
-        container.appendChild(child._render());
+      const rendered = renderChild(child);
+      if (rendered) {
+        container.appendChild(rendered);
       }
     });
 
@@ -242,9 +258,8 @@ export class LazyVGridView extends View {
 
     // Render children
     this._children.forEach(child => {
-      if (child instanceof View) {
-        const rendered = child._render();
-
+      const rendered = renderChild(child);
+      if (rendered) {
         // If it's a ForEach, it returns multiple items
         if (rendered instanceof DocumentFragment || rendered.dataset?.view === 'for-each') {
           const items = rendered.querySelectorAll ?
@@ -305,8 +320,9 @@ export class LazyHGridView extends View {
 
     // Render children
     this._children.forEach(child => {
-      if (child instanceof View) {
-        container.appendChild(child._render());
+      const rendered = renderChild(child);
+      if (rendered) {
+        container.appendChild(rendered);
       }
     });
 

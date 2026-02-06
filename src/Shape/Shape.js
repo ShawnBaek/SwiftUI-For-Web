@@ -42,15 +42,21 @@ export class ShapeView extends View {
   /**
    * Stroke the shape outline
    * @param {Object|string} color - Stroke color
-   * @param {Object} [options] - Stroke options
+   * @param {Object|number} [options] - Stroke options or line width
    * @param {number} [options.lineWidth=1] - Line width
    * @param {string} [options.style='solid'] - Line style (solid, dashed, dotted)
    * @returns {ShapeView} Returns this for chaining
    */
   stroke(color, options = {}) {
     this._strokeColor = color;
-    this._strokeWidth = options.lineWidth ?? 1;
-    this._strokeStyle = options.style ?? 'solid';
+    // Allow passing lineWidth directly as a number
+    if (typeof options === 'number') {
+      this._strokeWidth = options;
+      this._strokeStyle = 'solid';
+    } else {
+      this._strokeWidth = options.lineWidth ?? 1;
+      this._strokeStyle = options.style ?? 'solid';
+    }
     return this;
   }
 
@@ -71,7 +77,17 @@ export class ShapeView extends View {
    */
   _applyShapeStyles(element) {
     if (this._fillColor) {
-      element.style.backgroundColor = this._getColorValue(this._fillColor);
+      // Check if it's a gradient (has css() method returning gradient syntax)
+      if (typeof this._fillColor.css === 'function') {
+        const cssValue = this._fillColor.css();
+        if (cssValue && cssValue.includes('gradient')) {
+          element.style.backgroundImage = cssValue;
+        } else {
+          element.style.backgroundColor = cssValue;
+        }
+      } else {
+        element.style.backgroundColor = this._getColorValue(this._fillColor);
+      }
     }
 
     if (this._strokeColor && this._strokeWidth > 0) {
@@ -220,12 +236,30 @@ export function Ellipse() {
 export class CapsuleView extends ShapeView {
   constructor() {
     super();
+    this._frameHeight = null;
+  }
+
+  /**
+   * Override frame to calculate proper border-radius for capsule shape
+   */
+  frame(options = {}) {
+    if (options.height !== undefined) {
+      this._frameHeight = options.height;
+    }
+    return super.frame(options);
   }
 
   _render() {
     const el = document.createElement('div');
     el.dataset.shape = 'capsule';
-    el.style.borderRadius = '9999px'; // Very large value creates pill shape
+
+    // If frame height is known, use half of it for proper capsule
+    // Otherwise use a large value that gets clamped by the browser
+    if (this._frameHeight !== null) {
+      el.style.borderRadius = `${this._frameHeight / 2}px`;
+    } else {
+      el.style.borderRadius = '9999px';
+    }
 
     this._applyShapeStyles(el);
     return this._applyModifiers(el);

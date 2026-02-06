@@ -32,6 +32,7 @@
 import { View } from '../Core/View.js';
 import { Reconciler } from '../Core/Reconciler.js';
 import { ChangeTracker } from '../Core/ChangeTracker.js';
+import { isDescriptor } from '../Core/ViewDescriptor.js';
 
 /**
  * App class implementation for mounting views to the DOM.
@@ -134,7 +135,7 @@ class AppInstance {
   /**
    * Creates the view from the content.
    *
-   * @returns {View|null} The created view instance
+   * @returns {View|Object|null} The created view instance or descriptor
    * @private
    */
   _createView() {
@@ -148,13 +149,18 @@ class AppInstance {
       }
       // Otherwise it's a factory function
       const result = content();
-      if (result instanceof View) {
+
+      // Accept both View instances and descriptors
+      if (result instanceof View || isDescriptor(result)) {
         return result;
       }
+
+      // Return result anyway - Reconciler will handle it
+      return result;
     }
 
-    // If it's already a View instance
-    if (content instanceof View) {
+    // If it's already a View instance or descriptor
+    if (content instanceof View || isDescriptor(content)) {
       return content;
     }
 

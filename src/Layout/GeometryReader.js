@@ -17,6 +17,8 @@
  */
 
 import { View } from '../Core/View.js';
+import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../Core/Renderer.js';
 
 /**
  * GeometryProxy - Provides size and coordinate space information
@@ -142,6 +144,8 @@ export class GeometryReaderView extends View {
         const content = this._builder(this._geometry);
         if (content instanceof View) {
           container.appendChild(content._render());
+        } else if (content && content.$$typeof === VIEW_DESCRIPTOR) {
+          container.appendChild(renderDescriptor(content));
         }
       }
     };

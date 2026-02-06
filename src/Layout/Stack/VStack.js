@@ -2,6 +2,7 @@
  * VStack - A view that arranges its children in a vertical line.
  *
  * Matches SwiftUI's VStack for vertical layout composition.
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * // Basic usage
@@ -12,121 +13,93 @@
  * )
  *
  * // With options
- * VStack({ alignment: Alignment.leading, spacing: 10 },
+ * VStack({ alignment: 'leading', spacing: 10 },
  *   Text('Left aligned'),
  *   Text('Also left aligned')
  * )
- *
- * // With array of children
- * VStack({ spacing: 8 }, ...items.map(item => Text(item.name)))
  */
 
-import { View } from '../../Core/View.js';
-import { Alignment, alignmentToCSS } from '../Alignment.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../../Core/ViewDescriptor.js';
 
 /**
- * VStack view class implementation.
- * @extends View
+ * Create a chainable descriptor with modifier methods
  */
-class VStackView extends View {
-  /**
-   * Creates a new VStack.
-   *
-   * @param {Object} [options] - Stack options or first child
-   * @param {string} [options.alignment='center'] - Horizontal alignment of children
-   * @param {number} [options.spacing=8] - Spacing between children in pixels
-   * @param {...View} children - Child views
-   */
-  constructor(options = {}, ...children) {
-    super();
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-    // Handle case where first argument is a View (no options provided)
-    if (options instanceof View || typeof options === 'function') {
-      children = [options, ...children];
-      options = {};
-    }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
+  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
+  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
+  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
+  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
+  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
+  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-    // Handle case where options is an array (children passed as array)
-    if (Array.isArray(options)) {
-      children = options;
-      options = {};
-    }
+  // TabView support - store tabItem builder function
+  chain.tabItem = (builder) => {
+    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tabItem: builder }, descriptor.children, descriptor.key, descriptor.modifiers);
+    return chainable(newDesc);
+  };
 
-    this._alignment = options.alignment ?? Alignment.center;
-    this._spacing = options.spacing ?? 8;
-    this._children = children.flat().filter(child => child != null);
-  }
+  // TabView support - store tag for identification
+  chain.tag = (value) => {
+    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tag: value }, descriptor.children, descriptor.key, descriptor.modifiers);
+    return chainable(newDesc);
+  };
 
-  /**
-   * VStack returns itself as the body (container view).
-   *
-   * @returns {VStackView} Returns this
-   */
-  body() {
-    return this;
-  }
-
-  /**
-   * Renders the VStack to a DOM element.
-   *
-   * @returns {HTMLDivElement} The rendered container element
-   * @protected
-   */
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'VStack';
-
-    // Apply flexbox styles for vertical layout
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = alignmentToCSS(this._alignment, 'horizontal');
-    container.style.gap = `${this._spacing}px`;
-
-    // Render and append children
-    for (const child of this._children) {
-      if (child instanceof View) {
-        container.appendChild(child._render());
-      } else if (typeof child === 'function') {
-        // Support for lazy/dynamic children
-        const result = child();
-        if (result instanceof View) {
-          container.appendChild(result._render());
-        }
-      }
-    }
-
-    return this._applyModifiers(container);
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for creating VStack views.
- * Provides cleaner syntax without the `new` keyword.
+ * VStack - Vertical stack layout
  *
- * @param {Object|View} [options] - Stack options or first child view
- * @param {string} [options.alignment] - Horizontal alignment ('leading', 'center', 'trailing')
- * @param {number} [options.spacing] - Spacing between children in pixels
- * @param {...View} children - Child views to arrange vertically
- * @returns {VStackView} A new VStack instance
- *
- * @example
- * // Without options
- * VStack(
- *   Text('Hello'),
- *   Text('World')
- * )
- *
- * // With options
- * VStack({ alignment: 'leading', spacing: 16 },
- *   Text('Title').font(Font.title),
- *   Text('Subtitle').foregroundColor(Color.gray)
- * )
+ * @param {Object|...Object} optionsOrChildren - Options or first child
+ * @param {...Object} children - Child views
+ * @returns {Object} Chainable view descriptor
  */
-export function VStack(options, ...children) {
-  return new VStackView(options, ...children);
-}
+export function VStack(optionsOrChildren, ...children) {
+  let options = {};
+  let actualChildren = children;
 
-// Export the class for those who want to extend it
-export { VStackView };
+  // Handle different call signatures
+  if (optionsOrChildren && typeof optionsOrChildren === 'object') {
+    // Check if it's a descriptor or view (has type or $$typeof or _render)
+    const isView = optionsOrChildren.$$typeof ||
+                   optionsOrChildren.type ||
+                   optionsOrChildren._render ||
+                   Array.isArray(optionsOrChildren);
+
+    if (!isView) {
+      options = optionsOrChildren;
+    } else {
+      actualChildren = [optionsOrChildren, ...children];
+    }
+  } else if (optionsOrChildren != null) {
+    actualChildren = [optionsOrChildren, ...children];
+  }
+
+  // Flatten and filter children
+  actualChildren = actualChildren.flat().filter(c => c != null);
+
+  return chainable(createDescriptor('VStack', {
+    alignment: options.alignment ?? 'center',
+    spacing: options.spacing ?? 8
+  }, actualChildren));
+}
 
 export default VStack;

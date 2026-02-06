@@ -2,117 +2,37 @@
  * ForEach - SwiftUI ForEach equivalent
  *
  * Iterates over a collection and creates views for each element.
- * Matches SwiftUI's ForEach API.
+ * Uses immutable view descriptors for efficient rendering.
  *
- * Usage:
- *   ForEach(items, item => Text(item.name))
- *   ForEach(items, { id: 'id' }, item => Text(item.name))
- *   ForEach(0..<5, i => Text(`Item ${i}`))
+ * @example
+ * ForEach(items, item => Text(item.name))
+ * ForEach(items, { id: 'id' }, item => Text(item.name))
  */
 
-import { View } from '../../Core/View.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../../Core/ViewDescriptor.js';
 
 /**
- * ForEachView class - renders a collection of views
+ * Create a chainable descriptor with modifier methods
  */
-export class ForEachView extends View {
-  /**
-   * Create a ForEach view
-   * @param {Array|Object} data - Array of items or range object
-   * @param {Object|Function} optionsOrContent - Options object or content function
-   * @param {Function} [contentFn] - Content function if options provided
-   */
-  constructor(data, optionsOrContent, contentFn) {
-    super();
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-    // Parse arguments
-    if (typeof optionsOrContent === 'function') {
-      // ForEach(data, item => View)
-      this._data = data;
-      this._content = optionsOrContent;
-      this._id = null;
-    } else if (typeof optionsOrContent === 'object' && !Array.isArray(optionsOrContent)) {
-      // ForEach(data, { id: 'key' }, item => View)
-      this._data = data;
-      this._id = optionsOrContent.id || null;
-      this._content = contentFn;
-    } else {
-      throw new Error('ForEach requires a content function');
-    }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-    // Handle range syntax (0..<5 style via Range object)
-    if (this._data && typeof this._data === 'object' && 'start' in this._data && 'end' in this._data) {
-      this._data = Array.from(
-        { length: this._data.end - this._data.start },
-        (_, i) => this._data.start + i
-      );
-    }
-
-    // Ensure data is an array
-    if (!Array.isArray(this._data)) {
-      this._data = [];
-    }
-  }
-
-  /**
-   * Get the identity key for an item
-   * @param {*} item - The item
-   * @param {number} index - The index
-   * @returns {string} The identity key
-   */
-  _getKey(item, index) {
-    if (this._id) {
-      // Use specified id property
-      if (typeof this._id === 'function') {
-        return String(this._id(item));
-      }
-      return String(item[this._id]);
-    }
-    // Fall back to index
-    return String(index);
-  }
-
-  /**
-   * Get the child views
-   * @returns {Array<View>} Array of child views
-   */
-  get children() {
-    return this._data.map((item, index) => {
-      const view = this._content(item, index);
-      // Store identity on view for reconciliation
-      if (view) {
-        view._forEachKey = this._getKey(item, index);
-      }
-      return view;
-    }).filter(v => v != null);
-  }
-
-  /**
-   * Render to DOM
-   * @returns {HTMLElement}
-   */
-  _render() {
-    // ForEach is a "transparent" container - it returns a fragment
-    const fragment = document.createDocumentFragment();
-
-    for (const child of this.children) {
-      if (child instanceof View) {
-        const element = child._render();
-        if (child._forEachKey) {
-          element.dataset.forEachKey = child._forEachKey;
-        }
-        fragment.appendChild(element);
-      }
-    }
-
-    // Wrap in a container div for modifier support
-    const container = document.createElement('div');
-    container.dataset.view = 'ForEach';
-    container.style.display = 'contents'; // Makes container "invisible" in layout
-    container.appendChild(fragment);
-
-    return this._applyModifiers(container);
-  }
+  return Object.freeze(chain);
 }
 
 /**
@@ -135,14 +55,68 @@ export class Range {
 }
 
 /**
- * Factory function for ForEach
+ * ForEach - Iterate over a collection
+ *
  * @param {Array|Range} data - Array of items or Range
- * @param {Object|Function} optionsOrContent - Options or content function
+ * @param {Object|Function} optionsOrContent - Options object or content function
  * @param {Function} [contentFn] - Content function if options provided
- * @returns {ForEachView}
+ * @returns {Object} Chainable view descriptor
+ *
+ * @example
+ * ForEach(items, { id: 'id' }, item => Text(item.name))
+ * ForEach(['a', 'b', 'c'], (item, index) => Text(item).id(index))
  */
 export function ForEach(data, optionsOrContent, contentFn) {
-  return new ForEachView(data, optionsOrContent, contentFn);
+  let idKey = null;
+  let builderFn = contentFn;
+
+  // Parse arguments
+  if (typeof optionsOrContent === 'function') {
+    builderFn = optionsOrContent;
+  } else if (optionsOrContent && typeof optionsOrContent === 'object' && !Array.isArray(optionsOrContent)) {
+    idKey = optionsOrContent.id || null;
+  }
+
+  if (!builderFn) {
+    throw new Error('ForEach requires a content function');
+  }
+
+  // Handle range syntax
+  let actualData = data;
+  if (data && typeof data === 'object' && 'start' in data && 'end' in data) {
+    actualData = Array.from(
+      { length: data.end - data.start },
+      (_, i) => data.start + i
+    );
+  }
+
+  // Ensure data is an array
+  if (!Array.isArray(actualData)) {
+    actualData = [];
+  }
+
+  // Build children with keys
+  const children = actualData.map((item, index) => {
+    const child = builderFn(item, index);
+    if (child == null) return null;
+
+    // Set key based on idKey or index
+    let key;
+    if (idKey) {
+      if (typeof idKey === 'function') {
+        key = idKey(item);
+      } else {
+        key = item[idKey];
+      }
+    } else {
+      key = index;
+    }
+
+    // Use the id method if available, otherwise use setKey
+    return child.id ? child.id(key) : setKey(child, key);
+  }).filter(c => c != null);
+
+  return chainable(createDescriptor('ForEach', { idKey }, children));
 }
 
 export default ForEach;

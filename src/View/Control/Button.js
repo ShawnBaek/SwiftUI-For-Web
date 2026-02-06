@@ -2,18 +2,11 @@
  * Button - A control that initiates an action.
  *
  * Matches SwiftUI's Button for triggering actions on tap/click.
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * // Basic usage with string label
  * Button('Click Me', () => console.log('Clicked!'))
- *
- * // With custom label view
- * Button(() => handleTap(),
- *   HStack(
- *     Image('icon.png'),
- *     Text('Custom Label')
- *   )
- * )
  *
  * // With modifiers
  * Button('Submit', onSubmit)
@@ -23,205 +16,104 @@
  *   .cornerRadius(8)
  */
 
-import { View } from '../../Core/View.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../../Core/ViewDescriptor.js';
 
 /**
- * Button view class implementation.
- * @extends View
+ * Create a chainable descriptor with Button-specific modifier methods
  */
-class ButtonView extends View {
-  /**
-   * Creates a new Button.
-   *
-   * Supports multiple call signatures:
-   * - Button(label, action) - String label with action
-   * - Button(action, label) - SwiftUI-style with action first, then label view
-   *
-   * @param {string|Function|View} labelOrAction - Button label string, action function, or label view
-   * @param {Function|View} [actionOrLabel] - Action function or label view
-   */
-  constructor(labelOrAction, actionOrLabel) {
-    super();
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-    // Parse arguments to support multiple signatures
-    if (typeof labelOrAction === 'string') {
-      // Button('Label', action)
-      this._label = labelOrAction;
-      this._labelView = null;
-      this._action = actionOrLabel || (() => {});
-    } else if (typeof labelOrAction === 'function' && !(labelOrAction instanceof View)) {
-      // Button(action, labelView) - SwiftUI style
-      this._action = labelOrAction;
-      if (actionOrLabel instanceof View) {
-        this._label = null;
-        this._labelView = actionOrLabel;
-      } else if (typeof actionOrLabel === 'string') {
-        this._label = actionOrLabel;
-        this._labelView = null;
-      } else {
-        this._label = 'Button';
-        this._labelView = null;
-      }
-    } else if (labelOrAction instanceof View) {
-      // Button(labelView, action)
-      this._labelView = labelOrAction;
-      this._label = null;
-      this._action = actionOrLabel || (() => {});
-    } else {
-      // Default
-      this._label = 'Button';
-      this._labelView = null;
-      this._action = () => {};
-    }
+  // Standard modifiers
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
+  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
+  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
+  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
+  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
+  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
+  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-    this._isDisabled = false;
-    this._buttonStyle = 'default';
-  }
+  // Button-specific modifiers
+  chain.disabled = (isDisabled = true) => {
+    const newProps = { ...descriptor.props, isDisabled };
+    return chainable(createDescriptor('Button', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
+  };
 
-  /**
-   * Button returns itself as the body (leaf view).
-   *
-   * @returns {ButtonView} Returns this
-   */
-  body() {
-    return this;
-  }
+  chain.buttonStyle = (style) => {
+    const newProps = { ...descriptor.props, buttonStyle: style };
+    return chainable(createDescriptor('Button', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
+  };
 
-  /**
-   * Disables the button.
-   *
-   * @param {boolean} [disabled=true] - Whether the button is disabled
-   * @returns {ButtonView} Returns this for chaining
-   */
-  disabled(disabled = true) {
-    this._isDisabled = disabled;
-    return this;
-  }
-
-  /**
-   * Sets the button style.
-   *
-   * @param {string} style - Button style ('default', 'bordered', 'borderedProminent', 'borderless', 'plain')
-   * @returns {ButtonView} Returns this for chaining
-   */
-  buttonStyle(style) {
-    this._buttonStyle = style;
-    return this;
-  }
-
-  /**
-   * Renders the Button to a DOM element.
-   *
-   * @returns {HTMLButtonElement} The rendered button element
-   * @protected
-   */
-  _render() {
-    const button = document.createElement('button');
-    button.dataset.view = 'Button';
-
-    // Set button content
-    if (this._labelView) {
-      button.appendChild(this._labelView._render());
-    } else {
-      button.textContent = this._label;
-    }
-
-    // Apply disabled state
-    if (this._isDisabled) {
-      button.disabled = true;
-      button.style.opacity = '0.5';
-      button.style.cursor = 'not-allowed';
-    } else {
-      button.style.cursor = 'pointer';
-    }
-
-    // Apply button style
-    this._applyButtonStyle(button);
-
-    // Add click handler
-    button.addEventListener('click', (event) => {
-      if (!this._isDisabled) {
-        event.preventDefault();
-        this._action();
-      }
-    });
-
-    return this._applyModifiers(button);
-  }
-
-  /**
-   * Applies the button style to the element.
-   *
-   * @param {HTMLButtonElement} button - The button element
-   * @private
-   */
-  _applyButtonStyle(button) {
-    // Reset default button styles
-    button.style.border = 'none';
-    button.style.background = 'none';
-    button.style.fontFamily = 'inherit';
-    button.style.fontSize = 'inherit';
-    button.style.padding = '0';
-    button.style.margin = '0';
-
-    switch (this._buttonStyle) {
-      case 'bordered':
-        button.style.padding = '8px 16px';
-        button.style.border = '1px solid currentColor';
-        button.style.borderRadius = '8px';
-        button.style.background = 'transparent';
-        break;
-
-      case 'borderedProminent':
-        button.style.padding = '8px 16px';
-        button.style.borderRadius = '8px';
-        button.style.background = 'rgba(0, 122, 255, 1)';
-        button.style.color = 'white';
-        break;
-
-      case 'borderless':
-        button.style.padding = '8px 16px';
-        button.style.background = 'transparent';
-        break;
-
-      case 'plain':
-        // No additional styling
-        break;
-
-      case 'default':
-      default:
-        // Default iOS-style button appearance
-        button.style.color = 'rgba(0, 122, 255, 1)';
-        break;
-    }
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for creating Button views.
- * Provides cleaner syntax without the `new` keyword.
+ * Button - Clickable control
  *
- * @param {string|Function|View} labelOrAction - Button label, action, or label view
- * @param {Function|View} [actionOrLabel] - Action function or label view
- * @returns {ButtonView} A new Button instance
+ * Supports multiple call signatures:
+ * - Button(label, action) - String label with action
+ * - Button(action, label) - SwiftUI-style with action first
+ *
+ * @param {string|Function|Object} labelOrAction - Button label string, action function, or label view
+ * @param {Function|Object} [actionOrLabel] - Action function or label view
+ * @returns {Object} Chainable view descriptor
  *
  * @example
- * // String label with action
  * Button('Tap Me', () => console.log('Tapped'))
- *
- * // SwiftUI style: action first, then label
- * Button(() => doSomething(), Text('Do It').bold())
- *
- * // With modifiers
  * Button('Submit', onSubmit)
  *   .buttonStyle('borderedProminent')
  *   .disabled(isLoading)
  */
 export function Button(labelOrAction, actionOrLabel) {
-  return new ButtonView(labelOrAction, actionOrLabel);
-}
+  let label = null;
+  let action = () => {};
+  let children = [];
 
-// Export the class for those who want to extend it
-export { ButtonView };
+  // Parse arguments to support multiple signatures
+  if (typeof labelOrAction === 'string') {
+    // Button('Label', action)
+    label = labelOrAction;
+    action = actionOrLabel || (() => {});
+  } else if (typeof labelOrAction === 'function' && !labelOrAction.type) {
+    // Button(action, labelView) - SwiftUI style
+    action = labelOrAction;
+    if (actionOrLabel && typeof actionOrLabel === 'object' && actionOrLabel.type) {
+      children = [actionOrLabel];
+    } else if (typeof actionOrLabel === 'string') {
+      label = actionOrLabel;
+    } else {
+      label = 'Button';
+    }
+  } else if (labelOrAction && typeof labelOrAction === 'object' && labelOrAction.type) {
+    // Button(labelView, action)
+    children = [labelOrAction];
+    action = actionOrLabel || (() => {});
+  } else {
+    // Default
+    label = 'Button';
+  }
+
+  return chainable(createDescriptor('Button', {
+    label,
+    action,
+    isDisabled: false,
+    buttonStyle: 'default'
+  }, children));
+}
 
 export default Button;

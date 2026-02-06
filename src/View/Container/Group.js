@@ -14,6 +14,8 @@
  */
 
 import { View } from '../../Core/View.js';
+import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
 
 /**
  * Group view class
@@ -33,6 +35,8 @@ export class GroupView extends View {
     for (const child of this._children) {
       if (child instanceof View) {
         el.appendChild(child._render());
+      } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
+        el.appendChild(renderDescriptor(child));
       }
     }
 

@@ -114,9 +114,21 @@ class LinearGradientView extends View {
       const dy = this._endPoint.y - this._startPoint.y;
       const angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
       direction = `${angle}deg`;
+    } else if (GradientDirection[direction]) {
+      // Convert enum key (e.g., 'toRight') to CSS value ('to right')
+      direction = GradientDirection[direction];
     }
 
     return `linear-gradient(${direction}, ${stops})`;
+  }
+
+  /**
+   * Get CSS gradient string (for use with Shape.fill())
+   *
+   * @returns {string} CSS linear-gradient value
+   */
+  css() {
+    return this._buildGradientCSS();
   }
 
   /**
@@ -182,6 +194,15 @@ class RadialGradientView extends View {
   }
 
   /**
+   * Get CSS gradient string (for use with Shape.fill())
+   *
+   * @returns {string} CSS radial-gradient value
+   */
+  css() {
+    return this._buildGradientCSS();
+  }
+
+  /**
    * Renders the gradient to a DOM element
    *
    * @returns {HTMLDivElement} The rendered element
@@ -240,6 +261,15 @@ class AngularGradientView extends View {
     const centerY = this._center.y * 100;
 
     return `conic-gradient(from ${this._startAngle}deg at ${centerX}% ${centerY}%, ${stops})`;
+  }
+
+  /**
+   * Get CSS gradient string (for use with Shape.fill())
+   *
+   * @returns {string} CSS conic-gradient value
+   */
+  css() {
+    return this._buildGradientCSS();
   }
 
   _render() {

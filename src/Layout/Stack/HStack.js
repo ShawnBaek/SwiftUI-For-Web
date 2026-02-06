@@ -2,6 +2,7 @@
  * HStack - A view that arranges its children in a horizontal line.
  *
  * Matches SwiftUI's HStack for horizontal layout composition.
+ * Uses immutable view descriptors for efficient rendering.
  *
  * @example
  * // Basic usage
@@ -12,128 +13,93 @@
  * )
  *
  * // With options
- * HStack({ alignment: Alignment.top, spacing: 20 },
+ * HStack({ alignment: 'top', spacing: 20 },
  *   Image('icon.png'),
  *   Text('Label')
  * )
- *
- * // With Spacer for flexible layouts
- * HStack(
- *   Text('Left'),
- *   Spacer(),
- *   Text('Right')
- * )
  */
 
-import { View } from '../../Core/View.js';
-import { Alignment, alignmentToCSS } from '../Alignment.js';
+import {
+  createDescriptor,
+  addModifier,
+  setKey,
+  createModifier,
+  ModifierType
+} from '../../Core/ViewDescriptor.js';
 
 /**
- * HStack view class implementation.
- * @extends View
+ * Create a chainable descriptor with modifier methods
  */
-class HStackView extends View {
-  /**
-   * Creates a new HStack.
-   *
-   * @param {Object} [options] - Stack options or first child
-   * @param {string} [options.alignment='center'] - Vertical alignment of children
-   * @param {number} [options.spacing=8] - Spacing between children in pixels
-   * @param {...View} children - Child views
-   */
-  constructor(options = {}, ...children) {
-    super();
+function chainable(descriptor) {
+  const chain = Object.create(null);
+  Object.assign(chain, descriptor);
 
-    // Handle case where first argument is a View (no options provided)
-    if (options instanceof View || typeof options === 'function') {
-      children = [options, ...children];
-      options = {};
-    }
+  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
+  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
+  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
+  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
+  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
+  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
+  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
+  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
+  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
+  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
+  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
+  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
 
-    // Handle case where options is an array (children passed as array)
-    if (Array.isArray(options)) {
-      children = options;
-      options = {};
-    }
+  // TabView support - store tabItem builder function
+  chain.tabItem = (builder) => {
+    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tabItem: builder }, descriptor.children, descriptor.key, descriptor.modifiers);
+    return chainable(newDesc);
+  };
 
-    this._alignment = options.alignment ?? Alignment.center;
-    this._spacing = options.spacing ?? 8;
-    this._children = children.flat().filter(child => child != null);
-  }
+  // TabView support - store tag for identification
+  chain.tag = (value) => {
+    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tag: value }, descriptor.children, descriptor.key, descriptor.modifiers);
+    return chainable(newDesc);
+  };
 
-  /**
-   * HStack returns itself as the body (container view).
-   *
-   * @returns {HStackView} Returns this
-   */
-  body() {
-    return this;
-  }
-
-  /**
-   * Renders the HStack to a DOM element.
-   *
-   * @returns {HTMLDivElement} The rendered container element
-   * @protected
-   */
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'HStack';
-
-    // Apply flexbox styles for horizontal layout
-    container.style.display = 'flex';
-    container.style.flexDirection = 'row';
-    container.style.alignItems = alignmentToCSS(this._alignment, 'vertical');
-    container.style.gap = `${this._spacing}px`;
-
-    // Render and append children
-    for (const child of this._children) {
-      if (child instanceof View) {
-        container.appendChild(child._render());
-      } else if (typeof child === 'function') {
-        // Support for lazy/dynamic children
-        const result = child();
-        if (result instanceof View) {
-          container.appendChild(result._render());
-        }
-      }
-    }
-
-    return this._applyModifiers(container);
-  }
+  return Object.freeze(chain);
 }
 
 /**
- * Factory function for creating HStack views.
- * Provides cleaner syntax without the `new` keyword.
+ * HStack - Horizontal stack layout
  *
- * @param {Object|View} [options] - Stack options or first child view
- * @param {string} [options.alignment] - Vertical alignment ('top', 'center', 'bottom', 'firstTextBaseline')
- * @param {number} [options.spacing] - Spacing between children in pixels
- * @param {...View} children - Child views to arrange horizontally
- * @returns {HStackView} A new HStack instance
- *
- * @example
- * // Without options
- * HStack(
- *   Icon('star'),
- *   Text('Favorite')
- * )
- *
- * // With options
- * HStack({ alignment: 'top', spacing: 12 },
- *   Avatar(user),
- *   VStack(
- *     Text(user.name).bold(),
- *     Text(user.email).foregroundColor(Color.gray)
- *   )
- * )
+ * @param {Object|...Object} optionsOrChildren - Options or first child
+ * @param {...Object} children - Child views
+ * @returns {Object} Chainable view descriptor
  */
-export function HStack(options, ...children) {
-  return new HStackView(options, ...children);
-}
+export function HStack(optionsOrChildren, ...children) {
+  let options = {};
+  let actualChildren = children;
 
-// Export the class for those who want to extend it
-export { HStackView };
+  // Handle different call signatures
+  if (optionsOrChildren && typeof optionsOrChildren === 'object') {
+    // Check if it's a descriptor or view (has type or $$typeof or _render)
+    const isView = optionsOrChildren.$$typeof ||
+                   optionsOrChildren.type ||
+                   optionsOrChildren._render ||
+                   Array.isArray(optionsOrChildren);
+
+    if (!isView) {
+      options = optionsOrChildren;
+    } else {
+      actualChildren = [optionsOrChildren, ...children];
+    }
+  } else if (optionsOrChildren != null) {
+    actualChildren = [optionsOrChildren, ...children];
+  }
+
+  // Flatten and filter children
+  actualChildren = actualChildren.flat().filter(c => c != null);
+
+  return chainable(createDescriptor('HStack', {
+    alignment: options.alignment ?? 'center',
+    spacing: options.spacing ?? 8
+  }, actualChildren));
+}
 
 export default HStack;

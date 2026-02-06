@@ -21,6 +21,45 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
+import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
+
+/**
+ * Helper to check if something is a descriptor
+ */
+function isDescriptor(obj) {
+  return obj && obj.$$typeof === VIEW_DESCRIPTOR;
+}
+
+/**
+ * Helper to get tabItem from view or descriptor
+ */
+function getTabItem(tab) {
+  if (isDescriptor(tab)) {
+    return tab.props._tabItem;
+  }
+  return tab._tabItem;
+}
+
+/**
+ * Helper to get tag from view or descriptor
+ */
+function getTag(tab, index) {
+  if (isDescriptor(tab)) {
+    return tab.props._tag ?? index;
+  }
+  return tab._tag ?? index;
+}
+
+/**
+ * Helper to render a view or descriptor
+ */
+function renderTab(tab) {
+  if (isDescriptor(tab)) {
+    return renderDescriptor(tab);
+  }
+  return tab._render();
+}
 
 /**
  * TabView style enum
@@ -136,7 +175,7 @@ export class TabViewView extends View {
 
     // Render tabs
     this._tabs.forEach((tab, index) => {
-      const tag = tab._tag ?? index;
+      const tag = getTag(tab, index);
       const isSelected = tag === currentSelection;
 
       // Tab button
@@ -153,10 +192,16 @@ export class TabViewView extends View {
       tabButton.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
 
       // Render tab item content
-      if (tab._tabItem) {
-        const tabItemView = tab._tabItem();
+      const tabItemBuilder = getTabItem(tab);
+      if (tabItemBuilder) {
+        const tabItemView = tabItemBuilder();
         if (tabItemView instanceof View) {
           const rendered = tabItemView._render();
+          rendered.style.color = 'inherit';
+          rendered.style.fontSize = '10px';
+          tabButton.appendChild(rendered);
+        } else if (isDescriptor(tabItemView)) {
+          const rendered = renderDescriptor(tabItemView);
           rendered.style.color = 'inherit';
           rendered.style.fontSize = '10px';
           tabButton.appendChild(rendered);
@@ -177,7 +222,7 @@ export class TabViewView extends View {
 
       // Show content for selected tab
       if (isSelected) {
-        const rendered = tab._render();
+        const rendered = renderTab(tab);
         rendered.style.height = '100%';
         contentArea.appendChild(rendered);
       }
@@ -196,9 +241,9 @@ export class TabViewView extends View {
   _updateTabView(container, contentArea, tabBar, newSelection) {
     // Update content
     contentArea.innerHTML = '';
-    const selectedTab = this._tabs.find((tab, index) => (tab._tag ?? index) === newSelection);
+    const selectedTab = this._tabs.find((tab, index) => getTag(tab, index) === newSelection);
     if (selectedTab) {
-      const rendered = selectedTab._render();
+      const rendered = renderTab(selectedTab);
       rendered.style.height = '100%';
       contentArea.appendChild(rendered);
     }

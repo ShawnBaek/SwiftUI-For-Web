@@ -21,6 +21,8 @@
  */
 
 import { View } from '../../Core/View.js';
+import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
 
 /**
  * Axis enum for scroll direction
@@ -199,10 +201,15 @@ class ScrollViewView extends View {
 
       if (child instanceof View) {
         element = child._render();
+      } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
+        // Handle descriptor-based views
+        element = renderDescriptor(child);
       } else if (typeof child === 'function') {
         const result = child();
         if (result instanceof View) {
           element = result._render();
+        } else if (result && result.$$typeof === VIEW_DESCRIPTOR) {
+          element = renderDescriptor(result);
         }
       }
 

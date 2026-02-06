@@ -57,12 +57,12 @@ import {
 // =============================================================================
 // View Components
 // =============================================================================
-import { Text, TextView } from './View/Text.js';
+import { Text } from './View/Text.js';
 import { Image, ImageView, ContentMode } from './View/Image.js';
 import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
 
 // Controls
-import { Button, ButtonView } from './View/Control/Button.js';
+import { Button } from './View/Control/Button.js';
 import { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
 import { Toggle, ToggleView } from './View/Control/Toggle.js';
 import { Slider, SliderView } from './View/Control/Slider.js';
@@ -74,7 +74,7 @@ import { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
 
 // Lists
 import { List, ListView, ListStyle } from './View/List/List.js';
-import { ForEach, ForEachView, Range } from './View/List/ForEach.js';
+import { ForEach, Range } from './View/List/ForEach.js';
 
 // Containers
 import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
@@ -96,11 +96,11 @@ import {
 // =============================================================================
 // Layout
 // =============================================================================
-import { VStack, VStackView } from './Layout/Stack/VStack.js';
-import { HStack, HStackView } from './Layout/Stack/HStack.js';
-import { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
-import { Spacer, SpacerView } from './Layout/Spacer.js';
-import { Divider, DividerView } from './Layout/Divider.js';
+import { VStack } from './Layout/Stack/VStack.js';
+import { HStack } from './Layout/Stack/HStack.js';
+import { ZStack } from './Layout/Stack/ZStack.js';
+import { Spacer } from './Layout/Spacer.js';
+import { Divider } from './Layout/Divider.js';
 import { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
 import { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
 import {
@@ -241,12 +241,12 @@ const SwiftUI = {
   UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom,
 
   // Views
-  Text, TextView,
+  Text,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
 
   // Controls
-  Button, ButtonView,
+  Button,
   TextField, TextFieldView,
   SecureField, SecureFieldView,
   Toggle, ToggleView,
@@ -259,7 +259,7 @@ const SwiftUI = {
 
   // Lists
   List, ListView, ListStyle,
-  ForEach, ForEachView, Range,
+  ForEach, Range,
 
   // Containers
   ScrollView, ScrollViewView, Axis,
@@ -275,11 +275,11 @@ const SwiftUI = {
   TabView, TabViewView, TabViewStyle,
 
   // Layout
-  VStack, VStackView,
-  HStack, HStackView,
-  ZStack, ZStackView,
-  Spacer, SpacerView,
-  Divider, DividerView,
+  VStack,
+  HStack,
+  ZStack,
+  Spacer,
+  Divider,
   GeometryReader, GeometryReaderView, GeometryProxy,
   Alignment, HorizontalAlignment, VerticalAlignment,
   Grid, GridView,
@@ -374,12 +374,12 @@ export {
   extendViewWithEnvironment,
 
   // Views
-  Text, TextView,
+  Text,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
 
   // Controls
-  Button, ButtonView,
+  Button,
   TextField, TextFieldView,
   SecureField, SecureFieldView,
   Toggle, ToggleView,
@@ -392,7 +392,7 @@ export {
 
   // Lists
   List, ListView, ListStyle,
-  ForEach, ForEachView, Range,
+  ForEach, Range,
 
   // Containers
   ScrollView, ScrollViewView, Axis,
@@ -409,11 +409,11 @@ export {
   TabView, TabViewView, TabViewStyle,
 
   // Layout
-  VStack, VStackView,
-  HStack, HStackView,
-  ZStack, ZStackView,
-  Spacer, SpacerView,
-  Divider, DividerView,
+  VStack,
+  HStack,
+  ZStack,
+  Spacer,
+  Divider,
   GeometryReader, GeometryReaderView, GeometryProxy,
   Alignment, HorizontalAlignment, VerticalAlignment,
   Grid, GridView,
