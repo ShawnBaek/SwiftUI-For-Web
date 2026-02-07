@@ -146,10 +146,10 @@ python3 -m http.server 8000
 
 ## Installation
 
-### Option 1: npm
+### Option 1: npm (from GitHub)
 
 ```bash
-npm install swiftui-for-web
+npm install ShawnBaek/SwiftUI-For-Web
 ```
 
 ```javascript
@@ -159,6 +159,8 @@ const { App, VStack, Text, Button, State } = SwiftUI;
 
 ### Option 2: Direct Download (no npm needed)
 
+No build step required. Just copy the `src/` folder into your project.
+
 ```bash
 git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
 cp -r SwiftUI-For-Web/src ./your-project/
@@ -166,19 +168,7 @@ cp -r SwiftUI-For-Web/src ./your-project/
 
 ```javascript
 import SwiftUI from './src/index.js';
-```
-
-### Modular Imports
-
-```javascript
-// Full package (SwiftUI + Charts) — ~100KB gzipped
-import SwiftUI from 'swiftui-for-web';
-
-// Core only (no Charts) — ~88KB gzipped
-import SwiftUI from 'swiftui-for-web/core';
-
-// Charts only (requires core)
-import { Chart, BarMark, LineMark, value } from 'swiftui-for-web/charts';
+const { App, VStack, Text, Button, State } = SwiftUI;
 ```
 
 ---
