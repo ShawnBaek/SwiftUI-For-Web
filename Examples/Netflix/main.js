@@ -23,7 +23,6 @@ import {
   Color,
   Font,
   LinearGradient,
-  State,
   View,
   // Environment for adaptive layout
   Environment,
@@ -125,9 +124,8 @@ const categories = [
 // State
 // =============================================================================
 
-const selectedMovie = new State(null);
-
 // Overlay is managed outside the view tree to avoid scroll reset on app.refresh()
+let selectedMovie = null;   // Currently selected movie (plain variable, not State)
 let currentOverlay = null;  // Reference to the overlay DOM element
 let currentCardRect = null; // Stored rect of the clicked card for close animation
 
@@ -438,7 +436,7 @@ function openCard(movie, rect) {
   // Prevent opening multiple overlays
   if (currentOverlay) return;
 
-  selectedMovie.value = movie;
+  selectedMovie = movie;
   currentCardRect = rect;
 
   const layout = getLayoutInfo();
@@ -652,7 +650,7 @@ function closeCard() {
   // Prevent double-close
   currentOverlay = null;
   currentCardRect = null;
-  selectedMovie.value = null;
+  selectedMovie = null;
 
   if (card && rect) {
     // Animate close back to original card position
