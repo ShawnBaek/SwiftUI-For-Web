@@ -5,7 +5,7 @@
 SwiftUI-For-Web is a declarative UI framework that implements the **full SwiftUI API surface** and **Swift Charts API** using pure JavaScript. If you know SwiftUI, you already know this framework. Same component names, same modifiers, same patterns.
 
 [![Version](https://img.shields.io/badge/version-1.1.0--beta-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
-[![License](https://img.shields.io/badge/license-ISC-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Components](https://img.shields.io/badge/components-84-orange.svg)](CLAUDE.md)
 [![Stage](https://img.shields.io/badge/stage-beta-yellow.svg)](#status)
 
@@ -379,7 +379,7 @@ Contributions welcome! See [CLAUDE.md](CLAUDE.md) for development guidelines.
 
 ## License
 
-ISC License
+MIT License
 
 ---
 
