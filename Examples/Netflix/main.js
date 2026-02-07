@@ -741,15 +741,15 @@ function NetflixApp() {
 const app = App(() => NetflixApp());
 app.mount('#root');
 
-// Debounced refresh to prevent multiple renders from rapid state changes
-let refreshPending = false;
-function debouncedRefresh() {
-  if (refreshPending) return;
-  refreshPending = true;
-  requestAnimationFrame(() => {
-    refreshPending = false;
-    app.refresh();
-  });
+// Scroll-preserving refresh: save scrollTop before refresh, restore after
+function refreshPreservingScroll() {
+  const scrollEl = document.querySelector('[data-swiftui-mounted="true"] [style*="overflow"]');
+  const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+  app.refresh();
+  if (scrollTop > 0) {
+    const newScrollEl = document.querySelector('[data-swiftui-mounted="true"] [style*="overflow"]');
+    if (newScrollEl) newScrollEl.scrollTop = scrollTop;
+  }
 }
 
 // Re-render on window resize (debounced)
@@ -757,13 +757,13 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(() => {
-    app.refresh();
+    refreshPreservingScroll();
   }, 150);
 });
 
 // Also subscribe to Environment changes
 Environment.subscribe(EnvironmentValues.horizontalSizeClass, () => {
-  app.refresh();
+  refreshPreservingScroll();
 });
 
 // Handle escape key to close
