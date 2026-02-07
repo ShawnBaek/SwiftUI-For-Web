@@ -143,6 +143,7 @@ npm run serve
 #   http://localhost:8000/Examples/Counter/
 #   http://localhost:8000/Examples/TodoApp/
 #   http://localhost:8000/Examples/Netflix/
+#   http://localhost:8000/Examples/SwiftGraph/
 #   http://localhost:8000/Examples/HelloWorld/
 ```
 
