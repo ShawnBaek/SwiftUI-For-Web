@@ -16,7 +16,7 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { VIEW_DESCRIPTOR, isDescriptor } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
 
 /**
@@ -69,13 +69,13 @@ export class ListView extends View {
         this._idKeyPath = args[1].id ?? 'id';
         this._rowBuilder = args[2];
       }
-    } else if (typeof args[0] === 'object' && !Array.isArray(args[0]) && !(args[0] instanceof View)) {
-      // List({ selection: binding }, children...)
+    } else if (typeof args[0] === 'object' && !Array.isArray(args[0]) && !(args[0] instanceof View) && !isDescriptor(args[0])) {
+      // List({ selection: binding }, children...) - but NOT view descriptors
       const options = args[0];
       this._selection = options.selection ?? null;
       this._children = args.slice(1).flat();
     } else {
-      // List(children...)
+      // List(children...) - includes View instances and view descriptors
       this._children = args.flat();
     }
   }
