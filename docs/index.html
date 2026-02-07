@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SwiftUI for Web - Developer Guide</title>
+  <title>SwiftUI for Web - Tutorials</title>
   <style>
     :root {
       --bg-primary: #0a0a0a;
@@ -15,6 +15,7 @@
       --accent-green: #34C759;
       --accent-red: #FF3B30;
       --accent-orange: #FF9500;
+      --accent-purple: #AF52DE;
       --border: #333;
     }
 
@@ -57,13 +58,19 @@
       font-size: 24px;
       font-weight: 700;
       color: var(--accent);
+      text-decoration: none;
+    }
+
+    nav {
+      display: flex;
+      gap: 24px;
     }
 
     nav a {
       color: var(--text-secondary);
       text-decoration: none;
-      margin-left: 24px;
       transition: color 0.2s;
+      font-size: 15px;
     }
 
     nav a:hover {
@@ -72,13 +79,13 @@
 
     /* Hero */
     .hero {
-      padding: 80px 0;
+      padding: 80px 0 60px;
       text-align: center;
       background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
     }
 
     .hero h1 {
-      font-size: 56px;
+      font-size: 52px;
       font-weight: 700;
       margin-bottom: 16px;
       background: linear-gradient(135deg, #007AFF, #5856D6, #AF52DE);
@@ -90,27 +97,128 @@
     .hero p {
       font-size: 20px;
       color: var(--text-secondary);
-      max-width: 600px;
+      max-width: 640px;
       margin: 0 auto 32px;
     }
 
-    .hero-buttons {
+    .badges {
       display: flex;
       gap: 16px;
       justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .badge strong {
+      color: var(--text-primary);
+    }
+
+    /* Examples Grid */
+    .examples-section {
+      padding: 60px 0;
+    }
+
+    .examples-section h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 40px;
+    }
+
+    .examples-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .examples-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .examples-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero h1 {
+        font-size: 36px;
+      }
+      .hero p {
+        font-size: 17px;
+      }
+      nav {
+        gap: 16px;
+      }
+    }
+
+    .example-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .example-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+    }
+
+    .example-card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      object-position: top;
+      display: block;
+    }
+
+    .card-content {
+      padding: 20px;
+    }
+
+    .card-content h3 {
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+
+    .card-content p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+
+    .card-buttons {
+      display: flex;
+      gap: 10px;
     }
 
     .btn {
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-size: 16px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
       font-weight: 600;
       text-decoration: none;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: transform 0.2s, opacity 0.2s;
+      display: inline-block;
     }
 
     .btn:hover {
-      transform: translateY(-2px);
+      opacity: 0.9;
     }
 
     .btn-primary {
@@ -124,81 +232,79 @@
       border: 1px solid var(--border);
     }
 
-    /* Features */
-    .features {
+    /* Detail Sections */
+    .detail-section {
       padding: 80px 0;
+      border-top: 1px solid var(--border);
     }
 
-    .features h2 {
-      text-align: center;
-      font-size: 36px;
-      margin-bottom: 48px;
-    }
-
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px;
-    }
-
-    .feature-card {
+    .detail-section:nth-child(even) {
       background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      transition: transform 0.2s, border-color 0.2s;
     }
 
-    .feature-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--accent);
+    .detail-header {
+      margin-bottom: 32px;
     }
 
-    .feature-icon {
+    .detail-header h2 {
       font-size: 32px;
-      margin-bottom: 16px;
-    }
-
-    .feature-card h3 {
-      font-size: 20px;
       margin-bottom: 8px;
     }
 
-    .feature-card p {
+    .detail-header p {
       color: var(--text-secondary);
+      font-size: 17px;
+      max-width: 700px;
     }
 
-    /* Code Examples */
-    .examples {
-      padding: 80px 0;
-      background: var(--bg-secondary);
-    }
-
-    .examples h2 {
-      text-align: center;
-      font-size: 36px;
-      margin-bottom: 16px;
-    }
-
-    .examples > p {
-      text-align: center;
-      color: var(--text-secondary);
-      margin-bottom: 48px;
-    }
-
-    .comparison {
+    .detail-content {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-bottom: 48px;
+      gap: 32px;
+      align-items: start;
     }
 
-    @media (max-width: 768px) {
-      .comparison {
+    @media (max-width: 800px) {
+      .detail-content {
         grid-template-columns: 1fr;
       }
     }
 
+    .detail-screenshot {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .detail-screenshot img {
+      width: 100%;
+      display: block;
+    }
+
+    .detail-info h3 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .detail-info ul {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+
+    .detail-info li {
+      padding: 4px 0;
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+
+    .detail-info li::before {
+      content: "\2713  ";
+      color: var(--accent-green);
+      font-weight: bold;
+    }
+
+    /* Code */
     .code-panel {
       background: var(--bg-code);
       border: 1px solid var(--border);
@@ -210,33 +316,22 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 16px;
+      padding: 10px 16px;
       background: rgba(255,255,255,0.05);
       border-bottom: 1px solid var(--border);
+      font-size: 13px;
     }
 
     .code-header span {
       font-weight: 600;
-    }
-
-    .code-header .badge {
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 6px;
-      background: var(--accent);
-      color: white;
-    }
-
-    .code-header .badge.react {
-      background: #61DAFB;
-      color: black;
+      color: var(--text-secondary);
     }
 
     pre {
-      padding: 20px;
+      padding: 16px;
       overflow-x: auto;
       font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.5;
     }
 
@@ -251,48 +346,10 @@
     .number { color: #D0BF69; }
     .property { color: #4FB0CC; }
 
-    /* Components Table */
-    .components {
-      padding: 80px 0;
-    }
-
-    .components h2 {
-      text-align: center;
-      font-size: 36px;
-      margin-bottom: 48px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--bg-secondary);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
-    th, td {
-      padding: 16px;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-    }
-
-    th {
-      background: var(--bg-code);
-      font-weight: 600;
-    }
-
-    .status-done {
-      color: var(--accent-green);
-    }
-
-    .status-planned {
-      color: var(--text-secondary);
-    }
-
     /* Quick Start */
     .quickstart {
       padding: 80px 0;
-      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
     }
 
     .quickstart h2 {
@@ -306,17 +363,21 @@
       align-items: flex-start;
       gap: 24px;
       margin-bottom: 32px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .step-number {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       background: var(--accent);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
+      font-size: 15px;
       flex-shrink: 0;
     }
 
@@ -330,7 +391,7 @@
 
     .step-content p {
       color: var(--text-secondary);
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     /* Footer */
@@ -342,276 +403,422 @@
 
     footer p {
       color: var(--text-secondary);
+      margin-bottom: 8px;
     }
 
     footer a {
       color: var(--accent);
       text-decoration: none;
     }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="container header-content">
-      <div class="logo">SwiftUI for Web</div>
+      <a href="#" class="logo">SwiftUI for Web</a>
       <nav>
-        <a href="#features">Features</a>
         <a href="#examples">Examples</a>
-        <a href="#components">Components</a>
         <a href="#quickstart">Quick Start</a>
         <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" target="_blank">GitHub</a>
       </nav>
     </div>
   </header>
 
+  <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <h1>SwiftUI for Web</h1>
-      <p>Build beautiful, declarative UIs for the web using the same patterns you love from SwiftUI. Zero dependencies. Pure JavaScript.</p>
-      <div class="hero-buttons">
-        <a href="#quickstart" class="btn btn-primary">Get Started</a>
-        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" class="btn btn-secondary" target="_blank">View on GitHub</a>
+      <h1>SwiftUI for Web Tutorials</h1>
+      <p>Learn to build declarative UIs for the web using the same patterns you love from SwiftUI. Zero dependencies, pure JavaScript.</p>
+      <div class="badges">
+        <div class="badge"><strong>84</strong> Components</div>
+        <div class="badge"><strong>0</strong> Dependencies</div>
+        <div class="badge"><strong>~52 KB</strong> Framework</div>
+        <div class="badge"><strong>6</strong> Example Apps</div>
       </div>
     </div>
   </section>
 
-  <section class="features" id="features">
+  <!-- Examples Grid -->
+  <section class="examples-section" id="examples">
     <div class="container">
-      <h2>Why SwiftUI for Web?</h2>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <div class="feature-icon">📦</div>
-          <h3>Zero Dependencies</h3>
-          <p>No npm packages, no build tools, no bundlers. Just vanilla JavaScript, CSS, and HTML.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎯</div>
-          <h3>Declarative UI</h3>
-          <p>Describe what your UI should look like, not how to build it. Just like SwiftUI.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🍎</div>
-          <h3>SwiftUI Familiar</h3>
-          <p>If you know SwiftUI, you already know this framework. Same components, same patterns.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Lightweight & Fast</h3>
-          <p>No virtual DOM overhead. Direct DOM manipulation for maximum performance.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🏗️</div>
-          <h3>MVVM Architecture</h3>
-          <p>Clean separation of concerns with ObservableObject and reactive state management.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎨</div>
-          <h3>View Transition API</h3>
-          <p>Smooth, native animations using the modern CSS View Transition API.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="examples" id="examples">
-    <div class="container">
-      <h2>SwiftUI for Web vs React</h2>
-      <p>See how the same Counter app looks in both frameworks</p>
-
-      <div class="comparison">
-        <div class="code-panel">
-          <div class="code-header">
-            <span>SwiftUI for Web</span>
-            <span class="badge">0 dependencies</span>
+      <h2>Example Apps</h2>
+      <div class="examples-grid">
+        <a class="example-card" href="#example-helloworld">
+          <img src="images/helloworld.png" alt="Hello World example" loading="lazy">
+          <div class="card-content">
+            <h3>Hello World</h3>
+            <p>Text, VStack, Font and Color basics</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/HelloWorld/', '_blank')">View Demo</span>
+            </div>
           </div>
-          <pre><code><span class="keyword">import</span> { App, VStack, HStack, Text, Button, State, Color, Font } <span class="keyword">from</span> <span class="string">'./src/index.js'</span>;
+        </a>
 
-<span class="comment">// State</span>
+        <a class="example-card" href="#example-counter">
+          <img src="images/counter.png" alt="Counter example" loading="lazy">
+          <div class="card-content">
+            <h3>Counter</h3>
+            <p>State management and reactive updates</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/Counter/', '_blank')">View Demo</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="example-card" href="#example-todoapp">
+          <img src="images/todoapp.png" alt="Todo App example" loading="lazy">
+          <div class="card-content">
+            <h3>Todo App</h3>
+            <p>MVVM with ObservableObject and ForEach</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/TodoApp/', '_blank')">View Demo</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="example-card" href="#example-netflix">
+          <img src="images/netflix.png" alt="Netflix clone example" loading="lazy">
+          <div class="card-content">
+            <h3>Netflix Clone</h3>
+            <p>Hero banners, card animations, responsive grid</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/Netflix/', '_blank')">View Demo</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="example-card" href="#example-airbnb">
+          <img src="images/airbnb.png" alt="Airbnb clone example" loading="lazy">
+          <div class="card-content">
+            <h3>StayFinder (Airbnb)</h3>
+            <p>NavigationSplitView and adaptive layout</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/Airbnb/', '_blank')">View Demo</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="example-card" href="#example-charts">
+          <img src="images/charts.png" alt="Charts example" loading="lazy">
+          <div class="card-content">
+            <h3>Swift Charts</h3>
+            <p>BarMark, LineMark, SectorMark data viz</p>
+            <div class="card-buttons">
+              <span class="btn btn-primary" onclick="event.preventDefault(); window.open('../Examples/Charts/', '_blank')">View Demo</span>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detail: Hello World -->
+  <section class="detail-section" id="example-helloworld">
+    <div class="container">
+      <div class="detail-header">
+        <h2>Hello World</h2>
+        <p>The simplest starting point. Renders styled text with VStack layout, custom fonts, and the SwiftUI color system.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/helloworld.png" alt="Hello World screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>Creating views with Text and VStack</li>
+            <li>Applying Font presets (largeTitle, subheadline, body)</li>
+            <li>Using Color.blue, Color.green, Color.secondary</li>
+            <li>Modifier chaining (.font().foregroundColor().padding())</li>
+            <li>Mounting an App to the DOM</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>HelloWorld/main.js</span></div>
+            <pre><code><span class="keyword">import</span> { App, VStack, HStack, Text, Color, Font } <span class="keyword">from</span> <span class="string">'../../src/index.js'</span>;
+
+<span class="keyword">const</span> <span class="function">ContentView</span> = () =>
+  <span class="function">VStack</span>({ spacing: <span class="number">16</span> },
+    <span class="function">Text</span>(<span class="string">'Hello, SwiftUI for Web!'</span>)
+      .<span class="function">font</span>(Font.largeTitle)
+      .<span class="function">foregroundColor</span>(Color.blue),
+    <span class="function">Text</span>(<span class="string">'Built with pure JavaScript'</span>)
+      .<span class="function">font</span>(Font.subheadline)
+      .<span class="function">foregroundColor</span>(Color.secondary)
+  ).<span class="function">padding</span>(<span class="number">40</span>);
+
+<span class="function">App</span>(ContentView).<span class="function">mount</span>(<span class="string">'#root'</span>);</code></pre>
+          </div>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/HelloWorld/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detail: Counter -->
+  <section class="detail-section" id="example-counter">
+    <div class="container">
+      <div class="detail-header">
+        <h2>Counter</h2>
+        <p>Introduces reactive State management. Clicking buttons updates the count and triggers a UI re-render automatically.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/counter.png" alt="Counter screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>Creating reactive state with new State(0)</li>
+            <li>Reading and writing state via count.value</li>
+            <li>Button with action callbacks</li>
+            <li>HStack for horizontal layout</li>
+            <li>Styling buttons with background, cornerRadius, padding</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>Counter/main.js</span></div>
+            <pre><code><span class="keyword">import</span> { App, VStack, HStack, Text, Button, State, Color, Font }
+  <span class="keyword">from</span> <span class="string">'../../src/index.js'</span>;
+
 <span class="keyword">const</span> count = <span class="keyword">new</span> <span class="function">State</span>(<span class="number">0</span>);
 
-<span class="comment">// View</span>
-<span class="function">App</span>(() =>
-  <span class="function">VStack</span>({ spacing: <span class="number">20</span> },
+<span class="keyword">const</span> <span class="function">CounterView</span> = () =>
+  <span class="function">VStack</span>({ spacing: <span class="number">24</span> },
     <span class="function">Text</span>(<span class="string">'Counter'</span>).<span class="function">font</span>(Font.title),
     <span class="function">Text</span>(<span class="function">String</span>(count.value))
-      .<span class="function">font</span>(Font.<span class="function">system</span>(<span class="number">48</span>))
+      .<span class="function">font</span>(Font.<span class="function">system</span>(<span class="number">72</span>, Font.Weight.bold))
       .<span class="function">foregroundColor</span>(Color.blue),
     <span class="function">HStack</span>({ spacing: <span class="number">16</span> },
-      <span class="function">Button</span>(<span class="string">'-'</span>, () => count.value--)
-        .<span class="function">padding</span>(<span class="number">16</span>)
+      <span class="function">Button</span>(<span class="string">'\u2212'</span>, () => count.value--)
         .<span class="function">background</span>(Color.red)
-        .<span class="function">cornerRadius</span>(<span class="number">8</span>),
+        .<span class="function">foregroundColor</span>(Color.white)
+        .<span class="function">cornerRadius</span>(<span class="number">12</span>),
       <span class="function">Button</span>(<span class="string">'+'</span>, () => count.value++)
-        .<span class="function">padding</span>(<span class="number">16</span>)
         .<span class="function">background</span>(Color.green)
-        .<span class="function">cornerRadius</span>(<span class="number">8</span>)
+        .<span class="function">foregroundColor</span>(Color.white)
+        .<span class="function">cornerRadius</span>(<span class="number">12</span>)
     )
-  ).<span class="function">padding</span>(<span class="number">40</span>)
-).<span class="function">mount</span>(<span class="string">'#root'</span>);</code></pre>
-        </div>
-
-        <div class="code-panel">
-          <div class="code-header">
-            <span>React</span>
-            <span class="badge react">40+ MB node_modules</span>
+  ).<span class="function">padding</span>(<span class="number">40</span>);</code></pre>
           </div>
-          <pre><code><span class="keyword">import</span> React, { useState } <span class="keyword">from</span> <span class="string">'react'</span>;
-
-<span class="keyword">function</span> <span class="function">Counter</span>() {
-  <span class="keyword">const</span> [count, setCount] = <span class="function">useState</span>(<span class="number">0</span>);
-
-  <span class="keyword">return</span> (
-    &lt;<span class="property">div</span> style={{
-      display: <span class="string">'flex'</span>,
-      flexDirection: <span class="string">'column'</span>,
-      alignItems: <span class="string">'center'</span>,
-      gap: <span class="number">20</span>,
-      padding: <span class="number">40</span>
-    }}&gt;
-      &lt;<span class="property">h1</span>&gt;Counter&lt;/<span class="property">h1</span>&gt;
-      &lt;<span class="property">span</span> style={{
-        fontSize: <span class="number">48</span>,
-        color: <span class="string">'rgb(0, 122, 255)'</span>
-      }}&gt;{count}&lt;/<span class="property">span</span>&gt;
-      &lt;<span class="property">div</span> style={{ display: <span class="string">'flex'</span>, gap: <span class="number">16</span> }}&gt;
-        &lt;<span class="property">button</span> onClick={() => <span class="function">setCount</span>(c => c - <span class="number">1</span>)}
-          style={{ padding: <span class="number">16</span>, background: <span class="string">'rgb(255,59,48)'</span> }}&gt;
-          -
-        &lt;/<span class="property">button</span>&gt;
-        &lt;<span class="property">button</span> onClick={() => <span class="function">setCount</span>(c => c + <span class="number">1</span>)}
-          style={{ padding: <span class="number">16</span>, background: <span class="string">'rgb(52,199,89)'</span> }}&gt;
-          +
-        &lt;/<span class="property">button</span>&gt;
-      &lt;/<span class="property">div</span>&gt;
-    &lt;/<span class="property">div</span>&gt;
-  );
-}</code></pre>
-        </div>
-      </div>
-
-      <h3 style="text-align: center; margin-bottom: 24px;">More Examples</h3>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <h3>📋 Todo App (MVVM)</h3>
-          <p>Full MVVM architecture with ObservableObject, ForEach, TextField, and Toggle.</p>
-          <a href="../Examples/TodoApp/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
-        </div>
-        <div class="feature-card">
-          <h3>🎬 Netflix Clone</h3>
-          <p>Hero banner, horizontal carousels, ZStack overlays, and View Transition animations.</p>
-          <a href="../Examples/Netflix/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
-        </div>
-        <div class="feature-card">
-          <h3>👋 Hello World</h3>
-          <p>Simple text rendering with layout, fonts, and colors. Perfect starting point.</p>
-          <a href="../Examples/HelloWorld/" class="btn btn-secondary" style="margin-top: 16px; display: inline-block;">View Example</a>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/Counter/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="components" id="components">
+  <!-- Detail: Todo App -->
+  <section class="detail-section" id="example-todoapp">
     <div class="container">
-      <h2>Component Status</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th>Component</th>
-            <th>Status</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Core</td>
-            <td>View, App</td>
-            <td class="status-done">✅ Done</td>
-            <td>Base class, app mounting</td>
-          </tr>
-          <tr>
-            <td>Layout</td>
-            <td>VStack, HStack, ZStack</td>
-            <td class="status-done">✅ Done</td>
-            <td>Flexbox/Grid based stacks</td>
-          </tr>
-          <tr>
-            <td>Layout</td>
-            <td>Spacer, ScrollView</td>
-            <td class="status-done">✅ Done</td>
-            <td>Flexible space, scrolling</td>
-          </tr>
-          <tr>
-            <td>Views</td>
-            <td>Text, Image</td>
-            <td class="status-done">✅ Done</td>
-            <td>Text rendering, images</td>
-          </tr>
-          <tr>
-            <td>Controls</td>
-            <td>Button, TextField, Toggle</td>
-            <td class="status-done">✅ Done</td>
-            <td>Interactive controls</td>
-          </tr>
-          <tr>
-            <td>Lists</td>
-            <td>ForEach</td>
-            <td class="status-done">✅ Done</td>
-            <td>Array iteration</td>
-          </tr>
-          <tr>
-            <td>State</td>
-            <td>State, Binding, ObservableObject</td>
-            <td class="status-done">✅ Done</td>
-            <td>Reactive state management</td>
-          </tr>
-          <tr>
-            <td>Graphics</td>
-            <td>Color, Font, LinearGradient</td>
-            <td class="status-done">✅ Done</td>
-            <td>Colors, typography, gradients</td>
-          </tr>
-          <tr>
-            <td>Animation</td>
-            <td>withAnimation</td>
-            <td class="status-done">✅ Done</td>
-            <td>View Transition API</td>
-          </tr>
-          <tr>
-            <td>Navigation</td>
-            <td>NavigationStack, NavigationLink</td>
-            <td class="status-done">✅ Done</td>
-            <td>Stack-based navigation</td>
-          </tr>
-          <tr>
-            <td>Layout</td>
-            <td>List, LazyVStack, LazyHStack</td>
-            <td class="status-planned">🔴 Planned</td>
-            <td>P1 Priority</td>
-          </tr>
-          <tr>
-            <td>Controls</td>
-            <td>Slider, Picker, DatePicker</td>
-            <td class="status-planned">🔴 Planned</td>
-            <td>P1 Priority</td>
-          </tr>
-          <tr>
-            <td>Shapes</td>
-            <td>Rectangle, Circle, Capsule</td>
-            <td class="status-planned">🔴 Planned</td>
-            <td>P1 Priority</td>
-          </tr>
-          <tr>
-            <td>Navigation</td>
-            <td>TabView, Sheet, Alert</td>
-            <td class="status-planned">🔴 Planned</td>
-            <td>P2 Priority</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="detail-header">
+        <h2>Todo App</h2>
+        <p>A complete MVVM application with an ObservableObject ViewModel, two-way data binding through TextField, dynamic lists with ForEach, and filter controls.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/todoapp.png" alt="Todo App screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>MVVM architecture with ObservableObject</li>
+            <li>Published properties for reactive state</li>
+            <li>Two-way binding with TextField</li>
+            <li>Dynamic lists using ForEach with id tracking</li>
+            <li>Filter logic (All / Active / Completed)</li>
+            <li>Computed properties (filteredTodos, activeCount)</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>TodoApp/main.js</span></div>
+            <pre><code><span class="keyword">class</span> <span class="function">TodoViewModel</span> <span class="keyword">extends</span> <span class="function">ObservableObject</span> {
+  <span class="function">constructor</span>() {
+    <span class="keyword">super</span>();
+    <span class="keyword">this</span>.<span class="function">published</span>(<span class="string">'todos'</span>, []);
+    <span class="keyword">this</span>.<span class="function">published</span>(<span class="string">'newTodoText'</span>, <span class="string">''</span>);
+    <span class="keyword">this</span>.<span class="function">published</span>(<span class="string">'filter'</span>, <span class="string">'all'</span>);
+  }
+
+  <span class="function">addTodo</span>() {
+    <span class="keyword">const</span> text = <span class="keyword">this</span>.newTodoText.<span class="function">trim</span>();
+    <span class="keyword">if</span> (text) {
+      <span class="keyword">this</span>.todos = [...<span class="keyword">this</span>.todos,
+        <span class="keyword">new</span> <span class="function">TodoItem</span>(Date.<span class="function">now</span>(), text)];
+      <span class="keyword">this</span>.newTodoText = <span class="string">''</span>;
+    }
+  }
+}
+
+<span class="comment">// View uses ForEach for the list</span>
+<span class="function">ForEach</span>(viewModel.filteredTodos, { id: <span class="string">'id'</span> },
+  (todo) => <span class="function">TodoItemRow</span>(todo, viewModel)
+)</code></pre>
+          </div>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/TodoApp/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
+  <!-- Detail: Netflix -->
+  <section class="detail-section" id="example-netflix">
+    <div class="container">
+      <div class="detail-header">
+        <h2>Netflix Clone</h2>
+        <p>A rich media app with a hero banner, responsive card grids, ZStack overlays with gradient, and smooth Pinterest-style card expansion animations.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/netflix.png" alt="Netflix clone screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>ZStack for layered hero banner with gradient overlay</li>
+            <li>ScrollView with horizontal and vertical scrolling</li>
+            <li>Responsive grid layout adapting to screen size</li>
+            <li>Card expansion animation outside the view tree</li>
+            <li>Environment and UserInterfaceSizeClass for adaptive UI</li>
+            <li>LinearGradient for smooth visual transitions</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>Netflix/main.js</span></div>
+            <pre><code><span class="comment">// Hero banner with ZStack layering</span>
+<span class="function">ZStack</span>({ alignment: <span class="string">'bottomLeading'</span> },
+  <span class="function">Image</span>(movie.backdrop)
+    .<span class="function">resizable</span>().<span class="function">aspectRatio</span>(<span class="string">'fill'</span>)
+    .<span class="function">frame</span>({ height: <span class="number">600</span> }),
+
+  <span class="function">LinearGradient</span>(
+    [<span class="string">'transparent'</span>, <span class="string">'rgba(20,20,20,0.9)'</span>, <span class="string">'#141414'</span>],
+    { direction: <span class="string">'to bottom'</span> }
+  ).<span class="function">frame</span>({ height: <span class="number">600</span> }),
+
+  <span class="function">VStack</span>({ alignment: <span class="string">'leading'</span> },
+    <span class="function">Text</span>(movie.title)
+      .<span class="function">font</span>(Font.<span class="function">system</span>(<span class="number">56</span>, <span class="string">'bold'</span>))
+      .<span class="function">foregroundColor</span>(<span class="string">'white'</span>),
+    <span class="function">Button</span>(<span class="string">'&#9654; Play'</span>, () => {})
+      .<span class="function">background</span>(<span class="string">'white'</span>)
+      .<span class="function">foregroundColor</span>(<span class="string">'black'</span>)
+  )
+)</code></pre>
+          </div>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/Netflix/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detail: Airbnb -->
+  <section class="detail-section" id="example-airbnb">
+    <div class="container">
+      <div class="detail-header">
+        <h2>StayFinder (Airbnb Clone)</h2>
+        <p>A vacation rental booking app demonstrating MVVM architecture with feature-based folder structure, responsive grid listings, search with filters, and a detail view.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/airbnb.png" alt="Airbnb clone screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>Feature-based folder structure (Views/, ViewModels/, Services/)</li>
+            <li>Responsive grid adapting from mobile to desktop</li>
+            <li>Category bar navigation with filter modal</li>
+            <li>Listing detail view with booking flow</li>
+            <li>MVVM with centralized AppViewModel</li>
+            <li>Composing feature modules into a root app</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>Airbnb/main.js</span></div>
+            <pre><code><span class="keyword">import</span> SwiftUI <span class="keyword">from</span> <span class="string">'../../src/index.js'</span>;
+<span class="keyword">const</span> { App, VStack } = SwiftUI;
+
+<span class="keyword">import</span> { vm } <span class="keyword">from</span> <span class="string">'./ViewModels/AppViewModel.js'</span>;
+<span class="keyword">import</span> { Header } <span class="keyword">from</span> <span class="string">'./Views/Header/index.js'</span>;
+<span class="keyword">import</span> { ListingGrid, ListingDetail }
+  <span class="keyword">from</span> <span class="string">'./Views/Listing/index.js'</span>;
+<span class="keyword">import</span> { CategoryBar, FilterModal }
+  <span class="keyword">from</span> <span class="string">'./Views/Filter/index.js'</span>;
+
+<span class="keyword">function</span> <span class="function">MainApp</span>() {
+  <span class="keyword">return</span> <span class="function">VStack</span>({ spacing: <span class="number">0</span> },
+    <span class="function">Header</span>(), <span class="function">CategoryBar</span>(),
+    <span class="function">ListingGrid</span>(), <span class="function">MobileNav</span>(),
+    <span class="function">FilterModal</span>(), <span class="function">ListingDetail</span>()
+  );
+}
+
+<span class="keyword">const</span> app = <span class="function">App</span>(MainApp).<span class="function">mount</span>(<span class="string">'#root'</span>);
+vm.<span class="function">subscribe</span>(() => app.<span class="function">refresh</span>());</code></pre>
+          </div>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/Airbnb/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detail: Charts -->
+  <section class="detail-section" id="example-charts">
+    <div class="container">
+      <div class="detail-header">
+        <h2>Swift Charts for Web</h2>
+        <p>A declarative charting library mirroring Apple's Swift Charts API. Supports bar, line, area, scatter, pie, and donut charts with the same BarMark/LineMark/SectorMark syntax.</p>
+      </div>
+      <div class="detail-content">
+        <div class="detail-screenshot">
+          <img src="images/charts.png" alt="Charts screenshot">
+        </div>
+        <div class="detail-info">
+          <h3>What you'll learn</h3>
+          <ul>
+            <li>Chart container with data mapping callbacks</li>
+            <li>BarMark for categorical bar charts</li>
+            <li>LineMark with interpolation methods (catmullRom, monotone)</li>
+            <li>SectorMark for pie and donut charts</li>
+            <li>Multi-series with foregroundStyle(by:)</li>
+            <li>RuleMark for target/threshold lines</li>
+          </ul>
+          <div class="code-panel">
+            <div class="code-header"><span>Charts/main.js</span></div>
+            <pre><code><span class="keyword">import</span> { Chart, BarMark, LineMark, SectorMark,
+  value, Color } <span class="keyword">from</span> <span class="string">'../../src/index.js'</span>;
+
+<span class="comment">// Bar chart</span>
+<span class="function">Chart</span>(salesData, item =>
+  <span class="function">BarMark</span>({
+    x: <span class="function">value</span>(<span class="string">'Month'</span>, item.month),
+    y: <span class="function">value</span>(<span class="string">'Sales'</span>, item.sales)
+  })
+  .<span class="function">foregroundStyle</span>(Color.<span class="function">hex</span>(<span class="string">'#007AFF'</span>))
+  .<span class="function">cornerRadius</span>(<span class="number">4</span>)
+)
+.<span class="function">frame</span>({ width: <span class="number">500</span>, height: <span class="number">300</span> })
+.<span class="function">chartXAxis</span>({ label: <span class="string">'Month'</span> })
+.<span class="function">chartYAxis</span>({ label: <span class="string">'Sales ($K)'</span> });</code></pre>
+          </div>
+          <div style="margin-top: 16px;">
+            <a href="../Examples/Charts/" class="btn btn-primary" target="_blank">View Live Demo</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
   <section class="quickstart" id="quickstart">
     <div class="container">
       <h2>Quick Start</h2>
@@ -647,29 +854,18 @@ npx serve .</code></pre>
           <h3>Create your first view</h3>
           <p>Create an index.html file and start building!</p>
           <div class="code-panel">
-            <pre><code><span class="keyword">&lt;!DOCTYPE html&gt;</span>
-<span class="property">&lt;html&gt;</span>
-<span class="property">&lt;head&gt;</span>
-  <span class="property">&lt;link</span> rel=<span class="string">"stylesheet"</span> href=<span class="string">"src/styles/index.css"</span><span class="property">&gt;</span>
-<span class="property">&lt;/head&gt;</span>
-<span class="property">&lt;body&gt;</span>
-  <span class="property">&lt;div</span> id=<span class="string">"root"</span><span class="property">&gt;&lt;/div&gt;</span>
-  <span class="property">&lt;script</span> type=<span class="string">"module"</span><span class="property">&gt;</span>
-    <span class="keyword">import</span> { App, VStack, Text, Color, Font } <span class="keyword">from</span> <span class="string">'./src/index.js'</span>;
+            <pre><code><span class="property">&lt;script</span> type=<span class="string">"module"</span><span class="property">&gt;</span>
+  <span class="keyword">import</span> { App, VStack, Text, Color, Font }
+    <span class="keyword">from</span> <span class="string">'./src/index.js'</span>;
 
-    <span class="function">App</span>(() =>
-      <span class="function">VStack</span>({ spacing: <span class="number">16</span> },
-        <span class="function">Text</span>(<span class="string">'Hello, SwiftUI for Web!'</span>)
-          .<span class="function">font</span>(Font.largeTitle)
-          .<span class="function">foregroundColor</span>(Color.blue),
-        <span class="function">Text</span>(<span class="string">'Built with pure JavaScript'</span>)
-          .<span class="function">font</span>(Font.body)
-          .<span class="function">foregroundColor</span>(Color.gray)
-      ).<span class="function">padding</span>(<span class="number">40</span>)
-    ).<span class="function">mount</span>(<span class="string">'#root'</span>);
-  <span class="property">&lt;/script&gt;</span>
-<span class="property">&lt;/body&gt;</span>
-<span class="property">&lt;/html&gt;</span></code></pre>
+  <span class="function">App</span>(() =>
+    <span class="function">VStack</span>({ spacing: <span class="number">16</span> },
+      <span class="function">Text</span>(<span class="string">'Hello, SwiftUI for Web!'</span>)
+        .<span class="function">font</span>(Font.largeTitle)
+        .<span class="function">foregroundColor</span>(Color.blue)
+    ).<span class="function">padding</span>(<span class="number">40</span>)
+  ).<span class="function">mount</span>(<span class="string">'#root'</span>);
+<span class="property">&lt;/script&gt;</span></code></pre>
           </div>
         </div>
       </div>
@@ -678,7 +874,7 @@ npx serve .</code></pre>
         <div class="step-number">4</div>
         <div class="step-content">
           <h3>Open in browser</h3>
-          <p>Visit <code>http://localhost:8000</code> and see your app!</p>
+          <p>Visit <code style="background: var(--bg-code); padding: 2px 8px; border-radius: 4px;">http://localhost:8000</code> and see your app!</p>
         </div>
       </div>
     </div>
@@ -686,16 +882,11 @@ npx serve .</code></pre>
 
   <footer>
     <div class="container">
-      <p style="margin-bottom: 16px;">
-        <strong>Made with ❤️ for the SwiftUI and Web communities</strong>
-      </p>
+      <p><strong>SwiftUI for Web</strong> &mdash; Declarative UI framework for the web</p>
       <p>
-        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a> •
-        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/issues">Report Issues</a> •
-        <a href="https://github.com/sponsors/ShawnBaek">Sponsor</a>
-      </p>
-      <p style="margin-top: 24px; font-size: 14px;">
-        ISC License © 2024
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a> &middot;
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/issues">Issues</a> &middot;
+        ISC License
       </p>
     </div>
   </footer>
