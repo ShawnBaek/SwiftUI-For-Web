@@ -126,8 +126,10 @@ const categories = [
 // =============================================================================
 
 const selectedMovie = new State(null);
-const showDetail = new State(false);
-const cardRect = new State(null); // Store the clicked card's position
+
+// Overlay is managed outside the view tree to avoid scroll reset on app.refresh()
+let currentOverlay = null;  // Reference to the overlay DOM element
+let currentCardRect = null; // Stored rect of the clicked card for close animation
 
 // =============================================================================
 // Responsive Helpers
@@ -287,9 +289,7 @@ function HeroBanner(movie) {
           .font(Font.system(16, 'bold'))
           .cornerRadius(4),
         Button('ℹ More Info', () => {
-          cardRect.value = { x: window.innerWidth / 2, y: window.innerHeight / 2, width: 0, height: 0 };
-          selectedMovie.value = movie;
-          showDetail.value = true;
+          openCard(movie, { x: window.innerWidth / 2, y: window.innerHeight / 2, width: 0, height: 0 });
         })
         .padding({ horizontal: 24, vertical: 12 })
         .background('rgba(109, 109, 110, 0.7)')
@@ -337,14 +337,12 @@ function MovieCard(movie) {
       el.addEventListener('click', () => {
         // Get card position for animation
         const rect = el.getBoundingClientRect();
-        cardRect.value = {
+        openCard(movie, {
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
           width: rect.width,
           height: rect.height
-        };
-        selectedMovie.value = movie;
-        showDetail.value = true;
+        });
       });
     }
   });
@@ -385,14 +383,12 @@ function MovieCardGrid(movie) {
 
       el.addEventListener('click', () => {
         const rect = el.getBoundingClientRect();
-        cardRect.value = {
+        openCard(movie, {
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
           width: rect.width,
           height: rect.height
-        };
-        selectedMovie.value = movie;
-        showDetail.value = true;
+        });
       });
     }
   });
@@ -435,235 +431,231 @@ function MovieRow(category) {
 }
 
 /**
- * Pinterest-style Expanded Card Overlay
+ * Open card: creates overlay DOM and appends to document.body (outside view tree)
+ * This avoids app.refresh() which would reset scroll position.
  */
-function ExpandedCardOverlay() {
-  const movie = selectedMovie.value;
-  const rect = cardRect.value;
+function openCard(movie, rect) {
+  // Prevent opening multiple overlays
+  if (currentOverlay) return;
+
+  selectedMovie.value = movie;
+  currentCardRect = rect;
+
   const layout = getLayoutInfo();
 
-  if (!movie || !showDetail.value) return null;
+  // Create overlay container (appended to body, not the view tree)
+  const overlay = document.createElement('div');
+  overlay.id = 'netflix-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1000;
+    pointer-events: auto;
+  `;
 
-  return new View().modifier({
-    apply(el) {
-      // Clean up any existing expanded cards before creating a new one
-      const existingCards = document.querySelectorAll('#expanded-card');
-      if (existingCards.length > 0) {
-        existingCards.forEach(card => card.parentElement?.remove());
-      }
+  // Backdrop
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0);
+    transition: background 0.4s ease;
+  `;
+  backdrop.addEventListener('click', closeCard);
+  overlay.appendChild(backdrop);
 
-      // Create overlay container
-      el.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 1000;
-        pointer-events: auto;
-      `;
+  // Expanded card container
+  const card = document.createElement('div');
+  const startX = rect ? rect.x : window.innerWidth / 2;
+  const startY = rect ? rect.y : window.innerHeight / 2;
+  const startWidth = rect ? rect.width : 0;
+  const startHeight = rect ? rect.height : 0;
 
-      // Backdrop
-      const backdrop = document.createElement('div');
-      backdrop.style.cssText = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0);
-        transition: background 0.4s ease;
-      `;
-      backdrop.addEventListener('click', closeCard);
-      el.appendChild(backdrop);
+  card.style.cssText = `
+    position: absolute;
+    left: ${startX}px;
+    top: ${startY}px;
+    width: ${startWidth}px;
+    height: ${startHeight}px;
+    transform: translate(-50%, -50%);
+    background: #181818;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  `;
+  card.id = 'expanded-card';
 
-      // Expanded card container
-      const card = document.createElement('div');
-      const startX = rect ? rect.x : window.innerWidth / 2;
-      const startY = rect ? rect.y : window.innerHeight / 2;
-      const startWidth = rect ? rect.width : 0;
-      const startHeight = rect ? rect.height : 0;
+  // Image
+  const img = document.createElement('img');
+  img.src = movie.poster;
+  img.style.cssText = `
+    width: 100%;
+    height: 70%;
+    object-fit: cover;
+    display: block;
+  `;
+  card.appendChild(img);
 
-      card.style.cssText = `
-        position: absolute;
-        left: ${startX}px;
-        top: ${startY}px;
-        width: ${startWidth}px;
-        height: ${startHeight}px;
-        transform: translate(-50%, -50%);
-        background: #181818;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      `;
-      card.id = 'expanded-card';
+  // Text overlay with gradient
+  const textOverlay = document.createElement('div');
+  textOverlay.style.cssText = `
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to top, rgba(24, 24, 24, 1) 0%, rgba(24, 24, 24, 0.95) 40%, rgba(24, 24, 24, 0) 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 20px;
+    opacity: 0;
+    transition: opacity 0.3s ease 0.2s;
+  `;
 
-      // Image
-      const img = document.createElement('img');
-      img.src = movie.poster;
-      img.style.cssText = `
-        width: 100%;
-        height: 70%;
-        object-fit: cover;
-        display: block;
-      `;
-      card.appendChild(img);
+  // Title
+  const title = document.createElement('h2');
+  title.textContent = movie.title;
+  title.style.cssText = `
+    color: white;
+    font-size: ${layout.isMobile ? '18px' : '24px'};
+    font-weight: bold;
+    margin: 0 0 8px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  textOverlay.appendChild(title);
 
-      // Text overlay with gradient
-      const textOverlay = document.createElement('div');
-      textOverlay.style.cssText = `
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 50%;
-        background: linear-gradient(to top, rgba(24, 24, 24, 1) 0%, rgba(24, 24, 24, 0.95) 40%, rgba(24, 24, 24, 0) 100%);
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        padding: 20px;
-        opacity: 0;
-        transition: opacity 0.3s ease 0.2s;
-      `;
+  // Meta info
+  const meta = document.createElement('div');
+  meta.style.cssText = `
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+  `;
+  meta.innerHTML = `
+    <span style="color: #46d369; font-weight: 500;">${movie.year}</span>
+    <span style="color: white; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; font-size: 12px;">${movie.rating}</span>
+  `;
+  textOverlay.appendChild(meta);
 
-      // Title
-      const title = document.createElement('h2');
-      title.textContent = movie.title;
-      title.style.cssText = `
-        color: white;
-        font-size: ${layout.isMobile ? '18px' : '24px'};
-        font-weight: bold;
-        margin: 0 0 8px 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      `;
-      textOverlay.appendChild(title);
+  // Description
+  const desc = document.createElement('p');
+  desc.textContent = movie.description || 'An exciting movie that will keep you on the edge of your seat.';
+  desc.style.cssText = `
+    color: rgba(255, 255, 255, 0.8);
+    font-size: ${layout.isMobile ? '12px' : '14px'};
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  textOverlay.appendChild(desc);
 
-      // Meta info
-      const meta = document.createElement('div');
-      meta.style.cssText = `
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        margin-bottom: 8px;
-      `;
-      meta.innerHTML = `
-        <span style="color: #46d369; font-weight: 500;">${movie.year}</span>
-        <span style="color: white; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; font-size: 12px;">${movie.rating}</span>
-      `;
-      textOverlay.appendChild(meta);
+  // Action buttons
+  const buttons = document.createElement('div');
+  buttons.style.cssText = `
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+  `;
+  buttons.innerHTML = `
+    <button style="flex: 1; padding: 10px; background: white; color: black; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">▶ Play</button>
+    <button style="padding: 10px 16px; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 4px; cursor: pointer;">+ My List</button>
+  `;
+  textOverlay.appendChild(buttons);
 
-      // Description
-      const desc = document.createElement('p');
-      desc.textContent = movie.description || 'An exciting movie that will keep you on the edge of your seat.';
-      desc.style.cssText = `
-        color: rgba(255, 255, 255, 0.8);
-        font-size: ${layout.isMobile ? '12px' : '14px'};
-        margin: 0;
-        line-height: 1.4;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      `;
-      textOverlay.appendChild(desc);
+  card.appendChild(textOverlay);
 
-      // Action buttons
-      const buttons = document.createElement('div');
-      buttons.style.cssText = `
-        display: flex;
-        gap: 10px;
-        margin-top: 12px;
-      `;
-      buttons.innerHTML = `
-        <button style="flex: 1; padding: 10px; background: white; color: black; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">▶ Play</button>
-        <button style="padding: 10px 16px; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 4px; cursor: pointer;">+ My List</button>
-      `;
-      textOverlay.appendChild(buttons);
+  // Close button (top-left)
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '✕';
+  closeBtn.style.cssText = `
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 36px;
+    height: 36px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.3s ease 0.3s, transform 0.3s ease 0.3s, background 0.2s ease;
+    z-index: 10;
+  `;
+  closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.2)';
+  });
+  closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.style.background = 'rgba(0, 0, 0, 0.7)';
+  });
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeCard();
+  });
+  card.appendChild(closeBtn);
 
-      card.appendChild(textOverlay);
+  overlay.appendChild(card);
 
-      // Close button (top-left)
-      const closeBtn = document.createElement('button');
-      closeBtn.innerHTML = '✕';
-      closeBtn.style.cssText = `
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        width: 36px;
-        height: 36px;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        border: none;
-        border-radius: 50%;
-        font-size: 18px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transform: scale(0.8);
-        transition: opacity 0.3s ease 0.3s, transform 0.3s ease 0.3s, background 0.2s ease;
-        z-index: 10;
-      `;
-      closeBtn.addEventListener('mouseenter', () => {
-        closeBtn.style.background = 'rgba(255, 255, 255, 0.2)';
-      });
-      closeBtn.addEventListener('mouseleave', () => {
-        closeBtn.style.background = 'rgba(0, 0, 0, 0.7)';
-      });
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeCard();
-      });
-      card.appendChild(closeBtn);
+  // Store reference
+  currentOverlay = overlay;
 
-      el.appendChild(card);
+  // Append to body (outside view tree)
+  document.body.appendChild(overlay);
 
-      // Store references for close animation
-      el._card = card;
-      el._backdrop = backdrop;
-      el._closeBtn = closeBtn;
-      el._textOverlay = textOverlay;
-      el._startRect = rect;
+  // Animate open
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      backdrop.style.background = 'rgba(0, 0, 0, 0.85)';
 
-      // Animate open
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          backdrop.style.background = 'rgba(0, 0, 0, 0.85)';
+      card.style.left = '50%';
+      card.style.top = '50%';
+      card.style.width = `${layout.expandedWidth}px`;
+      card.style.height = `${layout.expandedHeight}px`;
 
-          card.style.left = '50%';
-          card.style.top = '50%';
-          card.style.width = `${layout.expandedWidth}px`;
-          card.style.height = `${layout.expandedHeight}px`;
-
-          closeBtn.style.opacity = '1';
-          closeBtn.style.transform = 'scale(1)';
-          textOverlay.style.opacity = '1';
-        });
-      });
-    }
+      closeBtn.style.opacity = '1';
+      closeBtn.style.transform = 'scale(1)';
+      textOverlay.style.opacity = '1';
+    });
   });
 }
 
 /**
- * Close card with animation back to original position
+ * Close card with animation back to original position.
+ * Removes overlay DOM directly via transitionend — no app.refresh() needed.
  */
 function closeCard() {
-  const overlay = document.querySelector('[data-swiftui-view] > div > div:last-child');
-  if (!overlay) {
-    showDetail.value = false;
-    selectedMovie.value = null;
-    return;
-  }
+  if (!currentOverlay) return;
 
-  const card = document.getElementById('expanded-card');
+  const overlay = currentOverlay;
+  const card = overlay.querySelector('#expanded-card');
   const backdrop = overlay.querySelector('div:first-child');
-  const rect = cardRect.value;
+  const rect = currentCardRect;
+
+  // Prevent double-close
+  currentOverlay = null;
+  currentCardRect = null;
+  selectedMovie.value = null;
 
   if (card && rect) {
-    // Animate close
+    // Animate close back to original card position
     card.style.transition = 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
     card.style.left = `${rect.x}px`;
     card.style.top = `${rect.y}px`;
@@ -675,24 +667,42 @@ function closeCard() {
     // Hide text overlay and close button
     const textOverlay = card.querySelector('div:nth-child(2)');
     const closeBtn = card.querySelector('button:last-of-type');
-    if (textOverlay) textOverlay.style.opacity = '0';
-    if (closeBtn) closeBtn.style.opacity = '0';
+    if (textOverlay) {
+      textOverlay.style.transition = 'opacity 0.15s ease';
+      textOverlay.style.opacity = '0';
+    }
+    if (closeBtn) {
+      closeBtn.style.transition = 'opacity 0.15s ease';
+      closeBtn.style.opacity = '0';
+    }
 
     // Fade backdrop
     if (backdrop) {
       backdrop.style.background = 'rgba(0, 0, 0, 0)';
     }
 
-    // Remove after animation
-    setTimeout(() => {
-      showDetail.value = false;
-      selectedMovie.value = null;
-      cardRect.value = null;
-    }, 350);
+    // Remove overlay after animation completes
+    const removeOverlay = () => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    };
+
+    card.addEventListener('transitionend', function handler(e) {
+      // Only act on the card's own transitions (e.g. 'left', 'width')
+      if (e.target === card) {
+        card.removeEventListener('transitionend', handler);
+        removeOverlay();
+      }
+    });
+
+    // Safety fallback in case transitionend doesn't fire
+    setTimeout(removeOverlay, 400);
   } else {
-    showDetail.value = false;
-    selectedMovie.value = null;
-    cardRect.value = null;
+    // No rect info — just remove immediately
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
   }
 }
 
@@ -712,21 +722,17 @@ function HomeView() {
  * Main App View
  */
 function NetflixApp() {
-  return ZStack({ alignment: 'top' },
-    // Main content
-    VStack({ spacing: 0 },
-      NavBar(),
-      ScrollView({ showsIndicators: false },
-        HomeView()
-      ).modifier({
-        apply(el) {
-          el.style.height = 'calc(100vh - 60px)';
-        }
-      })
-    ),
-
-    // Pinterest-style expanded card overlay
-    showDetail.value ? ExpandedCardOverlay() : null
+  // Overlay is managed outside the view tree (appended to document.body)
+  // so that app.refresh() doesn't destroy it or reset scroll position
+  return VStack({ spacing: 0 },
+    NavBar(),
+    ScrollView({ showsIndicators: false },
+      HomeView()
+    ).modifier({
+      apply(el) {
+        el.style.height = 'calc(100vh - 60px)';
+      }
+    })
   );
 }
 
@@ -748,18 +754,6 @@ function debouncedRefresh() {
   });
 }
 
-// Re-render on state changes
-showDetail.subscribe(() => {
-  debouncedRefresh();
-});
-
-selectedMovie.subscribe(() => {
-  // Only refresh if not showing detail (closing handled by closeCard)
-  if (!showDetail.value) {
-    debouncedRefresh();
-  }
-});
-
 // Re-render on window resize (debounced)
 let resizeTimeout;
 window.addEventListener('resize', () => {
@@ -776,7 +770,7 @@ Environment.subscribe(EnvironmentValues.horizontalSizeClass, () => {
 
 // Handle escape key to close
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && showDetail.value) {
+  if (e.key === 'Escape' && currentOverlay) {
     closeCard();
   }
 });
