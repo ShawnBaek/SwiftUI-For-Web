@@ -1,86 +1,147 @@
 # SwiftUI-For-Web
 
-**Build web apps the SwiftUI way. Zero dependencies. ~52KB gzipped.**
+**Apple's SwiftUI API — running natively in the browser with zero dependencies.**
 
-A declarative UI framework that brings Apple's SwiftUI paradigm to web development using pure JavaScript.
+SwiftUI-For-Web is a declarative UI framework that implements the **full SwiftUI API surface** and **Swift Charts API** using pure JavaScript. If you know SwiftUI, you already know this framework. Same component names, same modifiers, same patterns.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![Version](https://img.shields.io/badge/version-1.1.0--beta-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
 [![License](https://img.shields.io/badge/license-ISC-green.svg)](LICENSE)
 [![Components](https://img.shields.io/badge/components-84-orange.svg)](CLAUDE.md)
+[![Stage](https://img.shields.io/badge/stage-beta-yellow.svg)](#status)
 
-## Features
+> **[See live demos on GitHub Pages](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)**
 
-- **Zero Dependencies** - No npm, no bundlers, no build step
-- **Tiny Size** - ~52KB gzipped (React+ReactDOM is ~136KB)
-- **100% SwiftUI Coverage** - 84 components matching SwiftUI's API
-- **Adaptive Layouts** - Size classes, ViewThatFits, NavigationSplitView
-- **MVVM Architecture** - ObservableObject, @Published, Environment
+---
+
+## Why This Project Is Awesome
+
+**Write SwiftUI. Ship to browsers. No build step.**
+
+```javascript
+import { App, VStack, Text, Button, State, Color, Font } from './src/index.js';
+
+const count = new State(0);
+
+App(() =>
+  VStack({ spacing: 20 },
+    Text(String(count.value))
+      .font(Font.system(60))
+      .foregroundColor(Color.blue),
+    Button('Tap Me', () => count.value++)
+      .padding(16)
+      .background(Color.blue)
+      .foregroundColor(Color.white)
+      .cornerRadius(10)
+  ).padding(40)
+).mount('#root');
+```
+
+That's it. No `npm install`, no webpack, no JSX transpilation. Just an HTML file and a `<script type="module">`.
+
+### What makes it special
+
+- **100% SwiftUI API coverage** — 84 components faithfully matching Apple's [SwiftUI documentation](https://developer.apple.com/documentation/swiftui/). VStack, HStack, ZStack, NavigationStack, ObservableObject, @Published, Environment, ForEach, List... all of it.
+- **Swift Charts for Web** — `Chart`, `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `SectorMark`, `RuleMark` — the same declarative charting API from [Swift Charts](https://developer.apple.com/documentation/charts).
+- **Zero dependencies** — No npm packages. No build tools. No bundlers. Copy the `src/` folder and go.
+- **~88 KB gzipped** (core) / **~100 KB gzipped** (core + charts) — lighter than React+ReactDOM (~136KB).
+- **Instant developer experience** — Clone, open in browser, start building. No 5-minute setup, no config files.
+- **SwiftUI developers feel at home** — iOS/macOS developers can build web UIs without learning a new paradigm.
+
+### Inspired by
+
+This project draws inspiration from [elementary](https://elementary.codes), which runs declarative Swift natively in the browser via WebAssembly. SwiftUI-For-Web takes a different approach — instead of compiling Swift to WASM, we implement the SwiftUI API directly in JavaScript so it runs everywhere with zero compilation.
+
+---
+
+## Status
+
+**Beta** — The full SwiftUI component API is implemented and working. We're actively improving stability and adding features.
+
+### Roadmap
+
+- **NavigationPath for MPA** — We're working on full [NavigationPath](https://developer.apple.com/documentation/swiftui/navigationpath) support for Multi-Page Applications with real URL routing, browser history integration, and deep linking.
+
+### When to use SwiftUI-For-Web
+
+**Great for:**
+- Prototypes and internal tools without build tooling
+- iOS/SwiftUI developers building web UIs
+- Projects that need zero dependencies
+- Learning declarative UI patterns
+- Dashboards and data visualization with Swift Charts API
+
+**For production sites that need SSR or SEO**, consider pairing with a server-rendered framework or using tools like React/Next.js. SwiftUI-For-Web renders client-side only, so search engines won't see your content without additional work. We plan to address this in future releases.
+
+---
+
+## Live Demos
+
+**[Visit the tutorials page](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** to see all examples running live with code walkthroughs.
+
+| Example | Description |
+|---------|-------------|
+| [Hello World](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/HelloWorld/) | Text, VStack, Font, Color basics |
+| [Counter](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Counter/) | State management and reactive updates |
+| [Todo App](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/TodoApp/) | Full MVVM with ObservableObject, ForEach, TextField |
+| [Netflix Clone](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Netflix/) | ZStack, ScrollView, card animations, responsive grid |
+| [StayFinder (Airbnb)](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Airbnb/) | NavigationSplitView, adaptive layout, MVVM architecture |
+| [Swift Charts](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Charts/) | BarMark, LineMark, SectorMark data visualization |
+
+---
 
 ## Quick Start
 
 ```html
 <!DOCTYPE html>
 <html>
-<head>
-  <title>My App</title>
-</head>
+<head><title>My App</title></head>
 <body>
   <div id="root"></div>
   <script type="module">
     import SwiftUI from './src/index.js';
-    const { App, VStack, Text, Button, State, Color, Font } = SwiftUI;
-
-    const count = new State(0);
+    const { App, VStack, Text, Font, Color } = SwiftUI;
 
     App(() =>
-      VStack({ spacing: 20 },
-        Text('Hello SwiftUI-For-Web!')
-          .font(Font.largeTitle),
-        Text(String(count.value))
-          .font(Font.system(60))
+      VStack({ spacing: 16 },
+        Text('Hello, SwiftUI for Web!')
+          .font(Font.largeTitle)
           .foregroundColor(Color.blue),
-        Button('Tap Me', () => {
-          count.value++;
-        })
-          .padding(16)
-          .background(Color.blue)
-          .foregroundColor(Color.white)
-          .cornerRadius(10)
-      )
-      .padding(40)
+        Text('No build step required')
+          .font(Font.body)
+          .foregroundColor(Color.secondary)
+      ).padding(40)
     ).mount('#root');
-
-    count.subscribe(() => App.refresh());
   </script>
 </body>
 </html>
 ```
 
+Then serve it:
+
+```bash
+python3 -m http.server 8000
+# Open http://localhost:8000
+```
+
 ## Installation
 
-### Option 1: npm (Recommended)
+### Option 1: npm
 
 ```bash
 npm install swiftui-for-web
 ```
-
-Then import in your JavaScript:
 
 ```javascript
 import SwiftUI from 'swiftui-for-web';
 const { App, VStack, Text, Button, State } = SwiftUI;
 ```
 
-### Option 2: Direct Download
-
-No build step required! Just copy the `src/` folder to your project.
+### Option 2: Direct Download (no npm needed)
 
 ```bash
 git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
 cp -r SwiftUI-For-Web/src ./your-project/
 ```
-
-Then import directly:
 
 ```javascript
 import SwiftUI from './src/index.js';
@@ -88,130 +149,18 @@ import SwiftUI from './src/index.js';
 
 ### Modular Imports
 
-Choose what to include in your bundle:
-
 ```javascript
-// Full package (SwiftUI + Charts) - ~58KB gzipped
+// Full package (SwiftUI + Charts) — ~100KB gzipped
 import SwiftUI from 'swiftui-for-web';
 
-// Core only (no Charts) - ~52KB gzipped
+// Core only (no Charts) — ~88KB gzipped
 import SwiftUI from 'swiftui-for-web/core';
 
 // Charts only (requires core)
 import { Chart, BarMark, LineMark, value } from 'swiftui-for-web/charts';
 ```
 
-**Use core + charts separately:**
-```javascript
-import SwiftUI from 'swiftui-for-web/core';
-import { Chart, BarMark, value } from 'swiftui-for-web/charts';
-
-const { VStack, Text, App, Color } = SwiftUI;
-
-// Use both together
-App(() =>
-  VStack({ spacing: 20 },
-    Text('Sales Report'),
-    Chart(salesData, item =>
-      BarMark({
-        x: value("Month", item.month),
-        y: value("Sales", item.sales)
-      })
-    )
-  )
-).mount('#root');
-```
-
-## Running Examples
-
-Examples require a local HTTP server (ES modules don't work with `file://`).
-
-### Using npm scripts
-
-```bash
-# Clone the repo
-git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
-cd SwiftUI-For-Web
-
-# Install (optional, only needed for npm scripts)
-npm install
-
-# Run examples
-npm run serve
-# Then open in browser:
-#   http://localhost:8000/Examples/Airbnb/
-#   http://localhost:8000/Examples/Counter/
-#   http://localhost:8000/Examples/TodoApp/
-#   http://localhost:8000/Examples/Netflix/
-#   http://localhost:8000/Examples/SwiftGraph/
-#   http://localhost:8000/Examples/HelloWorld/
-```
-
-### Using Python (no npm needed)
-
-```bash
-cd SwiftUI-For-Web
-python3 -m http.server 8000
-# Open http://localhost:8000/Examples/Airbnb/
-```
-
-### Using Node.js
-
-```bash
-npx serve .
-# Open http://localhost:3000/Examples/Airbnb/
-```
-
-### Using VS Code Live Server
-
-1. Install the "Live Server" extension
-2. Right-click `Examples/Airbnb/index.html`
-3. Select "Open with Live Server"
-
-## Import Styles
-
-```javascript
-// Simple (recommended)
-import SwiftUI from './src/index.js';
-const { VStack, Text, Button, App } = SwiftUI;
-
-// Named imports (tree-shakeable)
-import { VStack, Text, Button, App } from './src/index.js';
-```
-
-## Size Comparison
-
-| Framework | Gzipped Size |
-|-----------|-------------|
-| **SwiftUI-For-Web** | **~52 KB** |
-| React + ReactDOM | ~136 KB |
-| Vue 3 | ~33 KB |
-| Angular | ~130 KB |
-
-## Why SwiftUI-For-Web?
-
-| | SwiftUI-For-Web | React |
-|---|---|---|
-| **Bundle Size** | ~52KB | ~136KB+ |
-| **Build Step** | None | Required |
-| **Dependencies** | Zero | 100+ npm packages |
-| **Setup Time** | Instant | Minutes to hours |
-| **iOS Developer Friendly** | Native SwiftUI syntax | New paradigm to learn |
-| **TypeScript** | No | Yes |
-| **SSR/SEO** | No | Yes (Next.js) |
-| **Ecosystem** | Small | Massive |
-
-**SwiftUI-For-Web is best for:**
-- Quick prototypes without build tooling
-- iOS/SwiftUI developers moving to web
-- Projects requiring zero dependencies
-- Learning declarative UI patterns
-
-**React is best for:**
-- Large-scale production apps
-- Teams needing SSR/SEO (Next.js)
-- Projects requiring extensive ecosystem
-- TypeScript-first development
+---
 
 ## Components (84 Total)
 
@@ -245,181 +194,163 @@ import { VStack, Text, Button, App } from './src/index.js';
 ### Gestures
 `TapGesture` `LongPressGesture` `DragGesture` `MagnificationGesture` `RotationGesture`
 
-## Examples
+### Charts (Swift Charts API)
+`Chart` `BarMark` `LineMark` `PointMark` `AreaMark` `SectorMark` `RuleMark`
 
-### 1. Hello World
+---
+
+## Code Examples
+
+### MVVM Counter
+
 ```javascript
 import SwiftUI from './src/index.js';
-const { App, Text, Font, Color } = SwiftUI;
-
-App(() =>
-  Text('Hello, World!')
-    .font(Font.largeTitle)
-    .foregroundColor(Color.blue)
-).mount('#root');
-```
-
-### 2. Counter with MVVM
-```javascript
-import SwiftUI from './src/index.js';
-const { App, VStack, HStack, Text, Button, ObservableObject, Published, Font, Color } = SwiftUI;
+const { App, VStack, HStack, Text, Button, ObservableObject, Font, Color } = SwiftUI;
 
 class CounterViewModel extends ObservableObject {
-  @Published count = 0;
-
+  constructor() {
+    super();
+    this.published('count', 0);
+  }
   increment() { this.count++; }
   decrement() { this.count--; }
 }
 
 const vm = new CounterViewModel();
 
-App(() =>
+const app = App(() =>
   VStack({ spacing: 20 },
     Text(String(vm.count))
       .font(Font.system(72))
       .foregroundColor(Color.blue),
     HStack({ spacing: 16 },
       Button('-', () => vm.decrement())
-        .font(Font.title)
         .padding({ horizontal: 24, vertical: 12 })
         .background(Color.red)
         .foregroundColor(Color.white)
         .cornerRadius(12),
       Button('+', () => vm.increment())
-        .font(Font.title)
         .padding({ horizontal: 24, vertical: 12 })
         .background(Color.green)
         .foregroundColor(Color.white)
         .cornerRadius(12)
     )
+  ).padding(40)
+).mount('#root');
+
+vm.subscribe(() => app.refresh());
+```
+
+### Swift Charts
+
+```javascript
+import SwiftUI from './src/index.js';
+const { App, Chart, BarMark, LineMark, value, Color } = SwiftUI;
+
+const salesData = [
+  { month: 'Jan', sales: 120 },
+  { month: 'Feb', sales: 150 },
+  { month: 'Mar', sales: 180 },
+  { month: 'Apr', sales: 140 },
+  { month: 'May', sales: 200 },
+  { month: 'Jun', sales: 220 }
+];
+
+App(() =>
+  Chart(salesData, item =>
+    BarMark({
+      x: value('Month', item.month),
+      y: value('Sales', item.sales)
+    })
+    .foregroundStyle(Color.hex('#007AFF'))
+    .cornerRadius(4)
   )
-  .padding(40)
+  .frame({ width: 500, height: 300 })
+  .chartXAxis({ label: 'Month' })
+  .chartYAxis({ label: 'Sales ($K)' })
 ).mount('#root');
 ```
 
-### 3. Adaptive Layout
+### Adaptive Layout
+
 ```javascript
 import SwiftUI from './src/index.js';
-const {
-  App, VStack, HStack, Text,
-  Environment, EnvironmentValues, UserInterfaceSizeClass,
-  ViewThatFits
-} = SwiftUI;
+const { App, ViewThatFits, HStack, VStack, Text } = SwiftUI;
 
-// Automatically switches layout based on available space
 App(() =>
   ViewThatFits({ in: 'horizontal' },
-    // Wide layout (desktop)
-    HStack({ spacing: 20 },
-      Text('Item 1'),
-      Text('Item 2'),
-      Text('Item 3')
-    ),
-    // Narrow layout (mobile)
-    VStack({ spacing: 12 },
-      Text('Item 1'),
-      Text('Item 2'),
-      Text('Item 3')
-    )
+    HStack({ spacing: 20 }, Text('Item 1'), Text('Item 2'), Text('Item 3')),
+    VStack({ spacing: 12 }, Text('Item 1'), Text('Item 2'), Text('Item 3'))
   )
 ).mount('#root');
 ```
 
-### 4. Navigation
-```javascript
-import SwiftUI from './src/index.js';
-const { App, NavigationStack, NavigationLink, VStack, Text, List, ForEach } = SwiftUI;
+---
 
-const items = ['Apple', 'Banana', 'Cherry'];
+## SwiftUI API Mapping
 
-App(() =>
-  NavigationStack(
-    VStack(
-      Text('Fruits').font(Font.largeTitle),
-      List(
-        ForEach(items, (item) =>
-          NavigationLink(
-            Text(item),
-            () => Text(`You selected: ${item}`).font(Font.title)
-          )
-        )
-      )
-    )
-  )
-).mount('#root');
-```
+| SwiftUI (iOS) | SwiftUI-For-Web |
+|---------------|-----------------|
+| `@State var count = 0` | `new State(0)` or `this.published('count', 0)` |
+| `@Published var name` | `this.published('name', '')` |
+| `@Environment(\.colorScheme)` | `Environment.get(EnvironmentValues.colorScheme)` |
+| `@Environment(\.horizontalSizeClass)` | `Environment.get(EnvironmentValues.horizontalSizeClass)` |
+| `VStack(alignment: .leading, spacing: 10)` | `VStack({ alignment: 'leading', spacing: 10 }, ...)` |
+| `.foregroundColor(.blue)` | `.foregroundColor(Color.blue)` |
+| `Chart { BarMark(...) }` | `Chart(data, item => BarMark({...}))` |
 
 ## Project Structure
 
 ```
 SwiftUI-For-Web/
 ├── src/
-│   ├── index.js              # Main entry (import SwiftUI from here)
-│   ├── Core/                 # View, ViewBuilder
+│   ├── index.js              # Main entry
+│   ├── Core/                 # View, ViewBuilder, Renderer
 │   ├── Data/                 # State, Binding, ObservableObject, Environment
 │   ├── View/                 # Text, Image, Controls, Navigation
 │   ├── Layout/               # VStack, HStack, Grid, ViewThatFits
 │   ├── Shape/                # Rectangle, Circle, Path
 │   ├── Graphic/              # Color, Font, Gradient
+│   ├── Charts/               # Chart, BarMark, LineMark, SectorMark
 │   ├── Animation/            # withAnimation, transitions
 │   ├── Gesture/              # Tap, Drag, Pinch gestures
 │   └── App/                  # App mounting, WindowGroup
-├── Examples/
-│   ├── HelloWorld/           # Basic example
-│   ├── Counter/              # State management
-│   ├── TodoApp/              # MVVM pattern
-│   ├── Netflix/              # Complex UI
-│   └── Airbnb/               # Full app with adaptive layout
-│       ├── index.html
-│       ├── main.js           # App entry
-│       ├── ViewModels/       # App state
-│       ├── Views/            # UI components
-│       ├── Services/         # API layer
-│       └── Components/       # Reusable UI
-└── CLAUDE.md                 # Development guide
+├── Examples/                 # 6 example apps
+│   ├── HelloWorld/
+│   ├── Counter/
+│   ├── TodoApp/
+│   ├── Netflix/
+│   ├── Airbnb/
+│   └── Charts/
+└── docs/                     # Tutorials page (GitHub Pages)
 ```
 
-## Recommended App Structure
+## Running Examples Locally
 
-```
-MyApp/
-├── index.html
-├── main.js                   # App entry point
-├── ViewModels/
-│   ├── AppViewModel.js       # Main app state
-│   └── SettingsViewModel.js
-├── Views/
-│   ├── Home/
-│   │   ├── HomeView.js
-│   │   └── index.js
-│   ├── Detail/
-│   │   ├── DetailView.js
-│   │   └── index.js
-│   └── Settings/
-│       └── SettingsView.js
-├── Components/               # Reusable UI
-│   ├── Card.js
-│   ├── Avatar.js
-│   └── LoadingSpinner.js
-└── Services/
-    └── api.js
+```bash
+git clone https://github.com/ShawnBaek/SwiftUI-For-Web.git
+cd SwiftUI-For-Web
+python3 -m http.server 8000
+
+# Open any example:
+#   http://localhost:8000/Examples/HelloWorld/
+#   http://localhost:8000/Examples/Counter/
+#   http://localhost:8000/Examples/TodoApp/
+#   http://localhost:8000/Examples/Netflix/
+#   http://localhost:8000/Examples/Airbnb/
+#   http://localhost:8000/Examples/Charts/
 ```
 
-## SwiftUI Mapping
+Or use npm:
 
-| SwiftUI (iOS) | SwiftUI-For-Web |
-|---------------|-----------------|
-| `@State var count = 0` | `@Published count = 0` |
-| `@Environment(\.colorScheme)` | `Environment.get(EnvironmentValues.colorScheme)` |
-| `@Environment(\.horizontalSizeClass)` | `Environment.get(EnvironmentValues.horizontalSizeClass)` |
-| `UIDevice.current.userInterfaceIdiom` | `currentDeviceIdiom()` returns `'phone'`, `'pad'`, `'mac'` |
+```bash
+npm install
+npm run serve
+```
 
 ## Browser Support
 
-- Chrome 61+
-- Firefox 60+
-- Safari 11+
-- Edge 79+
+Chrome 61+ / Firefox 60+ / Safari 11+ / Edge 79+
 
 ## Contributing
 
@@ -431,4 +362,4 @@ ISC License
 
 ---
 
-**Made with love for the SwiftUI and Web communities.**
+**[See the live tutorials and demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)**
