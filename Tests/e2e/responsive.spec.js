@@ -233,8 +233,13 @@ test.describe('Airbnb Responsive Grid', () => {
     // Resize to mobile
     await page.setViewportSize({ width: 375, height: 667 });
 
-    // Wait for debounced resize handler
-    await page.waitForTimeout(300);
+    // Manually trigger resize event since Playwright's setViewportSize may not fire it
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    // Wait for debounced resize handler (150ms) plus buffer
+    await page.waitForTimeout(500);
 
     // Check columns after resize
     const mobileColumns = await page.evaluate(() => {
