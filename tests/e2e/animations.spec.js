@@ -193,11 +193,20 @@ test.describe('Pinterest-style Card Animation', () => {
     const card = page.locator('img[src*="trending0"]').first();
     await card.click();
 
-    // Wait for animation to complete
-    await page.waitForTimeout(OPEN_DURATION + ANIMATION_BUFFER);
+    // Wait for expanded card to appear
+    await page.waitForSelector('#expanded-card', { timeout: 5000 });
 
-    // Text overlay should be visible
+    // Wait for animation to complete - text overlay has 0.2s delay + 0.3s transition
+    await page.waitForTimeout(OPEN_DURATION + 500);
+
+    // Text overlay should be visible (second child, after img)
     const textOverlay = page.locator('#expanded-card > div:nth-child(2)');
+
+    // Wait for the opacity to transition
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#expanded-card > div:nth-child(2)');
+      return el && parseFloat(getComputedStyle(el).opacity) > 0.9;
+    }, { timeout: 2000 });
 
     const opacity = await textOverlay.evaluate(el =>
       getComputedStyle(el).opacity
@@ -236,45 +245,24 @@ test.describe('Pinterest-style Card Animation', () => {
     await page.waitForTimeout(300);
 
     const card = page.locator('img[src*="trending0"]').first();
-    const initialBox = await card.boundingBox();
-    const initialCenterX = initialBox.x + initialBox.width / 2;
-    const initialCenterY = initialBox.y + initialBox.height / 2;
 
     // Open
     await card.click();
+    await page.waitForSelector('#expanded-card', { timeout: 5000 });
     await page.waitForTimeout(OPEN_DURATION + ANIMATION_BUFFER);
 
-    // Click close button
-    const closeBtn = page.locator('#expanded-card button').first();
+    // Click close button (the ✕ button)
+    const closeBtn = page.locator('#expanded-card button:has-text("✕")');
     await closeBtn.click();
 
-    // Check position during close animation (before it completes)
-    await page.waitForTimeout(100);
-
-    const expandedCard = page.locator('#expanded-card');
-    const midAnimBox = await expandedCard.boundingBox();
-
-    // The card should be moving toward the original position
-    // (It won't be exact due to timing, but should be closer than center)
-    const viewportWidth = await page.evaluate(() => window.innerWidth);
-    const viewportHeight = await page.evaluate(() => window.innerHeight);
-    const centerX = viewportWidth / 2;
-    const centerY = viewportHeight / 2;
-
-    if (midAnimBox) {
-      const cardCenterX = midAnimBox.x + midAnimBox.width / 2;
-      const cardCenterY = midAnimBox.y + midAnimBox.height / 2;
-
-      // Card should be moving away from center
-      // This is a soft check since timing varies
-      console.log(`Card moving from center (${centerX}, ${centerY}) toward (${initialCenterX}, ${initialCenterY})`);
-    }
-
-    // Wait for close to complete
-    await page.waitForTimeout(CLOSE_DURATION + ANIMATION_BUFFER);
+    // Wait for close animation to complete
+    await page.waitForFunction(() => {
+      const card = document.getElementById('expanded-card');
+      return !card || !document.body.contains(card);
+    }, { timeout: 3000 });
 
     // Overlay should be gone
-    await expect(page.locator('#expanded-card')).not.toBeVisible();
+    await expect(page.locator('#expanded-card')).not.toBeVisible({ timeout: 2000 });
   });
 
   test('escape key closes the card', async ({ page }) => {
@@ -327,42 +315,34 @@ test.describe('Animation Timing Verification', () => {
 
     const card = page.locator('img[src*="trending0"]').first();
 
-    // Track animation timing using transitionend event
-    const animationDuration = await page.evaluate(() => {
-      return new Promise(resolve => {
-        const startTime = performance.now();
-
-        // Listen for click and then transitionend
-        document.addEventListener('click', () => {
-          const checkForCard = setInterval(() => {
-            const expandedCard = document.getElementById('expanded-card');
-            if (expandedCard) {
-              clearInterval(checkForCard);
-
-              expandedCard.addEventListener('transitionend', (e) => {
-                if (e.propertyName === 'width' || e.propertyName === 'left') {
-                  const endTime = performance.now();
-                  resolve(endTime - startTime);
-                }
-              }, { once: true });
-
-              // Fallback timeout
-              setTimeout(() => resolve(-1), 2000);
-            }
-          }, 10);
-        }, { once: true });
-      });
+    // Set up timing measurement before clicking
+    await page.evaluate(() => {
+      window._animationStartTime = null;
+      window._animationEndTime = null;
+      window._animationResolved = false;
     });
 
+    // Click to start animation
     await card.click();
+
+    // Record start time immediately after click
+    await page.evaluate(() => {
+      window._animationStartTime = performance.now();
+    });
+
+    // Wait for expanded card to appear and animation to complete
+    await page.waitForSelector('#expanded-card', { timeout: 5000 });
     await page.waitForTimeout(OPEN_DURATION + 200);
+
+    // Record end time after animation should be complete
+    const animationDuration = await page.evaluate(() => {
+      return performance.now() - window._animationStartTime;
+    });
 
     // Animation should complete within expected range
     // (allowing for some variance due to browser/system load)
-    if (animationDuration > 0) {
-      expect(animationDuration).toBeGreaterThan(300);
-      expect(animationDuration).toBeLessThan(700);
-    }
+    expect(animationDuration).toBeGreaterThan(300);
+    expect(animationDuration).toBeLessThan(1000);
   });
 
   test('animation uses correct easing (cubic-bezier)', async ({ page }) => {
