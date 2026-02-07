@@ -348,7 +348,8 @@ class ReconcilerClass {
     }
 
     // Same type and key - check if content changed
-    if (this._viewChanged(oldNode, newNode)) {
+    const selfChanged = this._viewChanged(oldNode, newNode);
+    if (selfChanged) {
       patches.push({
         type: 'UPDATE',
         path,
@@ -365,9 +366,13 @@ class ReconcilerClass {
     // Carry over the DOM element reference
     newNode.element = oldNode.element;
 
-    // Diff children with keyed optimization
-    const childPatches = this._diffChildren(oldNode.children, newNode.children, path);
-    patches.push(...childPatches);
+    // Skip child diffing if this node will be fully re-rendered by UPDATE.
+    // The UPDATE patch re-renders the entire subtree, so child patches
+    // would operate on stale/orphaned elements and corrupt element refs.
+    if (!selfChanged) {
+      const childPatches = this._diffChildren(oldNode.children, newNode.children, path);
+      patches.push(...childPatches);
+    }
 
     return patches;
   }
