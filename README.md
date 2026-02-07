@@ -78,14 +78,35 @@ This project draws inspiration from [elementary](https://elementary.codes), whic
 
 **[Visit the tutorials page](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** to see all examples running live with code walkthroughs.
 
-| Example | Description |
-|---------|-------------|
-| [Hello World](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/HelloWorld/) | Text, VStack, Font, Color basics |
-| [Counter](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Counter/) | State management and reactive updates |
-| [Todo App](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/TodoApp/) | Full MVVM with ObservableObject, ForEach, TextField |
-| [Netflix Clone](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Netflix/) | ZStack, ScrollView, card animations, responsive grid |
-| [StayFinder (Airbnb)](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Airbnb/) | NavigationSplitView, adaptive layout, MVVM architecture |
-| [Swift Charts](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Charts/) | BarMark, LineMark, SectorMark data visualization |
+### Hello World
+Text, VStack, Font, Color basics — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/HelloWorld/)
+
+<img src="docs/images/helloworld.png" alt="Hello World" width="600">
+
+### Counter
+State management and reactive updates — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Counter/)
+
+<img src="docs/images/counter.png" alt="Counter" width="600">
+
+### Todo App
+Full MVVM with ObservableObject, ForEach, TextField — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/TodoApp/)
+
+<img src="docs/images/todoapp.png" alt="Todo App" width="600">
+
+### Netflix Clone
+ZStack, ScrollView, card animations, responsive grid — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Netflix/)
+
+<img src="docs/images/netflix.png" alt="Netflix Clone" width="600">
+
+### StayFinder (Airbnb)
+NavigationSplitView, adaptive layout, MVVM architecture — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Airbnb/)
+
+<img src="docs/images/airbnb.png" alt="StayFinder Airbnb Clone" width="600">
+
+### Swift Charts
+BarMark, LineMark, SectorMark data visualization — [View Demo](https://shawnbaek.github.io/SwiftUI-For-Web/Examples/Charts/)
+
+<img src="docs/images/charts.png" alt="Swift Charts" width="600">
 
 ---
 
