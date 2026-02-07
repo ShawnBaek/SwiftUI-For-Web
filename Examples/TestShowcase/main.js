@@ -681,9 +681,20 @@ function TestShowcase() {
 const app = App(TestShowcase);
 app.mount('#root');
 
-// Set up reactive updates
+// Set up reactive updates with debouncing to prevent excessive re-renders
+let refreshPending = false;
+function debouncedRefresh() {
+  if (refreshPending) return;
+  refreshPending = true;
+  requestAnimationFrame(() => {
+    refreshPending = false;
+    // Use forceRefresh to bypass reconciler for more reliable updates
+    app.forceRefresh();
+  });
+}
+
 vm.subscribe(() => {
-  app.refresh();
+  debouncedRefresh();
 });
 
 // Export for testing access

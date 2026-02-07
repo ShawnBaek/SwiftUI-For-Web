@@ -157,12 +157,34 @@ export class ListView extends View {
         el.appendChild(row);
       }
     } else {
-      // Children-based list
+      // Children-based list - v2 fix
       for (const child of this._children) {
+        // Render the child first
         const rendered = renderChild(child);
         if (rendered) {
-          const row = this._createListRow(rendered, null);
-          el.appendChild(row);
+          // Check if rendered element is a ForEach container (display:contents wrapper)
+          // ForEach renderer creates a div with display:contents containing the items
+          if (rendered.dataset && rendered.dataset.view === 'ForEach') {
+            // Extract children from ForEach and add each as a list row
+            for (const itemEl of Array.from(rendered.childNodes)) {
+              if (itemEl.nodeType === Node.ELEMENT_NODE) {
+                const row = this._createListRow(itemEl, null);
+                el.appendChild(row);
+              }
+            }
+          } else if (rendered.style && rendered.style.display === 'contents' && rendered.childNodes.length > 1) {
+            // Fallback: check for display:contents with multiple children
+            for (const itemEl of Array.from(rendered.childNodes)) {
+              if (itemEl.nodeType === Node.ELEMENT_NODE) {
+                const row = this._createListRow(itemEl, null);
+                el.appendChild(row);
+              }
+            }
+          } else {
+            // Regular child - wrap in a list row
+            const row = this._createListRow(rendered, null);
+            el.appendChild(row);
+          }
         }
       }
     }

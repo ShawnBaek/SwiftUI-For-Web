@@ -18,6 +18,18 @@ import {
 // Create reactive state
 const count = new State(0);
 
+// Debounced refresh to prevent excessive re-renders
+let app; // Will be initialized after mount
+let refreshPending = false;
+function debouncedRefresh() {
+  if (refreshPending || !app) return;
+  refreshPending = true;
+  requestAnimationFrame(() => {
+    refreshPending = false;
+    app.refresh();
+  });
+}
+
 // Define the content view
 const CounterView = () =>
   VStack({ spacing: 24 },
@@ -37,7 +49,7 @@ const CounterView = () =>
       // Decrement button
       Button('−', () => {
         count.value--;
-        app.refresh();
+        debouncedRefresh();
       })
         .font(Font.title)
         .padding({ horizontal: 24, vertical: 12 })
@@ -48,7 +60,7 @@ const CounterView = () =>
       // Reset button
       Button('Reset', () => {
         count.value = 0;
-        app.refresh();
+        debouncedRefresh();
       })
         .font(Font.body)
         .padding({ horizontal: 20, vertical: 12 })
@@ -59,7 +71,7 @@ const CounterView = () =>
       // Increment button
       Button('+', () => {
         count.value++;
-        app.refresh();
+        debouncedRefresh();
       })
         .font(Font.title)
         .padding({ horizontal: 24, vertical: 12 })
@@ -80,4 +92,4 @@ const CounterView = () =>
   .cornerRadius(20);
 
 // Mount the app
-const app = App(CounterView).mount('#root');
+app = App(CounterView).mount('#root');

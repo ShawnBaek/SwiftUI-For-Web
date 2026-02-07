@@ -252,9 +252,20 @@ viewModel.todos = [
 const app = TodoAppView(viewModel);
 app.mount('#root');
 
+// Debounced refresh to prevent excessive re-renders during typing
+let refreshPending = false;
+function debouncedRefresh() {
+  if (refreshPending) return;
+  refreshPending = true;
+  requestAnimationFrame(() => {
+    refreshPending = false;
+    app.refresh();
+  });
+}
+
 // Re-render when ViewModel changes
 viewModel.subscribe(() => {
-  app.refresh();
+  debouncedRefresh();
 });
 
 // Log for debugging
