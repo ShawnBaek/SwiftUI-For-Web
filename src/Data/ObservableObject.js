@@ -4,6 +4,11 @@
  * A base class for objects that publish changes to their properties.
  * Properties marked with @Published will notify subscribers when changed.
  *
+ * Performance optimizations:
+ * - Automatic batching via Scheduler (multiple property changes = 1 notification)
+ * - Per-property subscribers for fine-grained reactivity
+ * - Coalesced notifications prevent redundant re-renders
+ *
  * Usage:
  *   class TodoViewModel extends ObservableObject {
  *     constructor() {
@@ -15,6 +20,7 @@
  */
 
 import { Binding } from './Binding.js';
+import { scheduleWork, DefaultLane } from '../Core/Scheduler.js';
 
 /**
  * ObservableObject base class
@@ -26,6 +32,10 @@ export class ObservableObject {
     this._propertySubscribers = new Map();
     this._publishedProperties = new Map();
     this._bindings = new Map();
+    this._notificationScheduled = false;
+    this._boundNotify = null;
+    this._batchDepth = 0;
+    this._batchDirty = false;
   }
 
   /**
@@ -45,7 +55,7 @@ export class ObservableObject {
         if (oldValue !== newValue) {
           this._publishedProperties.set(name, newValue);
           this._notifyPropertyChange(name, newValue, oldValue);
-          this._notifyChange();
+          this._scheduleNotification();
         }
       },
       enumerable: true,
@@ -96,16 +106,41 @@ export class ObservableObject {
   }
 
   /**
+   * Schedule a notification via the Scheduler.
+   * Multiple property changes within the same microtask are coalesced.
+   * @private
+   */
+  _scheduleNotification() {
+    // If we're in a manual batch, just mark dirty
+    if (this._batchDepth > 0) {
+      this._batchDirty = true;
+      return;
+    }
+
+    if (this._notificationScheduled) return;
+    this._notificationScheduled = true;
+
+    if (!this._boundNotify) {
+      this._boundNotify = () => {
+        this._notificationScheduled = false;
+        this._notifyChange();
+      };
+    }
+
+    scheduleWork(this._boundNotify, DefaultLane);
+  }
+
+  /**
    * Notify all subscribers of a change
    */
   _notifyChange() {
-    this._subscribers.forEach(callback => {
+    for (const callback of this._subscribers) {
       try {
         callback(this);
       } catch (e) {
         console.error('ObservableObject subscriber error:', e);
       }
-    });
+    }
   }
 
   /**
@@ -117,34 +152,34 @@ export class ObservableObject {
   _notifyPropertyChange(propertyName, newValue, oldValue) {
     const subscribers = this._propertySubscribers.get(propertyName);
     if (subscribers) {
-      subscribers.forEach(callback => {
+      for (const callback of subscribers) {
         try {
           callback(newValue, oldValue);
         } catch (e) {
           console.error('ObservableObject property subscriber error:', e);
         }
-      });
+      }
     }
   }
 
   /**
-   * Batch multiple property updates into a single notification
+   * Batch multiple property updates into a single notification.
+   * This is an explicit batching API for cases where you want guaranteed
+   * single-notification behavior (the Scheduler also batches automatically).
+   *
    * @param {Function} updateFn - Function that performs updates
    */
   batch(updateFn) {
-    const originalNotify = this._notifyChange.bind(this);
-    let shouldNotify = false;
-
-    this._notifyChange = () => {
-      shouldNotify = true;
-    };
+    this._batchDepth++;
+    this._batchDirty = false;
 
     try {
       updateFn();
     } finally {
-      this._notifyChange = originalNotify;
-      if (shouldNotify) {
-        this._notifyChange();
+      this._batchDepth--;
+      if (this._batchDepth === 0 && this._batchDirty) {
+        this._batchDirty = false;
+        this._scheduleNotification();
       }
     }
   }

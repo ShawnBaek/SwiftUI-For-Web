@@ -80,6 +80,78 @@ export class Animation {
     return `all ${this._duration}s ${this._timingFunction} ${this._delay}s`;
   }
 
+  /**
+   * Convert to Web Animations API keyframe effect options.
+   * The Web Animations API provides better performance than CSS transitions
+   * because it runs on the compositor thread and avoids main thread jank.
+   *
+   * @returns {Object} KeyframeEffect options
+   */
+  toWAAPIOptions() {
+    return {
+      duration: this._duration * 1000,
+      easing: this._timingFunction,
+      delay: this._delay * 1000,
+      iterations: this._repeatCount === Infinity ? Infinity : this._repeatCount,
+      direction: this._autoreverses ? 'alternate' : 'normal',
+      fill: 'forwards',
+    };
+  }
+
+  /**
+   * Animate an element using the Web Animations API (WAAPI).
+   * Falls back to CSS transitions if WAAPI is not available.
+   *
+   * GPU-optimized: Only animates compositor-friendly properties
+   * (transform, opacity) when possible, avoiding layout/paint.
+   *
+   * @param {HTMLElement} element - Target element
+   * @param {Object} from - Starting keyframe styles
+   * @param {Object} to - Ending keyframe styles
+   * @returns {Animation|null} The WAAPI Animation object, or null
+   */
+  animate(element, from, to) {
+    if (!element) return null;
+
+    // Promote to GPU layer for transform/opacity animations
+    const hasTransform = 'transform' in to || 'transform' in from;
+    const hasOpacity = 'opacity' in to || 'opacity' in from;
+    if (hasTransform || hasOpacity) {
+      element.style.willChange = hasTransform && hasOpacity
+        ? 'transform, opacity'
+        : hasTransform ? 'transform' : 'opacity';
+    }
+
+    // Use Web Animations API if available (better performance)
+    if (element.animate && typeof element.animate === 'function') {
+      try {
+        const anim = element.animate([from, to], this.toWAAPIOptions());
+
+        // Clean up will-change after animation
+        anim.onfinish = () => {
+          element.style.willChange = '';
+          // Apply final styles
+          Object.assign(element.style, to);
+        };
+
+        return anim;
+      } catch (e) {
+        // Fall through to CSS fallback
+      }
+    }
+
+    // CSS transition fallback
+    Object.assign(element.style, from);
+    element.style.transition = this.toCSS();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        Object.assign(element.style, to);
+      });
+    });
+
+    return null;
+  }
+
   // ===========================================================================
   // Static Factory Methods - Match SwiftUI Animation presets exactly
   // ===========================================================================
@@ -670,6 +742,42 @@ export function prefersReducedMotion() {
 }
 
 // =============================================================================
+// GPU Layer Promotion Utilities
+// =============================================================================
+
+/**
+ * Promote an element to its own GPU compositing layer.
+ * This enables hardware-accelerated transforms and opacity changes
+ * that bypass the main thread layout/paint pipeline.
+ *
+ * @param {HTMLElement} element - Element to promote
+ */
+export function promoteToGPULayer(element) {
+  if (!element) return;
+  // Use translateZ(0) as a lightweight promotion hint
+  // This is more widely supported than will-change
+  if (!element.style.transform || element.style.transform === 'none') {
+    element.style.transform = 'translateZ(0)';
+  }
+  element.style.backfaceVisibility = 'hidden';
+}
+
+/**
+ * Remove GPU layer promotion from an element.
+ * Call this after animations complete to free GPU memory.
+ *
+ * @param {HTMLElement} element - Element to demote
+ */
+export function demoteFromGPULayer(element) {
+  if (!element) return;
+  element.style.willChange = '';
+  element.style.backfaceVisibility = '';
+  if (element.style.transform === 'translateZ(0)') {
+    element.style.transform = '';
+  }
+}
+
+// =============================================================================
 // CSS Styles for View Transitions
 // =============================================================================
 
@@ -796,5 +904,7 @@ export default {
   isViewTransitionSupported,
   prefersReducedMotion,
   getAnimationStyles,
-  injectAnimationStyles
+  injectAnimationStyles,
+  promoteToGPULayer,
+  demoteFromGPULayer
 };

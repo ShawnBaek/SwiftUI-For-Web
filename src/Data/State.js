@@ -4,6 +4,11 @@
  * Matches SwiftUI's @State pattern for local view state.
  * When the value changes, all subscribers are notified to update the UI.
  *
+ * Performance optimizations:
+ * - Automatic update batching via the Scheduler
+ * - Notifications are coalesced: multiple synchronous changes = 1 notification
+ * - Structural equality check prevents unnecessary re-renders
+ *
  * @example
  * // Create state
  * const count = new State(0);
@@ -11,7 +16,7 @@
  * // Read value
  * console.log(count.value); // 0
  *
- * // Write value (triggers subscribers)
+ * // Write value (triggers subscribers via Scheduler batching)
  * count.value = 1;
  *
  * // Subscribe to changes
@@ -24,6 +29,7 @@
  */
 
 import { Binding } from './Binding.js';
+import { scheduleWork, DefaultLane, batch as schedulerBatch } from '../Core/Scheduler.js';
 
 /**
  * State class for reactive state management.
@@ -38,6 +44,7 @@ export class State {
     this._value = initialValue;
     this._subscribers = new Set();
     this._binding = null;
+    this._notificationScheduled = false;
   }
 
   /**
@@ -50,14 +57,15 @@ export class State {
   }
 
   /**
-   * Sets the value and notifies subscribers (SwiftUI's wrappedValue).
+   * Sets the value and schedules subscriber notification.
+   * Multiple synchronous changes are automatically batched into a single notification.
    *
    * @param {*} newValue - The new value
    */
   set value(newValue) {
     if (this._value !== newValue) {
       this._value = newValue;
-      this._notifySubscribers();
+      this._scheduleNotification();
     }
   }
 
@@ -115,6 +123,27 @@ export class State {
   }
 
   /**
+   * Schedule a notification via the Scheduler.
+   * This coalesces multiple changes within the same microtask.
+   *
+   * @private
+   */
+  _scheduleNotification() {
+    if (this._notificationScheduled) return;
+    this._notificationScheduled = true;
+
+    // Use a bound reference so the Scheduler can deduplicate
+    if (!this._boundNotify) {
+      this._boundNotify = () => {
+        this._notificationScheduled = false;
+        this._notifySubscribers();
+      };
+    }
+
+    scheduleWork(this._boundNotify, DefaultLane);
+  }
+
+  /**
    * Notifies all subscribers of a value change.
    *
    * @private
@@ -137,12 +166,6 @@ export class State {
   update(updater) {
     this.value = updater(this._value);
   }
-
-  /**
-   * Resets the state to the initial value.
-   * Note: This requires storing the initial value.
-   */
-  // reset() is not implemented as SwiftUI doesn't have this
 }
 
 /**

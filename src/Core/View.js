@@ -24,6 +24,8 @@
  */
 
 import { ChangeTracker } from './ChangeTracker.js';
+import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } from './LifecycleObserver.js';
+import { delegateEvent } from './EventDelegate.js';
 
 /** @type {number} Global view counter for generating unique IDs */
 let _viewIdCounter = 0;
@@ -438,6 +440,7 @@ export class View {
 
   /**
    * Add a tap gesture handler.
+   * Uses event delegation (single root listener) instead of per-element addEventListener.
    *
    * @param {Function} handler - Function to call when tapped/clicked
    * @returns {View} Returns `this` for chaining
@@ -446,13 +449,14 @@ export class View {
     return this.modifier({
       apply(element) {
         element.style.cursor = 'pointer';
-        element.addEventListener('click', handler);
+        delegateEvent(element, 'click', handler);
       }
     });
   }
 
   /**
    * Add an onAppear lifecycle handler.
+   * Uses shared MutationObserver instead of per-element observer.
    *
    * @param {Function} handler - Function to call when view appears
    * @returns {View} Returns `this` for chaining
@@ -460,27 +464,14 @@ export class View {
   onAppear(handler) {
     return this.modifier({
       apply(element) {
-        // Use requestAnimationFrame to ensure element is in DOM
-        requestAnimationFrame(() => {
-          if (document.contains(element)) {
-            handler();
-          } else {
-            // Use MutationObserver to detect when added to DOM
-            const observer = new MutationObserver((mutations, obs) => {
-              if (document.contains(element)) {
-                handler();
-                obs.disconnect();
-              }
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-          }
-        });
+        lifecycleOnAppear(element, handler);
       }
     });
   }
 
   /**
    * Add an onDisappear lifecycle handler.
+   * Uses shared MutationObserver instead of per-element observer.
    *
    * @param {Function} handler - Function to call when view disappears
    * @returns {View} Returns `this` for chaining
@@ -488,13 +479,7 @@ export class View {
   onDisappear(handler) {
     return this.modifier({
       apply(element) {
-        const observer = new MutationObserver((mutations) => {
-          if (!document.contains(element)) {
-            handler();
-            observer.disconnect();
-          }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+        lifecycleOnDisappear(element, handler);
       }
     });
   }
