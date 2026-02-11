@@ -6,6 +6,7 @@
 import { describe, it, expect } from '../TestUtils.js';
 import { ObservableObject, Published, createObservable } from '../../src/Data/ObservableObject.js';
 import { Binding } from '../../src/Data/Binding.js';
+import { flushSync } from '../../src/Core/Scheduler.js';
 
 describe('ObservableObject', () => {
   describe('Constructor', () => {
@@ -58,6 +59,7 @@ describe('ObservableObject', () => {
       observable.subscribe(() => { notified = true; });
       observable.count = 1;
 
+      flushSync();
       expect(notified).toBe(true);
     });
 
@@ -69,6 +71,7 @@ describe('ObservableObject', () => {
       observable.subscribe((obj) => { received = obj; });
       observable.count = 1;
 
+      flushSync();
       expect(received).toBe(observable);
     });
 
@@ -80,6 +83,7 @@ describe('ObservableObject', () => {
       observable.subscribe(() => { notifications++; });
       observable.count = 5;
 
+      flushSync();
       expect(notifications).toBe(0);
     });
 
@@ -91,10 +95,12 @@ describe('ObservableObject', () => {
       const unsubscribe = observable.subscribe(() => { notifications++; });
 
       observable.count = 1;
+      flushSync();
       expect(notifications).toBe(1);
 
       unsubscribe();
       observable.count = 2;
+      flushSync();
       expect(notifications).toBe(1);
     });
   });
@@ -191,6 +197,7 @@ describe('ObservableObject', () => {
         observable.b = 2;
       });
 
+      flushSync();
       expect(notifications).toBe(1);
     });
 
@@ -286,11 +293,7 @@ describe('createObservable()', () => {
     observable.subscribe(() => { notified = true; });
     observable.count = 1;
 
+    flushSync();
     expect(notified).toBe(true);
   });
 });
-
-// Run tests if this file is loaded directly
-if (typeof window !== 'undefined') {
-  console.log('Running ObservableObject tests...');
-}
