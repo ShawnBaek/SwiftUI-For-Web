@@ -6,6 +6,7 @@
 import { describe, it, expect } from '../TestUtils.js';
 import { State, createState } from '../../src/Data/State.js';
 import { Binding } from '../../src/Data/Binding.js';
+import { flushSync } from '../../src/Core/Scheduler.js';
 
 describe('State', () => {
   describe('Constructor', () => {
@@ -65,6 +66,7 @@ describe('State', () => {
       state.subscribe((value) => { received = value; });
 
       state.value = 5;
+      flushSync(); // Flush scheduled notification
       expect(received).toBe(5);
     });
 
@@ -74,6 +76,7 @@ describe('State', () => {
       state.subscribe(() => { callCount++; });
 
       state.value = 10; // Same value
+      flushSync();
       expect(callCount).toBe(0);
     });
 
@@ -86,6 +89,7 @@ describe('State', () => {
       state.subscribe(() => { count2++; });
 
       state.value = 1;
+      flushSync();
       expect(count1).toBe(1);
       expect(count2).toBe(1);
     });
@@ -96,10 +100,12 @@ describe('State', () => {
       const unsubscribe = state.subscribe(() => { callCount++; });
 
       state.value = 1;
+      flushSync();
       expect(callCount).toBe(1);
 
       unsubscribe();
       state.value = 2;
+      flushSync();
       expect(callCount).toBe(1); // Should not increment
     });
   });
@@ -134,6 +140,7 @@ describe('State', () => {
       state.subscribe((value) => { received = value; });
 
       state.binding.value = 25;
+      flushSync();
       expect(received).toBe(25);
     });
   });
@@ -158,6 +165,7 @@ describe('State', () => {
       state.subscribe((value) => { received = value; });
 
       state.update((current) => current + 1);
+      flushSync();
       expect(received).toBe(6);
     });
   });
@@ -332,11 +340,7 @@ describe('State and Binding Integration', () => {
     const binding = state.binding.property('value');
     binding.value = 10;
 
+    flushSync();
     expect(notified).toBe(true);
   });
 });
-
-// Run tests if this file is loaded directly
-if (typeof window !== 'undefined') {
-  console.log('Running State and Binding tests...');
-}

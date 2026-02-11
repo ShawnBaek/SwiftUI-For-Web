@@ -130,50 +130,97 @@ export function setKey(descriptor, key) {
 }
 
 /**
- * Compute a hash for a descriptor for fast comparison
+ * FNV-1a 32-bit hash - fast numeric hashing for change detection.
+ * This replaces the previous string concatenation approach, reducing
+ * GC pressure and improving comparison speed (number === vs string ===).
+ *
+ * FNV-1a is chosen for its excellent distribution and speed on short inputs.
+ *
+ * @param {string} str - Input string
+ * @returns {number} 32-bit hash value
+ */
+function fnv1a(str) {
+  let hash = 0x811c9dc5; // FNV offset basis
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = (hash * 0x01000193) | 0; // FNV prime, keep as 32-bit int
+  }
+  return hash >>> 0; // Convert to unsigned
+}
+
+/**
+ * Mix a value into an existing hash.
+ * @param {number} hash - Current hash
+ * @param {number} value - Value to mix in
+ * @returns {number} Updated hash
+ */
+function hashMix(hash, value) {
+  hash ^= value;
+  hash = (hash * 0x01000193) | 0;
+  return hash >>> 0;
+}
+
+/**
+ * Compute a numeric hash for a descriptor for fast comparison.
+ * Uses FNV-1a with incremental mixing to avoid string allocations.
  *
  * @param {Object} descriptor - View descriptor
- * @returns {string} Hash string
+ * @returns {number} Numeric hash
  */
 function computeHash(descriptor) {
-  const parts = [
-    descriptor.type,
-    descriptor.key ?? '',
-    Object.keys(descriptor.props).sort().join(','),
-    descriptor.children.length,
-    descriptor.modifiers.length
-  ];
+  let hash = fnv1a(descriptor.type);
 
-  // Include prop values in hash for change detection
-  for (const key of Object.keys(descriptor.props).sort()) {
+  if (descriptor.key != null) {
+    hash = hashMix(hash, fnv1a(String(descriptor.key)));
+  }
+
+  hash = hashMix(hash, descriptor.children.length);
+  hash = hashMix(hash, descriptor.modifiers.length);
+
+  // Hash prop values (skip functions - they change identity each render)
+  const propKeys = Object.keys(descriptor.props);
+  for (let i = 0; i < propKeys.length; i++) {
+    const key = propKeys[i];
     const v = descriptor.props[key];
-    if (typeof v === 'function') {
-      // Functions change identity each render; skip to avoid false positives
-      continue;
+    if (typeof v === 'function') continue;
+
+    hash = hashMix(hash, fnv1a(key));
+    if (typeof v === 'string') {
+      hash = hashMix(hash, fnv1a(v));
+    } else if (typeof v === 'number') {
+      hash = hashMix(hash, v | 0);
+    } else if (typeof v === 'boolean') {
+      hash = hashMix(hash, v ? 1 : 0);
+    } else if (v != null) {
+      hash = hashMix(hash, fnv1a(String(v)));
     }
-    parts.push(`${key}=${v}`);
   }
 
-  // Include modifier types and simple values in hash
-  for (const mod of descriptor.modifiers) {
+  // Hash modifier types and simple values
+  for (let i = 0; i < descriptor.modifiers.length; i++) {
+    const mod = descriptor.modifiers[i];
+    hash = hashMix(hash, fnv1a(mod.type));
     const mv = mod.value;
-    if (typeof mv === 'string' || typeof mv === 'number' || typeof mv === 'boolean') {
-      parts.push(`m:${mod.type}=${mv}`);
+    if (typeof mv === 'string') {
+      hash = hashMix(hash, fnv1a(mv));
+    } else if (typeof mv === 'number') {
+      hash = hashMix(hash, mv | 0);
+    } else if (typeof mv === 'boolean') {
+      hash = hashMix(hash, mv ? 1 : 0);
     } else if (mv && typeof mv === 'object' && typeof mv.rgba === 'function') {
-      parts.push(`m:${mod.type}=${mv.rgba()}`);
-    } else {
-      parts.push(`m:${mod.type}`);
+      hash = hashMix(hash, fnv1a(mv.rgba()));
     }
   }
 
-  // Include child hashes for content-sensitive diffing
-  for (const child of descriptor.children) {
-    if (child && child._hash) {
-      parts.push(`c:${child._hash}`);
+  // Mix in child hashes for content-sensitive diffing
+  for (let i = 0; i < descriptor.children.length; i++) {
+    const child = descriptor.children[i];
+    if (child && child._hash != null) {
+      hash = hashMix(hash, child._hash);
     }
   }
 
-  return parts.join('|');
+  return hash;
 }
 
 /**

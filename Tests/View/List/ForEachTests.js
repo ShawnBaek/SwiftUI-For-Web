@@ -1,24 +1,24 @@
 /**
  * ForEach Tests
- * Tests for the ForEach list iteration component
+ * Tests for the ForEach list iteration component (descriptor-based API)
  */
 
 import { describe, it, expect } from '../../TestUtils.js';
-import { ForEach, ForEachView, Range } from '../../../src/View/List/ForEach.js';
-import { View } from '../../../src/Core/View.js';
+import { ForEach, Range } from '../../../src/View/List/ForEach.js';
 import { Text } from '../../../src/View/Text.js';
 import { VStack } from '../../../src/Layout/Stack/VStack.js';
+import { render } from '../../../src/Core/Renderer.js';
 
 describe('ForEach', () => {
   describe('Factory Function', () => {
-    it('should create a ForEachView instance', () => {
+    it('should create a descriptor with type ForEach', () => {
       const forEach = ForEach(['a', 'b'], item => Text(item));
-      expect(forEach).toBeInstanceOf(ForEachView);
+      expect(forEach.type).toBe('ForEach');
     });
 
-    it('should create a View instance', () => {
+    it('should be a frozen object', () => {
       const forEach = ForEach(['a', 'b'], item => Text(item));
-      expect(forEach).toBeInstanceOf(View);
+      expect(Object.isFrozen(forEach)).toBeTruthy();
     });
   });
 
@@ -46,14 +46,10 @@ describe('ForEach', () => {
 
     it('should pass index as second parameter', () => {
       const items = ['a', 'b', 'c'];
-      const indices = [];
-      ForEach(items, (item, index) => {
-        indices.push(index);
-        return Text(item);
-      });
-      // Access children to trigger iteration
       const forEach = ForEach(items, (item, index) => Text(`${index}: ${item}`));
       expect(forEach.children).toHaveLength(3);
+      expect(forEach.children[0].props.content).toBe('0: a');
+      expect(forEach.children[1].props.content).toBe('1: b');
     });
 
     it('should handle empty array', () => {
@@ -79,16 +75,16 @@ describe('ForEach', () => {
       ];
       const forEach = ForEach(items, { id: 'id' }, item => Text(item.name));
       const children = forEach.children;
-      expect(children[0]._forEachKey).toBe('a');
-      expect(children[1]._forEachKey).toBe('b');
+      expect(children[0].key).toBe('a');
+      expect(children[1].key).toBe('b');
     });
 
     it('should use index as fallback when no id specified', () => {
       const items = ['Apple', 'Banana'];
       const forEach = ForEach(items, item => Text(item));
       const children = forEach.children;
-      expect(children[0]._forEachKey).toBe('0');
-      expect(children[1]._forEachKey).toBe('1');
+      expect(children[0].key).toBe(0);
+      expect(children[1].key).toBe(1);
     });
 
     it('should support function as id', () => {
@@ -98,8 +94,8 @@ describe('ForEach', () => {
       ];
       const forEach = ForEach(items, { id: item => item.uuid }, item => Text(item.name));
       const children = forEach.children;
-      expect(children[0]._forEachKey).toBe('uuid-1');
-      expect(children[1]._forEachKey).toBe('uuid-2');
+      expect(children[0].key).toBe('uuid-1');
+      expect(children[1].key).toBe('uuid-2');
     });
   });
 
@@ -122,32 +118,23 @@ describe('ForEach', () => {
     });
   });
 
-  describe('_render()', () => {
-    it('should render container div with data-view', () => {
+  describe('render()', () => {
+    it('should render container div', () => {
       const forEach = ForEach(['a', 'b'], item => Text(item));
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.tagName).toBe('DIV');
-      expect(element.dataset.view).toBe('ForEach');
     });
 
     it('should use display: contents', () => {
       const forEach = ForEach(['a', 'b'], item => Text(item));
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.style.display).toBe('contents');
     });
 
     it('should render child elements', () => {
       const forEach = ForEach(['a', 'b', 'c'], item => Text(item));
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.children.length).toBe(3);
-    });
-
-    it('should set data-for-each-key on children', () => {
-      const items = [{ id: 'x' }, { id: 'y' }];
-      const forEach = ForEach(items, { id: 'id' }, item => Text(item.id));
-      const element = forEach._render();
-      expect(element.children[0].dataset.forEachKey).toBe('x');
-      expect(element.children[1].dataset.forEachKey).toBe('y');
     });
   });
 
@@ -159,7 +146,7 @@ describe('ForEach', () => {
         ForEach(items, item => Text(item)),
         Text('Footer')
       );
-      const element = stack._render();
+      const element = render(stack);
       // VStack should have 3 children: Header, ForEach container, Footer
       expect(element.children.length).toBe(3);
     });
@@ -172,28 +159,24 @@ describe('ForEach', () => {
           Text(`ID: ${item.id}`)
         )
       );
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.children.length).toBe(2);
-      expect(element.children[0].dataset.view).toBe('VStack');
+      // Children are VStacks (flex column divs)
+      expect(element.children[0].style.flexDirection).toBe('column');
     });
   });
 
   describe('Modifier Support', () => {
     it('should support padding modifier', () => {
       const forEach = ForEach(['a'], item => Text(item)).padding(10);
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.style.padding).toBe('10px');
     });
 
     it('should support background modifier', () => {
       const forEach = ForEach(['a'], item => Text(item)).background('red');
-      const element = forEach._render();
+      const element = render(forEach);
       expect(element.style.backgroundColor).toBe('red');
     });
   });
 });
-
-// Run tests if this file is loaded directly
-if (typeof window !== 'undefined') {
-  console.log('Running ForEach tests...');
-}

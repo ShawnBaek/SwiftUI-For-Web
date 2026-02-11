@@ -13,6 +13,29 @@ const testResults = {
 
 let currentSuite = null;
 
+// Stack of beforeEach/afterEach hooks for nested describe blocks
+const hookStack = [];
+
+/**
+ * Register a function to run before each test in the current describe block
+ * @param {Function} fn - Setup function
+ */
+export function beforeEach(fn) {
+  if (hookStack.length > 0) {
+    hookStack[hookStack.length - 1].beforeEach.push(fn);
+  }
+}
+
+/**
+ * Register a function to run after each test in the current describe block
+ * @param {Function} fn - Teardown function
+ */
+export function afterEach(fn) {
+  if (hookStack.length > 0) {
+    hookStack[hookStack.length - 1].afterEach.push(fn);
+  }
+}
+
 /**
  * Describe a test suite
  * @param {string} name - Suite name
@@ -26,7 +49,9 @@ export function describe(name, fn) {
     failed: 0
   };
 
+  const previousSuite = currentSuite;
   currentSuite = suite;
+  hookStack.push({ beforeEach: [], afterEach: [] });
   console.group(`%c${name}`, 'font-weight: bold; color: #007AFF;');
 
   try {
@@ -36,8 +61,22 @@ export function describe(name, fn) {
   }
 
   console.groupEnd();
+  hookStack.pop();
   testResults.suites.push(suite);
-  currentSuite = null;
+  currentSuite = previousSuite;
+}
+
+/**
+ * Collect all beforeEach/afterEach hooks from the entire hook stack (outer to inner)
+ */
+function collectHooks(type) {
+  const hooks = [];
+  for (const frame of hookStack) {
+    for (const fn of frame[type]) {
+      hooks.push(fn);
+    }
+  }
+  return hooks;
 }
 
 /**
@@ -49,7 +88,18 @@ export function it(name, fn) {
   testResults.total++;
 
   try {
+    // Run all beforeEach hooks (outer to inner)
+    for (const hook of collectHooks('beforeEach')) {
+      hook();
+    }
+
     fn();
+
+    // Run all afterEach hooks (outer to inner)
+    for (const hook of collectHooks('afterEach')) {
+      hook();
+    }
+
     testResults.passed++;
     if (currentSuite) {
       currentSuite.passed++;

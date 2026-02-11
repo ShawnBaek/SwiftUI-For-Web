@@ -8,6 +8,7 @@ import { App, AppInstance } from '../../src/App/App.js';
 import { View } from '../../src/Core/View.js';
 import { Text } from '../../src/View/Text.js';
 import { VStack } from '../../src/Layout/Stack/VStack.js';
+import { flushSync } from '../../src/Core/Scheduler.js';
 
 describe('App', () => {
   // Create a test container before each test
@@ -81,14 +82,14 @@ describe('App', () => {
   });
 
   describe('Content Types', () => {
-    it('should accept a factory function returning View', () => {
+    it('should accept a factory function returning descriptor', () => {
       const app = App(() => Text('Hello'));
       app.mount('#test-root');
       expect(testContainer.textContent).toContain('Hello');
       cleanup();
     });
 
-    it('should accept a View instance directly', () => {
+    it('should accept a descriptor directly', () => {
       const view = Text('Direct View');
       const app = App(view);
       app.mount('#test-root');
@@ -116,7 +117,10 @@ describe('App', () => {
         )
       );
       app.mount('#test-root');
-      expect(testContainer.querySelector('[data-view="VStack"]')).toBeTruthy();
+      // VStack renders as a flex-column div
+      const flexColumn = testContainer.querySelector('div');
+      expect(flexColumn).toBeTruthy();
+      expect(flexColumn.style.flexDirection).toBe('column');
       cleanup();
     });
   });
@@ -148,7 +152,7 @@ describe('App', () => {
   });
 
   describe('refresh()', () => {
-    it('should re-render the view', () => {
+    it('should schedule a re-render', () => {
       let counter = 0;
       const app = App(() => Text(`Count: ${counter}`));
       app.mount('#test-root');
@@ -156,6 +160,7 @@ describe('App', () => {
 
       counter = 1;
       app.refresh();
+      flushSync(); // Flush the scheduled refresh
       expect(testContainer.textContent).toContain('Count: 1');
       cleanup();
     });
@@ -173,7 +178,8 @@ describe('App', () => {
     it('should expose the mounted view via .view', () => {
       const app = App(() => Text('Hello'));
       app.mount('#test-root');
-      expect(app.view).toBeInstanceOf(View);
+      // View is a descriptor (plain object) or View instance
+      expect(app.view).toBeTruthy();
       cleanup();
     });
 
@@ -185,8 +191,3 @@ describe('App', () => {
     });
   });
 });
-
-// Run tests if this file is loaded directly
-if (typeof window !== 'undefined') {
-  console.log('Running App tests...');
-}

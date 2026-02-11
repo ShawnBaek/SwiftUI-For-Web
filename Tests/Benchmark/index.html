@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Benchmark: SwiftUI-For-Web vs React 19</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      background: #fafafa;
+      color: #1d1d1f;
+      padding: 40px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 15px;
+      margin-bottom: 24px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    button.run-btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button.run-btn:hover { opacity: 0.85; }
+    button.run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #007AFF; color: white; }
+    .btn-secondary { background: #e8e8e8; color: #333; }
+    .status {
+      padding: 12px 16px;
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      margin-bottom: 16px;
+      font-size: 14px;
+      display: none;
+    }
+    .status.active { display: block; }
+    #results { margin-top: 16px; }
+    /* Benchmark rendering containers — hidden but must exist */
+    #bench-swiftui, #bench-react {
+      position: absolute;
+      left: -9999px;
+      width: 800px;
+      height: 600px;
+      overflow: hidden;
+    }
+    .methodology {
+      margin-top: 32px;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #555;
+    }
+    .methodology h3 { color: #333; margin-bottom: 8px; }
+    .methodology ul { margin-left: 20px; }
+  </style>
+</head>
+<body>
+  <h1>SwiftUI-For-Web vs React 19</h1>
+  <p class="subtitle">Performance benchmark — rendering, re-rendering, and DOM throughput</p>
+
+  <div class="controls">
+    <button class="run-btn btn-primary" id="run-all" onclick="runAll()">Run Full Benchmark</button>
+    <button class="run-btn btn-secondary" id="run-swiftui" onclick="runSW()">SwiftUI-For-Web Only</button>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div id="results"></div>
+
+  <!-- Off-screen containers for benchmark rendering -->
+  <div id="bench-swiftui"></div>
+  <div id="bench-react"></div>
+
+  <div class="methodology">
+    <h3>Methodology</h3>
+    <ul>
+      <li>Both frameworks render identical DOM structures (div + span rows) for fair comparison.</li>
+      <li>React 19 is loaded from the production UMD build via unpkg CDN.</li>
+      <li>SwiftUI-For-Web uses the local source directly (no bundling, as designed).</li>
+      <li>Each benchmark runs multiple iterations; the <strong>median</strong> time is reported.</li>
+      <li>React uses <code>flushSync()</code> to force synchronous rendering (no concurrent batching).</li>
+      <li>Rendering happens in off-screen containers to measure pure framework overhead, not paint cost.</li>
+      <li>Results vary by browser, hardware, and CPU load — run multiple times for stable numbers.</li>
+    </ul>
+  </div>
+
+  <script type="module">
+    import { runAllBenchmarks, runSwiftUIBenchmarks, renderBenchmarkResults } from './benchmark.js';
+
+    const status = document.getElementById('status');
+    const resultsContainer = document.getElementById('results');
+
+    function showStatus(msg) {
+      status.textContent = msg;
+      status.classList.add('active');
+    }
+
+    function hideStatus() {
+      status.classList.remove('active');
+    }
+
+    function disableButtons(disabled) {
+      document.getElementById('run-all').disabled = disabled;
+      document.getElementById('run-swiftui').disabled = disabled;
+    }
+
+    window.runAll = async function() {
+      disableButtons(true);
+      showStatus('Running SwiftUI-For-Web benchmarks...');
+
+      try {
+        const sw = document.getElementById('bench-swiftui');
+        const re = document.getElementById('bench-react');
+
+        showStatus('Running SwiftUI-For-Web benchmarks...');
+        await new Promise(r => setTimeout(r, 100));
+
+        const results = await runAllBenchmarks(sw, re);
+
+        hideStatus();
+        renderBenchmarkResults(results, resultsContainer);
+      } catch (e) {
+        showStatus(`Error: ${e.message}`);
+        console.error(e);
+      }
+
+      disableButtons(false);
+    };
+
+    window.runSW = async function() {
+      disableButtons(true);
+      showStatus('Running SwiftUI-For-Web benchmarks...');
+
+      try {
+        const sw = document.getElementById('bench-swiftui');
+        await new Promise(r => setTimeout(r, 100));
+
+        const swResults = await runSwiftUIBenchmarks(sw);
+
+        hideStatus();
+        let html = '<h3>SwiftUI-For-Web Results</h3><table style="border-collapse:collapse;font-family:system-ui;font-size:14px;width:100%">';
+        html += '<tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Benchmark</th><th style="padding:8px">Median</th><th style="padding:8px">Min</th><th style="padding:8px">Max</th></tr>';
+        for (const r of swResults) {
+          html += `<tr><td style="padding:8px;border-bottom:1px solid #eee">${r.name}</td>`;
+          html += `<td style="padding:8px;text-align:center;border-bottom:1px solid #eee;font-weight:600">${r.median.toFixed(2)}ms</td>`;
+          html += `<td style="padding:8px;text-align:center;border-bottom:1px solid #eee;color:#888">${r.min.toFixed(2)}ms</td>`;
+          html += `<td style="padding:8px;text-align:center;border-bottom:1px solid #eee;color:#888">${r.max.toFixed(2)}ms</td></tr>`;
+        }
+        html += '</table>';
+        resultsContainer.innerHTML = html;
+      } catch (e) {
+        showStatus(`Error: ${e.message}`);
+        console.error(e);
+      }
+
+      disableButtons(false);
+    };
+  </script>
+</body>
+</html>

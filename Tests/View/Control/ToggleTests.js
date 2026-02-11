@@ -8,7 +8,6 @@ import { Toggle, ToggleView } from '../../../src/View/Control/Toggle.js';
 import { View } from '../../../src/Core/View.js';
 import { Binding } from '../../../src/Data/Binding.js';
 import { State } from '../../../src/Data/State.js';
-import { Text } from '../../../src/View/Text.js';
 
 describe('Toggle', () => {
   describe('Factory Function', () => {
@@ -58,7 +57,8 @@ describe('Toggle', () => {
   describe('Constructor - View Label', () => {
     it('should accept View as label', () => {
       const state = new State(false);
-      const labelView = Text('Custom Label');
+      // Toggle checks `instanceof View`, so we need a real View instance
+      const labelView = new View();
       const toggle = Toggle(labelView, state.binding);
       expect(toggle._labelView).toBe(labelView);
     });

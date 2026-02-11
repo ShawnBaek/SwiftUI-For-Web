@@ -150,8 +150,48 @@ import {
   currentAnimation,
   extendViewWithAnimation,
   isViewTransitionSupported,
-  prefersReducedMotion
+  prefersReducedMotion,
+  promoteToGPULayer,
+  demoteFromGPULayer
 } from './Animation/Animation.js';
+
+// =============================================================================
+// Performance Infrastructure
+// =============================================================================
+import {
+  scheduleWork,
+  schedulePostFlush,
+  batchUpdates,
+  endBatch,
+  batch,
+  flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats,
+  resetSchedulerStats,
+  SyncLane,
+  DiscreteLane,
+  DefaultLane,
+  TransitionLane,
+  IdleLane
+} from './Core/Scheduler.js';
+import {
+  acquireElement,
+  releaseElement,
+  releaseTree,
+  getPoolStats,
+  clearPools
+} from './Core/ElementPool.js';
+import {
+  delegateEvent,
+  undelegateEvent,
+  initDelegation,
+  teardownDelegation
+} from './Core/EventDelegate.js';
+import {
+  onAppear as lifecycleOnAppear,
+  onDisappear as lifecycleOnDisappear,
+  getLifecycleStats
+} from './Core/LifecycleObserver.js';
 
 // =============================================================================
 // Charts (Swift Charts for Web)
@@ -340,7 +380,18 @@ const SwiftUI = {
   PlottableValue, value,
   Mark,
   MarkDimension,
-  Charts
+  Charts,
+
+  // Performance Infrastructure
+  scheduleWork, schedulePostFlush,
+  batchUpdates, endBatch, batch, flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats, resetSchedulerStats,
+  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
+  acquireElement, releaseElement, releaseTree,
+  getPoolStats, clearPools,
+  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
+  promoteToGPULayer, demoteFromGPULayer
 };
 
 // Default export
@@ -476,5 +527,16 @@ export {
   PlottableValue, value,
   Mark,
   MarkDimension,
-  Charts
+  Charts,
+
+  // Performance Infrastructure
+  scheduleWork, schedulePostFlush,
+  batchUpdates, endBatch, batch, flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats, resetSchedulerStats,
+  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
+  acquireElement, releaseElement, releaseTree,
+  getPoolStats, clearPools,
+  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
+  promoteToGPULayer, demoteFromGPULayer
 };
