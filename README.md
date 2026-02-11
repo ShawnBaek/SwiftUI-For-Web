@@ -348,7 +348,9 @@ python3 -m http.server 8000
 # Open http://localhost:8000/Tests/Benchmark/
 ```
 
-The benchmark suite ([`Tests/Benchmark/`](Tests/Benchmark/)) tests 8 scenarios from the [js-framework-benchmark](https://github.com/nicknisi/js-framework-benchmark) methodology:
+The benchmark suite ([`Tests/Benchmark/`](Tests/Benchmark/)) tests 12 scenarios covering both flat-list and complex-tree workloads, inspired by the [js-framework-benchmark](https://github.com/nicknisi/js-framework-benchmark) methodology:
+
+**Flat List Benchmarks**
 
 | Benchmark | Description |
 |---|---|
@@ -359,9 +361,18 @@ The benchmark suite ([`Tests/Benchmark/`](Tests/Benchmark/)) tests 8 scenarios f
 | Remove one row | Single deletion |
 | Swap two rows | Key-based reorder |
 | Clear 1,000 rows | Empty a full list |
-| Create+destroy 10K elements | Raw DOM throughput / GC pressure |
 
-Both frameworks render identical DOM structures (flex-row divs with spans). React 19 is loaded from the production UMD build and uses `flushSync()` for synchronous comparison.
+**Complex View Tree Benchmarks**
+
+| Benchmark | Description |
+|---|---|
+| Deep tree mount (500+ nodes) | Mount a 5-level nested dashboard (Sections → Tabs → Cards → Items) |
+| Leaf update (1 node in 500) | Change a single counter in the header — tests subtree skipping |
+| Update 1 of 4 subtrees | Replace one section entirely while 3 remain unchanged |
+| Scattered updates (4 leaves) | Change 1 item per section — tests reconciler efficiency across the tree |
+| Rapid-fire 100 re-renders | 100 sequential state updates — stress-tests batching and scheduling |
+
+Both frameworks render identical DOM structures. React 19 is loaded from the production UMD build, uses `flushSync()` for synchronous comparison, and wraps all leaf components in `React.memo()` for fair partial-update benchmarks.
 
 ### Performance API
 
