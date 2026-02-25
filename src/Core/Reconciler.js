@@ -36,6 +36,83 @@ import { flushLifecycleCallbacks } from './LifecycleObserver.js';
 // Reusable arrays to avoid allocations during diffing
 const _patchBuffer = [];
 
+// Container types that can have modifiers updated in-place
+const _containerTypeSet = new Set([
+  'VStack', 'HStack', 'ZStack', 'Group', 'ScrollView', 'ForEach'
+]);
+
+/**
+ * Reapply base container styles (flexbox etc.) without re-rendering children.
+ */
+function _reapplyContainerStyles(element, descriptor) {
+  const props = descriptor.props;
+  switch (descriptor.type) {
+    case 'VStack':
+      element.style.display = 'flex';
+      element.style.flexDirection = 'column';
+      element.style.gap = `${props.spacing ?? 8}px`;
+      break;
+    case 'HStack':
+      element.style.display = 'flex';
+      element.style.flexDirection = 'row';
+      element.style.gap = `${props.spacing ?? 8}px`;
+      break;
+    case 'ZStack':
+      element.style.display = 'grid';
+      element.style.gridTemplate = '1fr / 1fr';
+      break;
+    case 'ScrollView':
+      element.style.overflow = 'auto';
+      break;
+    case 'ForEach':
+      element.style.display = 'contents';
+      break;
+  }
+}
+
+/**
+ * Apply modifier descriptors in-place to an existing element.
+ */
+function _applyModifiersInPlace(element, modifiers) {
+  // Import dynamically would create circular dep, use Renderer's applyModifiers
+  // Instead inline the common cases
+  for (let i = 0; i < modifiers.length; i++) {
+    const { type, value } = modifiers[i];
+    switch (type) {
+      case 'padding':
+        if (typeof value === 'number') {
+          element.style.padding = `${value}px`;
+        } else if (typeof value === 'object') {
+          if (value.horizontal !== undefined) {
+            element.style.paddingLeft = `${value.horizontal}px`;
+            element.style.paddingRight = `${value.horizontal}px`;
+          }
+          if (value.vertical !== undefined) {
+            element.style.paddingTop = `${value.vertical}px`;
+            element.style.paddingBottom = `${value.vertical}px`;
+          }
+        }
+        break;
+      case 'frame':
+        if (value.width !== undefined) element.style.width = typeof value.width === 'number' ? `${value.width}px` : value.width;
+        if (value.height !== undefined) element.style.height = typeof value.height === 'number' ? `${value.height}px` : value.height;
+        break;
+      case 'foregroundColor':
+        element.style.color = value && typeof value.rgba === 'function' ? value.rgba() : value;
+        break;
+      case 'background':
+        element.style.backgroundColor = value && typeof value.rgba === 'function' ? value.rgba() : value;
+        break;
+      case 'opacity':
+        element.style.opacity = String(value);
+        break;
+      case 'cornerRadius':
+        element.style.borderRadius = `${value}px`;
+        break;
+    }
+  }
+}
+
 /**
  * View node in the virtual tree
  */
@@ -293,7 +370,15 @@ class ReconcilerClass {
   }
 
   /**
-   * Update a mounted view tree with optimized diffing
+   * Update a mounted view tree.
+   *
+   * Uses direct reconciliation for descriptor-based views:
+   * walks old VNode tree and new descriptors simultaneously,
+   * skipping unchanged subtrees WITHOUT building new VNodes.
+   * This eliminates the "virtual DOM" overhead for unchanged parts.
+   *
+   * Falls back to build-then-diff for legacy View instances.
+   *
    * @param {View|Object} newView - New root view or descriptor
    * @param {HTMLElement} container - Target container
    * @returns {VNode} The updated tree
@@ -307,10 +392,18 @@ class ReconcilerClass {
       return this.mount(newView, container);
     }
 
-    // Build new virtual tree
+    // Fast path: direct reconciliation for descriptor-based views
+    // This avoids building a full VNode tree — we walk the old tree
+    // and new descriptors simultaneously, patching the DOM inline.
+    if (isDescriptor(newView) && oldTree.isDescriptor) {
+      this._directReconcile(oldTree, newView, container);
+      flushLifecycleCallbacks();
+      return oldTree; // oldTree is mutated in-place
+    }
+
+    // Fallback: build-then-diff for legacy views
     const newTree = this.buildTree(newView);
 
-    // Diff and collect patches into the reusable buffer
     _patchBuffer.length = 0;
     this._diff(oldTree, newTree, '', _patchBuffer);
 
@@ -318,16 +411,193 @@ class ReconcilerClass {
       console.log('[Reconciler] Patches count:', _patchBuffer.length);
     }
 
-    // Apply patches
-    this._applyPatches(container, oldTree, newTree, _patchBuffer);
+    if (_patchBuffer.length > 0) {
+      this._applyPatches(container, oldTree, newTree, _patchBuffer);
+    }
 
-    // Store updated tree
     this._trees.set(container, newTree);
-
-    // Flush lifecycle callbacks after all DOM mutations
     flushLifecycleCallbacks();
 
     return newTree;
+  }
+
+  /**
+   * Direct reconciliation: walk old VNode tree and new descriptor tree
+   * simultaneously, applying DOM patches inline. No new VNode tree is built.
+   *
+   * This is the "no virtual DOM" path — we compare descriptors directly
+   * against the cached VNode tree and surgically update only changed DOM nodes.
+   *
+   * @param {VNode} oldNode - Existing VNode with DOM element
+   * @param {Object} newDesc - New descriptor
+   * @param {HTMLElement} parentElement - Parent DOM element
+   */
+  _directReconcile(oldNode, newDesc, parentElement) {
+    if (!oldNode || !newDesc) return;
+
+    // Fast path: hash match = skip entire subtree (no allocation, no work)
+    if (oldNode.hash === newDesc._hash) {
+      if (isMemoized(newDesc) || descriptorsEqual(oldNode.view, newDesc)) {
+        // Update the stored descriptor (lightweight)
+        oldNode.view = newDesc;
+        this._stats.subtreesSkipped++;
+        return;
+      }
+    }
+
+    // Type changed — full replace
+    if (oldNode.type !== newDesc.type) {
+      const newElement = this._renderView(newDesc);
+      if (oldNode.element && oldNode.element.parentNode) {
+        oldNode.element.parentNode.replaceChild(newElement, oldNode.element);
+        releaseTree(oldNode.element);
+      }
+      // Replace VNode in-place
+      oldNode.view = newDesc;
+      oldNode.type = newDesc.type;
+      oldNode.hash = newDesc._hash;
+      oldNode.element = newElement;
+      oldNode.key = newDesc.key;
+      // Rebuild children for new node
+      const children = newDesc.children || [];
+      const childNodes = new Array(children.length);
+      for (let i = 0; i < children.length; i++) {
+        childNodes[i] = new VNode(children[i], children[i].key);
+        childNodes[i].identity = `${oldNode.identity}/${children[i].type}[${i}]`;
+      }
+      oldNode.children = childNodes;
+      this._linkElements(oldNode, newElement);
+      return;
+    }
+
+    // Key changed — full replace
+    if (oldNode.key !== newDesc.key) {
+      const newElement = this._renderView(newDesc);
+      if (oldNode.element && oldNode.element.parentNode) {
+        oldNode.element.parentNode.replaceChild(newElement, oldNode.element);
+        releaseTree(oldNode.element);
+      }
+      oldNode.view = newDesc;
+      oldNode.hash = newDesc._hash;
+      oldNode.element = newElement;
+      oldNode.key = newDesc.key;
+      const children = newDesc.children || [];
+      const childNodes = new Array(children.length);
+      for (let i = 0; i < children.length; i++) {
+        childNodes[i] = new VNode(children[i], children[i].key);
+        childNodes[i].identity = `${oldNode.identity}/${children[i].type}[${i}]`;
+      }
+      oldNode.children = childNodes;
+      this._linkElements(oldNode, newElement);
+      return;
+    }
+
+    // Same type & key — check if content changed
+    const oldDesc = oldNode.view;
+    const selfChanged = oldNode.hash !== newDesc._hash && !descriptorsEqual(oldDesc, newDesc);
+
+    if (selfChanged) {
+      // Text node in-place update
+      if (oldNode.type === 'Text' && oldNode.element) {
+        const oldProps = oldDesc.props;
+        const newProps = newDesc.props;
+        if (oldProps.content !== newProps.content) {
+          let onlyContentChanged = true;
+          const keys = Object.keys(newProps);
+          for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            if (k === 'content') continue;
+            if (typeof oldProps[k] === 'function') continue;
+            if (oldProps[k] !== newProps[k]) { onlyContentChanged = false; break; }
+          }
+          if (onlyContentChanged && oldDesc.modifiers.length === newDesc.modifiers.length) {
+            oldNode.element.textContent = String(newProps.content ?? '');
+            oldNode.view = newDesc;
+            oldNode.hash = newDesc._hash;
+            this._stats.textUpdatesInPlace++;
+            return;
+          }
+        }
+      }
+
+      // Full re-render of this node
+      const newElement = this._renderView(newDesc);
+      if (oldNode.element && oldNode.element.parentNode) {
+        oldNode.element.parentNode.replaceChild(newElement, oldNode.element);
+        releaseTree(oldNode.element);
+      }
+      oldNode.view = newDesc;
+      oldNode.hash = newDesc._hash;
+      oldNode.element = newElement;
+      // Rebuild children
+      const children = newDesc.children || [];
+      const childNodes = new Array(children.length);
+      for (let i = 0; i < children.length; i++) {
+        childNodes[i] = new VNode(children[i], children[i].key);
+        childNodes[i].identity = `${oldNode.identity}/${children[i].type}[${i}]`;
+      }
+      oldNode.children = childNodes;
+      this._linkElements(oldNode, newElement);
+      return;
+    }
+
+    // Self unchanged — update stored descriptor and hash, then recurse into children
+    oldNode.view = newDesc;
+    oldNode.hash = newDesc._hash;
+
+    const oldChildren = oldNode.children;
+    const newChildren = newDesc.children || _emptyChildren;
+    const oldLen = oldChildren.length;
+    const newLen = newChildren.length;
+
+    if (oldLen === 0 && newLen === 0) return;
+
+    // Match children by position (fast path for no-key case)
+    const minLen = Math.min(oldLen, newLen);
+    for (let i = 0; i < minLen; i++) {
+      const newChild = newChildren[i];
+      if (isDescriptor(newChild) && oldChildren[i].isDescriptor) {
+        this._directReconcile(oldChildren[i], newChild, oldNode.element);
+      } else {
+        // Fallback for mixed descriptor/legacy children
+        const newElement = this._renderView(newChild);
+        if (oldChildren[i].element && oldChildren[i].element.parentNode) {
+          oldChildren[i].element.parentNode.replaceChild(newElement, oldChildren[i].element);
+          releaseTree(oldChildren[i].element);
+        }
+        oldChildren[i] = new VNode(newChild, isDescriptor(newChild) ? newChild.key : null);
+        oldChildren[i].element = newElement;
+      }
+    }
+
+    // Handle added children
+    if (newLen > oldLen) {
+      const fragment = document.createDocumentFragment();
+      const newNodes = [];
+      for (let i = oldLen; i < newLen; i++) {
+        const newChild = newChildren[i];
+        const newElement = this._renderView(newChild);
+        const newNode = new VNode(newChild, isDescriptor(newChild) ? newChild.key : null);
+        newNode.element = newElement;
+        newNode.identity = `${oldNode.identity}/${newNode.type}[${i}]`;
+        newNodes.push(newNode);
+        fragment.appendChild(newElement);
+      }
+      if (oldNode.element) oldNode.element.appendChild(fragment);
+      oldNode.children = [...oldChildren, ...newNodes];
+    }
+
+    // Handle removed children
+    if (oldLen > newLen) {
+      for (let i = oldLen - 1; i >= newLen; i--) {
+        const child = oldChildren[i];
+        if (child.element && child.element.parentNode) {
+          child.element.parentNode.removeChild(child.element);
+          releaseTree(child.element);
+        }
+      }
+      oldNode.children = oldChildren.slice(0, newLen);
+    }
   }
 
   /**
@@ -374,9 +644,16 @@ class ReconcilerClass {
 
     // Fast path: descriptor hash comparison
     // If both nodes are descriptors and hashes match, skip entire subtree
-    if (oldNode.isDescriptor && newNode.isDescriptor) {
-      if (oldNode.hash === newNode.hash && isMemoized(newNode.view)) {
-        // Subtree is identical - reuse entire DOM
+    if (oldNode.isDescriptor && newNode.isDescriptor && oldNode.hash === newNode.hash) {
+      // Memoized descriptors (same object) — skip immediately
+      if (isMemoized(newNode.view)) {
+        newNode.element = oldNode.element;
+        newNode.children = oldNode.children;
+        this._stats.subtreesSkipped++;
+        return;
+      }
+      // Non-memoized but hashes match — verify with full comparison, then skip subtree
+      if (descriptorsEqual(oldNode.view, newNode.view)) {
         newNode.element = oldNode.element;
         newNode.children = oldNode.children;
         this._stats.subtreesSkipped++;
@@ -617,8 +894,10 @@ class ReconcilerClass {
       }
     }
 
-    // If root needs full replace or too many patches, do full re-render
-    if (hasRootReplace || patches.length > 30) {
+    // If root needs full replace, do full re-render.
+    // Only fall back to full re-render for root replacement — incremental
+    // patching is faster than full re-render in virtually all cases.
+    if (hasRootReplace) {
       this._stats.fullRerenders++;
 
       if (this._debug) {
@@ -729,6 +1008,41 @@ class ReconcilerClass {
             newNode.element = oldNode.element;
             this._stats.textUpdatesInPlace++;
             return;
+          }
+        }
+      }
+
+      // Optimization: for container types (VStack, HStack, etc.) where only
+      // modifiers changed but children are diffed separately, update modifiers in-place
+      if (newNode.isDescriptor && oldNode.isDescriptor) {
+        const containerTypes = _containerTypeSet;
+        if (containerTypes.has(newNode.type)) {
+          const oldView = oldNode.view;
+          const newView = newNode.view;
+          // If only modifiers changed, reapply them in-place
+          if (oldView.children.length === newView.children.length) {
+            const oldMods = oldView.modifiers;
+            const newMods = newView.modifiers;
+            let onlyModsChanged = oldMods.length !== newMods.length;
+            if (!onlyModsChanged) {
+              for (let i = 0; i < oldMods.length; i++) {
+                if (oldMods[i].type !== newMods[i].type || oldMods[i].value !== newMods[i].value) {
+                  onlyModsChanged = true;
+                  break;
+                }
+              }
+            }
+            if (onlyModsChanged) {
+              // Reset styles and reapply modifiers without re-rendering children
+              oldNode.element.style.cssText = '';
+              _reapplyContainerStyles(oldNode.element, newView);
+              if (newMods.length > 0) {
+                _applyModifiersInPlace(oldNode.element, newMods);
+              }
+              newNode.element = oldNode.element;
+              this._stats.textUpdatesInPlace++;
+              return;
+            }
           }
         }
       }

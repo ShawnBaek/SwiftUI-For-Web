@@ -197,52 +197,52 @@ async function benchmarkSwiftUI(container) {
 
   results.push(await runBenchmark(
     'Update every 10th row',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
     () => {
       const nd = [...data.value];
       for (let i = 0; i < nd.length; i += 10) nd[i] = { ...nd[i], label: nd[i].label + ' !!!' };
-      data._value = nd; app.refresh();
+      data._value = nd; app._doRefresh();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Replace all 1,000 rows',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = generateData(1000, 1000); app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
+    () => { data._value = generateData(1000, 1000); app._doRefresh(); },
     null, 5
   ));
 
   results.push(await runBenchmark(
     'Append 1,000 rows to 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = [...data.value, ...generateData(1000, 1000)]; app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
+    () => { data._value = [...data.value, ...generateData(1000, 1000)]; app._doRefresh(); },
     null, 5
   ));
 
   results.push(await runBenchmark(
     'Remove one row from 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
     () => {
-      const nd = [...data.value]; nd.splice(500, 1); data._value = nd; app.refresh();
+      const nd = [...data.value]; nd.splice(500, 1); data._value = nd; app._doRefresh();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Swap two rows in 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
     () => {
       const nd = [...data.value]; const t = nd[1]; nd[1] = nd[998]; nd[998] = t;
-      data._value = nd; app.refresh();
+      data._value = nd; app._doRefresh();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Clear 1,000 rows',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = []; app.refresh(); },
+    () => { createListApp(); data._value = generateData(1000); app._doRefresh(); },
+    () => { data._value = []; app._doRefresh(); },
     null, 10
   ));
 
@@ -310,6 +310,7 @@ async function benchmarkSwiftUI(container) {
   ));
 
   // 9. Leaf-only update — change 1 counter text in header, rest is identical
+  //    Uses Reconciler.update() for incremental DOM patching (like React's setState)
   results.push(await runBenchmark(
     'Leaf update (1 node in 500)',
     () => {
@@ -320,7 +321,7 @@ async function benchmarkSwiftUI(container) {
     },
     () => {
       dashData = generateDashboardData(dashData.counter + 1);
-      app = App(() => buildDashboard(dashData)).mount(container);
+      app._doRefresh();
     },
     null, 15
   ));
@@ -347,7 +348,7 @@ async function benchmarkSwiftUI(container) {
       }
       d.sections[2].subtitle = 'UPDATED';
       dashData = d;
-      app = App(() => buildDashboard(dashData)).mount(container);
+      app._doRefresh();
     },
     null, 10
   ));
@@ -368,7 +369,7 @@ async function benchmarkSwiftUI(container) {
         d.sections[s].tabs[1].cards[2].items[1].label = 'CHANGED';
       }
       dashData = d;
-      app = App(() => buildDashboard(dashData)).mount(container);
+      app._doRefresh();
     },
     null, 10
   ));
@@ -385,7 +386,7 @@ async function benchmarkSwiftUI(container) {
     () => {
       for (let i = 0; i < 100; i++) {
         dashData = generateDashboardData(i);
-        app = App(() => buildDashboard(dashData)).mount(container);
+        app._doRefresh();
       }
     },
     null, 3

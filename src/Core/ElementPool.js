@@ -20,7 +20,7 @@
 const _pools = new Map();
 
 /** Maximum number of elements to keep per tag type */
-const MAX_POOL_SIZE = 50;
+const MAX_POOL_SIZE = 200;
 
 /** Tags that benefit from pooling (high churn elements) */
 const POOLABLE_TAGS = new Set([
