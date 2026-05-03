@@ -310,6 +310,217 @@ async function runTests() {
       });
     });
 
+    // Test Signal core (Phase 1 — internal reactive primitives)
+    const Signal = await import('./src/Data/Signal.js');
+    const Scheduler = await import('./src/Core/Scheduler.js');
+    describe('Signal', () => {
+      it('createSignal returns [read, write]', () => {
+        const [read, write] = Signal.createSignal(0);
+        expect(typeof read).toBe('function');
+        expect(typeof write).toBe('function');
+        expect(read()).toBe(0);
+      });
+
+      it('write updates the value', () => {
+        const [read, write] = Signal.createSignal(1);
+        write(42);
+        expect(read()).toBe(42);
+      });
+
+      it('write(prev => next) uses the updater form', () => {
+        const [read, write] = Signal.createSignal(5);
+        write(p => p + 10);
+        expect(read()).toBe(15);
+      });
+
+      it('createEffect runs immediately', () => {
+        let runs = 0;
+        Signal.createRoot(() => { Signal.createEffect(() => { runs++; }); });
+        expect(runs).toBe(1);
+      });
+
+      it('createEffect re-runs when a tracked signal changes', () => {
+        const [read, write] = Signal.createSignal(0);
+        let last = -1;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { last = read(); });
+        });
+        expect(last).toBe(0);
+        write(7);
+        Scheduler.flushSync();
+        expect(last).toBe(7);
+      });
+
+      it('createEffect ignores untracked signals', () => {
+        const [readA, writeA] = Signal.createSignal(0);
+        const [, writeB] = Signal.createSignal(0);
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { readA(); runs++; });
+        });
+        expect(runs).toBe(1);
+        writeB(99);
+        Scheduler.flushSync();
+        expect(runs).toBe(1);
+        writeA(1);
+        Scheduler.flushSync();
+        expect(runs).toBe(2);
+      });
+
+      it('createEffect detaches stale sources between runs', () => {
+        const [readA, writeA] = Signal.createSignal(true);
+        const [readB, writeB] = Signal.createSignal('B');
+        const [readC, writeC] = Signal.createSignal('C');
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { runs++; readA() ? readB() : readC(); });
+        });
+        expect(runs).toBe(1);
+        writeA(false);
+        Scheduler.flushSync();
+        expect(runs).toBe(2);
+        writeB('B-updated');     // now unsubscribed
+        Scheduler.flushSync();
+        expect(runs).toBe(2);
+        writeC('C-updated');
+        Scheduler.flushSync();
+        expect(runs).toBe(3);
+      });
+
+      it('disposer stops re-runs', () => {
+        const [read, write] = Signal.createSignal(0);
+        let runs = 0;
+        Signal.createRoot(() => {
+          const dispose = Signal.createEffect(() => { read(); runs++; });
+          write(1);
+          Scheduler.flushSync();
+          expect(runs).toBe(2);
+          dispose();
+          write(2);
+          Scheduler.flushSync();
+          expect(runs).toBe(2);
+        });
+      });
+
+      it('createRoot dispose cascades to child effects', () => {
+        const [read, write] = Signal.createSignal(0);
+        let runs = 0;
+        let dispose;
+        Signal.createRoot((d) => {
+          dispose = d;
+          Signal.createEffect(() => { read(); runs++; });
+        });
+        expect(runs).toBe(1);
+        dispose();
+        write(1);
+        Scheduler.flushSync();
+        expect(runs).toBe(1);
+      });
+
+      it('createMemo caches and recomputes only on dep change', () => {
+        const [read, write] = Signal.createSignal(2);
+        let computeCount = 0;
+        let memo;
+        Signal.createRoot(() => {
+          memo = Signal.createMemo(() => { computeCount++; return read() * 10; });
+        });
+        expect(memo()).toBe(20);
+        expect(memo()).toBe(20);
+        expect(computeCount).toBe(1);
+        write(3);
+        Scheduler.flushSync();
+        expect(memo()).toBe(30);
+        expect(computeCount).toBe(2);
+      });
+
+      it('createMemo only notifies downstream when result changes', () => {
+        const [read, write] = Signal.createSignal(1);
+        let downstreamRuns = 0;
+        Signal.createRoot(() => {
+          const memo = Signal.createMemo(() => read() > 5);
+          Signal.createEffect(() => { memo(); downstreamRuns++; });
+        });
+        expect(downstreamRuns).toBe(1);
+        write(2);
+        Scheduler.flushSync();
+        expect(downstreamRuns).toBe(1);
+        write(10);
+        Scheduler.flushSync();
+        expect(downstreamRuns).toBe(2);
+        write(20);
+        Scheduler.flushSync();
+        expect(downstreamRuns).toBe(2);
+      });
+
+      it('untrack reads do not subscribe', () => {
+        const [read, write] = Signal.createSignal(0);
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { runs++; Signal.untrack(read); });
+        });
+        expect(runs).toBe(1);
+        write(7);
+        Scheduler.flushSync();
+        expect(runs).toBe(1);
+      });
+
+      it('batch coalesces writes across signals', () => {
+        const [readA, writeA] = Signal.createSignal(0);
+        const [readB, writeB] = Signal.createSignal(0);
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { readA(); readB(); runs++; });
+        });
+        expect(runs).toBe(1);
+        Signal.batch(() => { writeA(1); writeB(1); });
+        Scheduler.flushSync();
+        expect(runs).toBe(2);
+      });
+
+      it('onCleanup runs before re-execution and on dispose', () => {
+        const [read, write] = Signal.createSignal(0);
+        const log = [];
+        let dispose;
+        Signal.createRoot((d) => {
+          dispose = d;
+          Signal.createEffect(() => {
+            const v = read();
+            log.push('run:' + v);
+            Signal.onCleanup(() => log.push('cleanup:' + v));
+          });
+        });
+        expect(log.join(',')).toBe('run:0');
+        write(1);
+        Scheduler.flushSync();
+        expect(log.join(',')).toBe('run:0,cleanup:0,run:1');
+        dispose();
+        expect(log.join(',')).toBe('run:0,cleanup:0,run:1,cleanup:1');
+      });
+
+      it('isTracking reports the active state', () => {
+        expect(Signal.isTracking()).toBe(false);
+        Signal.createRoot(() => {
+          Signal.createEffect(() => {
+            expect(Signal.isTracking()).toBe(true);
+          });
+        });
+        expect(Signal.isTracking()).toBe(false);
+      });
+
+      it('trackObservers/notifyObserversSet bridges an external Set', () => {
+        const observers = new Set();
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { Signal.trackObservers(observers); runs++; });
+        });
+        expect(runs).toBe(1);
+        expect(observers.size).toBe(1);
+        Signal.notifyObserversSet(observers);
+        Scheduler.flushSync();
+        expect(runs).toBe(2);
+      });
+    });
+
     // Test ObservableObject
     const { ObservableObject, Published, createObservable } = await import('./src/Data/ObservableObject.js');
     describe('ObservableObject', () => {
