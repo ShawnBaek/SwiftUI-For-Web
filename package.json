@@ -31,8 +31,11 @@
   ],
   "scripts": {
     "test": "node run-tests.js",
-    "test:e2e": "npx playwright test",
+    "test:e2e": "npx playwright test Tests/e2e",
     "test:e2e:ui": "npx playwright test --ui",
+    "test:visual": "npx playwright test Tests/visual --workers=1",
+    "test:visual:update": "npx playwright test Tests/visual --workers=1 --update-snapshots",
+    "bench:capture": "npx playwright test Tests/Benchmark/capture.spec.js --grep @capture --workers=1",
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",
