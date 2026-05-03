@@ -257,7 +257,15 @@ export function ListingDetail() {
         }),
         Spacer()
       )
-      .padding(16),
+      .padding(16)
+      .modifier({
+        apply(el) {
+          // Force full-width row so Spacer pushes the back button to the left
+          // edge instead of letting the HStack collapse to content width.
+          el.style.width = '100%';
+          el.style.justifyContent = 'flex-start';
+        }
+      }),
 
       // Scrollable content
       ScrollView({ axis: 'vertical' },
@@ -271,14 +279,34 @@ export function ListingDetail() {
                   .modifier({
                     apply(el) {
                       el.style.objectFit = 'cover';
+                      el.style.flexShrink = '0';
                       el.style.borderRadius = idx === 0 ? '12px 0 0 12px' :
                         idx === listing.images.slice(0, 5).length - 1 ? '0 12px 12px 0' : '0';
                     }
                   })
               )
             )
+            .modifier({
+              apply(el) {
+                // Let the row keep its natural width inside the horizontal
+                // ScrollView so the gallery actually scrolls instead of
+                // collapsing to the parent's width.
+                el.style.width = 'max-content';
+                el.style.flexShrink = '0';
+              }
+            })
           )
-          .padding({ horizontal: vm.isMobile ? 16 : 24, bottom: 24 }),
+          .padding({ horizontal: vm.isMobile ? 16 : 24, bottom: 24 })
+          .modifier({
+            apply(el) {
+              // Cap the gallery's scrollport at the modal width so the wide
+              // HStack inside scrolls horizontally instead of widening the
+              // outer modal (which would push the booking card offscreen).
+              el.style.width = '100%';
+              el.style.maxWidth = '100%';
+              el.style.boxSizing = 'border-box';
+            }
+          }),
 
           // Main content
           HStack({ alignment: 'top', spacing: 48 },
@@ -421,14 +449,35 @@ export function ListingDetail() {
           .modifier({
             apply(el) {
               el.style.alignItems = 'flex-start';
+              // Cap the 2-column row to the modal width so the booking card
+              // (right column) stays inside the viewport instead of overflowing.
+              el.style.width = '100%';
+              el.style.boxSizing = 'border-box';
+              el.style.minWidth = '0';
             }
           })
         )
+        .modifier({
+          apply(el) {
+            // Constrain the inner stack to the scrollport width so children
+            // (image gallery, 2-column row) can't widen the modal.
+            el.style.width = '100%';
+            el.style.maxWidth = '100%';
+            el.style.boxSizing = 'border-box';
+          }
+        })
       )
       .modifier({
         apply(el) {
           el.style.flex = '1';
           el.style.overflow = 'auto';
+          // Force the scrollport to the modal width — without this it would
+          // grow to its content's intrinsic width (2080px from the image
+          // gallery) and get centered by the modal VStack's flex alignment,
+          // shifting everything 340px to the left.
+          el.style.width = '100%';
+          el.style.alignSelf = 'stretch';
+          el.style.minWidth = '0';
         }
       }),
 
@@ -443,6 +492,15 @@ export function ListingDetail() {
         el.style.zIndex = '201';
         el.style.display = 'flex';
         el.style.flexDirection = 'column';
+        // Lock the modal to viewport size — without these, a wide child
+        // (e.g. the horizontal image gallery) makes the modal exceed 100vw,
+        // which pushes the booking card offscreen and routes scroll to the
+        // page instead of the inner ScrollView.
+        el.style.width = '100vw';
+        el.style.height = '100vh';
+        el.style.maxWidth = '100vw';
+        el.style.maxHeight = '100vh';
+        el.style.overflow = 'hidden';
       }
     })
   );

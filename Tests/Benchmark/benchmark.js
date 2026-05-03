@@ -39,7 +39,7 @@ function formatMs(ms) {
   return ms < 1 ? `${(ms * 1000).toFixed(0)}μs` : `${ms.toFixed(2)}ms`;
 }
 
-function generateData(count, offset = 0) {
+export function generateData(count, offset = 0) {
   const data = new Array(count);
   for (let i = 0; i < count; i++) {
     data[i] = {
@@ -69,7 +69,7 @@ const NOUNS = [
  *   Dashboard → Sections(4) → Tabs(3) → Cards(5) → Items(4)
  *   Total nodes: 1 + 4 + 12 + 60 + 240 = 317 containers + text = ~500+ DOM nodes
  */
-function generateDashboardData(counterValue = 0) {
+export function generateDashboardData(counterValue = 0) {
   const sections = [];
   for (let s = 0; s < 4; s++) {
     const tabs = [];
@@ -114,7 +114,7 @@ function generateDashboardData(counterValue = 0) {
 // Benchmark Runner
 // ---------------------------------------------------------------------------
 
-async function runBenchmark(name, setupFn, benchFn, teardownFn, iterations = 10) {
+export async function runBenchmark(name, setupFn, benchFn, teardownFn, iterations = 10) {
   const times = [];
 
   for (let i = 0; i < iterations; i++) {
@@ -402,13 +402,40 @@ async function benchmarkSwiftUI(container) {
 
 async function benchmarkReact(container) {
   if (!window.React || !window.ReactDOM) {
-    await loadScript('https://unpkg.com/react@19/umd/react.production.min.js');
-    await loadScript('https://unpkg.com/react-dom@19/umd/react-dom.production.min.js');
+    // Headless Chromium ORB blocks the unpkg/jsdelivr UMD responses, so use
+    // ESM via esm.sh — same code, ESM-wrapped with proper CORS+MIME.
+    // Crucially: `?bundle` would inline a separate React copy into react-dom,
+    // breaking the shared internals contract. Use `?deps=react@19.2.5`
+    // instead so react-dom resolves to the same React module instance we
+    // import.
+    const reactMod = await import('https://esm.sh/react@19.2.5?dev=false');
+    const reactDomMod = await import('https://esm.sh/react-dom@19.2.5?dev=false&deps=react@19.2.5');
+    const reactDomClientMod = await import('https://esm.sh/react-dom@19.2.5/client?dev=false&deps=react@19.2.5');
+    const pickNamespace = (m) => {
+      // esm.sh sometimes hangs the namespace under default, sometimes not.
+      if (m.createElement || m.useState || m.createRoot || m.flushSync) return m;
+      if (m.default && (m.default.createElement || m.default.useState || m.default.createRoot || m.default.flushSync)) return m.default;
+      return m;
+    };
+    const R = pickNamespace(reactMod);
+    const RD = pickNamespace(reactDomMod);
+    const RDC = pickNamespace(reactDomClientMod);
+    window.React = R;
+    window.ReactDOM = {
+      createRoot: RDC.createRoot || RD.createRoot,
+      flushSync: RD.flushSync || RDC.flushSync,
+    };
+    if (!window.ReactDOM.flushSync || !window.ReactDOM.createRoot) {
+      throw new Error(`React load: createRoot=${!!window.ReactDOM.createRoot} flushSync=${!!window.ReactDOM.flushSync}`);
+    }
   }
 
   const React = window.React;
   const ReactDOM = window.ReactDOM;
   const { createElement: h, useState, memo } = React;
+  if (!h || !useState || !memo) {
+    throw new Error(`React API missing: createElement=${!!h} useState=${!!useState} memo=${!!memo}`);
+  }
 
   const results = [];
   let root = null;
@@ -698,9 +725,10 @@ function loadScript(src) {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
     const script = document.createElement('script');
     script.src = src;
-    script.crossOrigin = 'anonymous';
+    // No crossOrigin — Playwright's headless Chromium errors out on it for
+    // some CDN responses. We only need the script to execute, not fetch().
     script.onload = resolve;
-    script.onerror = reject;
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
     document.head.appendChild(script);
   });
 }
@@ -709,60 +737,75 @@ function loadScript(src) {
 // Report Generation
 // ---------------------------------------------------------------------------
 
-function generateReport(swiftuiResults, reactResults) {
+function generateReport(swiftuiResults, reactResults, solidResults = null) {
   const lines = [];
   lines.push('');
   lines.push('╔════════════════════════════════════════════════════════════════════════════╗');
-  lines.push('║            BENCHMARK: SwiftUI-For-Web vs React 19                        ║');
+  lines.push(solidResults
+    ? '║       BENCHMARK: SwiftUI-For-Web vs React 19 vs Solid.js               ║'
+    : '║            BENCHMARK: SwiftUI-For-Web vs React 19                        ║');
   lines.push('╠════════════════════════════════════════════════════════════════════════════╣');
   lines.push('');
 
-  const header = [
-    padRight('Benchmark', 35),
-    padRight('SwiftUI-FW', 12),
-    padRight('React 19', 12),
-    padRight('Winner', 12),
-    padRight('Speedup', 10)
-  ].join('│');
-  lines.push(header);
-  lines.push('─'.repeat(81));
+  const headerCols = [
+    padRight('Benchmark', 33),
+    padRight('SwiftUI-FW', 11),
+    padRight('React 19', 11)
+  ];
+  if (solidResults) headerCols.push(padRight('Solid', 11));
+  headerCols.push(padRight('Best', 11));
+  headerCols.push(padRight('Gap', 10));
+  lines.push(headerCols.join('│'));
+  const ruleLen = solidResults ? 100 : 90;
+  lines.push('─'.repeat(ruleLen));
 
-  let swWins = 0;
-  let reWins = 0;
+  const winCounts = { sw: 0, re: 0, so: 0 };
+  const investmentTargets = [];
 
   for (let i = 0; i < swiftuiResults.length; i++) {
     const sw = swiftuiResults[i];
     const re = reactResults[i];
-    const swMs = sw.median;
-    const reMs = re.median;
+    const so = solidResults ? solidResults[i] : null;
 
-    // Separator between flat list and complex tree sections
     if (i === 7) {
-      lines.push('─'.repeat(81));
-      lines.push(padRight(' Complex View Tree', 81));
-      lines.push('─'.repeat(81));
+      lines.push('─'.repeat(ruleLen));
+      lines.push(padRight(' Complex View Tree (500+ nodes)', ruleLen));
+      lines.push('─'.repeat(ruleLen));
     }
 
-    const faster = swMs <= reMs ? 'SwiftUI-FW' : 'React 19';
-    if (swMs <= reMs) swWins++; else reWins++;
-    const speedup = swMs <= reMs
-      ? `${(reMs / swMs).toFixed(1)}x`
-      : `${(swMs / reMs).toFixed(1)}x`;
+    const candidates = [{ k: 'sw', name: 'SwiftUI-FW', t: sw.median }, { k: 're', name: 'React 19', t: re.median }];
+    if (so) candidates.push({ k: 'so', name: 'Solid', t: so.median });
+    candidates.sort((a, b) => a.t - b.t);
+    const best = candidates[0];
+    winCounts[best.k]++;
+    const swSlowestRatio = sw.median / best.t;
+    const gap = best.k === 'sw' ? `(best)` : `${swSlowestRatio.toFixed(2)}x`;
+    if (best.k !== 'sw' && swSlowestRatio >= 1.3) {
+      investmentTargets.push(`${sw.name} (${gap} slower than ${best.name})`);
+    }
 
-    lines.push([
-      padRight(sw.name, 35),
-      padRight(formatMs(swMs), 12),
-      padRight(formatMs(reMs), 12),
-      padRight(faster, 12),
-      padRight(speedup, 10)
-    ].join('│'));
+    const row = [
+      padRight(sw.name, 33),
+      padRight(formatMs(sw.median), 11),
+      padRight(formatMs(re.median), 11)
+    ];
+    if (so) row.push(padRight(formatMs(so.median), 11));
+    row.push(padRight(best.name, 11));
+    row.push(padRight(gap, 10));
+    lines.push(row.join('│'));
   }
 
-  lines.push('─'.repeat(81));
-  lines.push(`SwiftUI-For-Web wins: ${swWins}/${swiftuiResults.length}   React 19 wins: ${reWins}/${reactResults.length}`);
+  lines.push('─'.repeat(ruleLen));
+  const score = `Wins — SwiftUI-FW: ${winCounts.sw} | React 19: ${winCounts.re}` +
+    (solidResults ? ` | Solid: ${winCounts.so}` : '');
+  lines.push(score);
   lines.push('');
+  if (investmentTargets.length) {
+    lines.push('Phase C investment targets (SwiftUI-For-Web ≥1.3× behind best):');
+    for (const t of investmentTargets) lines.push(`  • ${t}`);
+    lines.push('');
+  }
   lines.push('Lower is better. Median of multiple iterations in the same tab.');
-  lines.push('React uses React.memo on leaf components for optimal comparison.');
   lines.push('');
 
   return lines.join('\n');
@@ -776,7 +819,7 @@ function padRight(str, len) {
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function runAllBenchmarks(swContainer, reactContainer) {
+export async function runAllBenchmarks(swContainer, reactContainer, solidContainer = null, opts = {}) {
   if (!swContainer) {
     swContainer = document.createElement('div');
     swContainer.id = 'bench-swiftui';
@@ -787,6 +830,12 @@ export async function runAllBenchmarks(swContainer, reactContainer) {
     reactContainer.id = 'bench-react';
     document.body.appendChild(reactContainer);
   }
+  const includeSolid = opts.includeSolid !== false;
+  if (includeSolid && !solidContainer) {
+    solidContainer = document.createElement('div');
+    solidContainer.id = 'bench-solid';
+    document.body.appendChild(solidContainer);
+  }
 
   console.log('%c[Benchmark] Running SwiftUI-For-Web...', 'color: #007AFF; font-weight: bold');
   const swiftuiResults = await benchmarkSwiftUI(swContainer);
@@ -794,10 +843,22 @@ export async function runAllBenchmarks(swContainer, reactContainer) {
   console.log('%c[Benchmark] Running React 19...', 'color: #61DAFB; font-weight: bold');
   const reactResults = await benchmarkReact(reactContainer);
 
-  const report = generateReport(swiftuiResults, reactResults);
+  let solidResults = null;
+  if (includeSolid) {
+    try {
+      console.log('%c[Benchmark] Running Solid.js...', 'color: #2C4F7C; font-weight: bold');
+      const { benchmarkSolid } = await import('./solidBenchmarks.js');
+      solidResults = await benchmarkSolid(solidContainer);
+    } catch (e) {
+      console.warn('[Benchmark] Solid.js skipped:', e.message);
+      solidResults = null;
+    }
+  }
+
+  const report = generateReport(swiftuiResults, reactResults, solidResults);
   console.log(report);
 
-  return { swiftui: swiftuiResults, react: reactResults, report };
+  return { swiftui: swiftuiResults, react: reactResults, solid: solidResults, report };
 }
 
 export async function runSwiftUIBenchmarks(container) {
@@ -806,7 +867,9 @@ export async function runSwiftUIBenchmarks(container) {
 }
 
 export function renderBenchmarkResults(results, container) {
-  const { swiftui, react } = results;
+  const { swiftui, react, solid } = results;
+  const hasSolid = !!solid;
+  const colCount = hasSolid ? 6 : 5;
 
   let html = `
     <style>
@@ -815,46 +878,68 @@ export function renderBenchmarkResults(results, container) {
       .bench-table th { background: #f5f5f5; font-weight: 600; }
       .bench-winner { color: #34C759; font-weight: 600; }
       .bench-loser { color: #999; }
-      .bench-speedup { font-weight: 700; }
+      .bench-gap { font-weight: 700; }
+      .bench-gap.investment { color: #FF3B30; }
       .bench-title { font-size: 20px; font-weight: 700; margin: 20px 0 10px; }
       .bench-note { color: #666; font-size: 12px; margin-top: 8px; }
       .bench-section { background: #f0f0f5; font-weight: 600; color: #555; }
       .bench-section td { padding: 6px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
     </style>
-    <div class="bench-title">SwiftUI-For-Web vs React 19 — Benchmark Results</div>
+    <div class="bench-title">${hasSolid ? 'SwiftUI-For-Web vs React 19 vs Solid.js' : 'SwiftUI-For-Web vs React 19'} — Benchmark Results</div>
     <table class="bench-table">
-      <tr><th>Benchmark</th><th>SwiftUI-For-Web</th><th>React 19</th><th>Winner</th><th>Speedup</th></tr>
+      <tr>
+        <th>Benchmark</th>
+        <th>SwiftUI-For-Web</th>
+        <th>React 19</th>
+        ${hasSolid ? '<th>Solid.js</th>' : ''}
+        <th>Best</th>
+        <th>SwiftUI gap vs Best</th>
+      </tr>
   `;
 
-  let swWins = 0, reWins = 0;
+  const winCounts = { sw: 0, re: 0, so: 0 };
+  const investmentTargets = [];
 
   for (let i = 0; i < swiftui.length; i++) {
-    // Section separator
     if (i === 7) {
-      html += `<tr class="bench-section"><td colspan="5">Complex View Tree (500+ nodes, partial re-renders)</td></tr>`;
+      html += `<tr class="bench-section"><td colspan="${colCount}">Complex View Tree (500+ nodes, partial re-renders)</td></tr>`;
     }
-
     const sw = swiftui[i];
     const re = react[i];
-    const swW = sw.median <= re.median;
-    if (swW) swWins++; else reWins++;
-    const speedup = swW ? (re.median / sw.median).toFixed(1) : (sw.median / re.median).toFixed(1);
-    const winner = swW ? 'SwiftUI-FW' : 'React 19';
+    const so = hasSolid ? solid[i] : null;
 
+    const candidates = [{ k: 'sw', name: 'SwiftUI-FW', t: sw.median }, { k: 're', name: 'React 19', t: re.median }];
+    if (so) candidates.push({ k: 'so', name: 'Solid', t: so.median });
+    candidates.sort((a, b) => a.t - b.t);
+    const best = candidates[0];
+    winCounts[best.k]++;
+
+    const gapNum = sw.median / best.t;
+    const gap = best.k === 'sw' ? '(best)' : `${gapNum.toFixed(2)}x`;
+    const isInvestment = best.k !== 'sw' && gapNum >= 1.3;
+    if (isInvestment) investmentTargets.push({ name: sw.name, gap, bestName: best.name });
+
+    const cellClass = (k) => candidates[0].k === k ? 'bench-winner' : 'bench-loser';
     html += `<tr>
       <td>${sw.name}</td>
-      <td class="${swW ? 'bench-winner' : 'bench-loser'}">${formatMs(sw.median)}</td>
-      <td class="${!swW ? 'bench-winner' : 'bench-loser'}">${formatMs(re.median)}</td>
-      <td>${winner}</td>
-      <td class="bench-speedup">${speedup}x</td>
+      <td class="${cellClass('sw')}">${formatMs(sw.median)}</td>
+      <td class="${cellClass('re')}">${formatMs(re.median)}</td>
+      ${hasSolid ? `<td class="${cellClass('so')}">${formatMs(so.median)}</td>` : ''}
+      <td>${best.name}</td>
+      <td class="bench-gap ${isInvestment ? 'investment' : ''}">${gap}</td>
     </tr>`;
   }
 
-  html += `</table>
-    <div class="bench-note">
-      Lower is better. Median of multiple iterations. React uses <code>React.memo</code> on all leaf components.<br>
-      <strong>Score: SwiftUI-For-Web ${swWins}/${swiftui.length} &nbsp;|&nbsp; React 19 ${reWins}/${react.length}</strong>
-    </div>`;
+  html += `</table>`;
+  if (investmentTargets.length) {
+    html += `<div class="bench-note" style="color:#FF3B30;margin-top:12px"><strong>Phase C investment targets (≥1.3× behind best):</strong><ul>`;
+    for (const t of investmentTargets) html += `<li>${t.name} — ${t.gap} slower than ${t.bestName}</li>`;
+    html += `</ul></div>`;
+  }
+  html += `<div class="bench-note">
+    Lower is better. Median of multiple iterations. React uses <code>React.memo</code> on leaf components; Solid uses <code>&lt;For&gt;</code> with a single root signal.<br>
+    <strong>Best counts — SwiftUI-FW: ${winCounts.sw} | React 19: ${winCounts.re}${hasSolid ? ` | Solid: ${winCounts.so}` : ''}</strong>
+  </div>`;
 
   container.innerHTML = html;
 }
