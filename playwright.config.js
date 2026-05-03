@@ -2,8 +2,10 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './Tests',
+  testMatch: ['e2e/**/*.spec.js', 'visual/**/*.spec.js', 'Benchmark/**/*.spec.js'],
   fullyParallel: true,
+  timeout: 60000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
@@ -25,6 +27,6 @@ export default defineConfig({
     command: 'python3 -m http.server 8000',
     url: 'http://localhost:8000',
     reuseExistingServer: !process.env.CI,
-    timeout: 10000,
+    timeout: 30000,
   },
 });
