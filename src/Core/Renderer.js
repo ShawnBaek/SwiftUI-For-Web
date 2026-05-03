@@ -18,9 +18,10 @@ import {
   isLegacyView,
   ModifierType
 } from './ViewDescriptor.js';
-import { acquireElement } from './ElementPool.js';
+import { acquireElement, releaseTree } from './ElementPool.js';
 import { onAppear, onDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { createRoot, createEffect, onCleanup, untrack } from '../Data/Signal.js';
 
 /**
  * Registry of view type renderers
@@ -598,6 +599,125 @@ registerRenderer('ForEach', (props, children) => {
   element.style.display = 'contents';
   element.appendChild(fragment);
   return element;
+});
+
+// ---------------------------------------------------------------------------
+// Reactive control flow primitives. Registered here so they Just Work when
+// nested inside any container's children (where renderChildren calls
+// render() eagerly). Each runs its own createEffect under the current
+// signal owner — the SignalRenderer's mount() establishes that root.
+// ---------------------------------------------------------------------------
+
+// Show — reactive conditional branch
+registerRenderer('Show', (props) => {
+  const { when, then: thenView, else: elseView } = props;
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'contents';
+
+  let currentNode = null;
+  let currentDispose = null;
+  let lastBranch = null;
+
+  createEffect(() => {
+    const truthy = !!when();
+    const branch = truthy ? 'then' : 'else';
+    if (branch === lastBranch) return;
+    lastBranch = branch;
+
+    if (currentDispose) { currentDispose(); currentDispose = null; }
+    if (currentNode && currentNode.parentNode) {
+      currentNode.parentNode.removeChild(currentNode);
+    }
+    if (currentNode) releaseTree(currentNode);
+    currentNode = null;
+
+    const view = truthy ? thenView : elseView;
+    if (view != null) {
+      createRoot((d) => {
+        currentDispose = d;
+        currentNode = untrack(() => render(view));
+        if (currentNode) wrapper.appendChild(currentNode);
+      });
+    }
+  });
+
+  onCleanup(() => {
+    if (currentDispose) currentDispose();
+  });
+
+  return wrapper;
+});
+
+// For — reactive keyed list
+registerRenderer('For', (props) => {
+  const { each, render: renderRow, keyFn } = props;
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'contents';
+
+  /** @type {Map<any, { node: Node, dispose: () => void, item: any }>} */
+  const rows = new Map();
+
+  createEffect(() => {
+    const items = each() || [];
+    const seen = new Set();
+
+    let prevSibling = null;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const key = keyFn(item, i);
+      if (seen.has(key)) {
+        console.warn('[For] duplicate key:', key, '— behavior undefined');
+      }
+      seen.add(key);
+
+      let entry = rows.get(key);
+      // Identity-aware: a new object with the same key (immutable update)
+      // remounts the row so its render closure captures the new item.
+      if (entry && entry.item !== item) {
+        entry.dispose();
+        if (entry.node && entry.node.parentNode) {
+          entry.node.parentNode.removeChild(entry.node);
+        }
+        if (entry.node) releaseTree(entry.node);
+        rows.delete(key);
+        entry = null;
+      }
+      if (!entry) {
+        let dispose;
+        let node;
+        createRoot((d) => {
+          dispose = d;
+          node = untrack(() => render(renderRow(item, i)));
+        });
+        entry = { node, dispose, item };
+        rows.set(key, entry);
+      }
+
+      const target = prevSibling ? prevSibling.nextSibling : wrapper.firstChild;
+      if (entry.node && entry.node !== target) {
+        wrapper.insertBefore(entry.node, target);
+      }
+      prevSibling = entry.node;
+    }
+
+    for (const [key, entry] of rows) {
+      if (!seen.has(key)) {
+        entry.dispose();
+        if (entry.node && entry.node.parentNode) {
+          entry.node.parentNode.removeChild(entry.node);
+        }
+        if (entry.node) releaseTree(entry.node);
+        rows.delete(key);
+      }
+    }
+  });
+
+  onCleanup(() => {
+    for (const [, entry] of rows) entry.dispose();
+    rows.clear();
+  });
+
+  return wrapper;
 });
 
 // ============================================================================

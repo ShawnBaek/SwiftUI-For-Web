@@ -12,6 +12,7 @@
 
 import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
+import { createEffect, untrack } from '../../Data/Signal.js';
 
 /**
  * TextFieldView class - text input control
@@ -206,7 +207,19 @@ export class TextFieldView extends View {
 
     // Event handlers
     input.addEventListener('input', (e) => {
-      this._text.value = e.target.value;
+      // Untrack so this write inside an event handler doesn't subscribe
+      // any active outer effect to a self-feedback loop.
+      untrack(() => { this._text.value = e.target.value; });
+    });
+
+    // Reactive sync: when the underlying binding changes from elsewhere
+    // (e.g. vm.newTodoText = '' after Add), update the input's value in
+    // place — preserves focus/selection across writes.
+    createEffect(() => {
+      const desired = this._text.value || '';
+      if (input.value !== desired) {
+        input.value = desired;
+      }
     });
 
     input.addEventListener('focus', () => {

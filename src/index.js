@@ -76,6 +76,10 @@ import { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
 import { List, ListView, ListStyle } from './View/List/List.js';
 import { ForEach, Range } from './View/List/ForEach.js';
 
+// Reactive control flow (signal engine)
+import { Show } from './View/ControlFlow/Show.js';
+import { For } from './View/ControlFlow/For.js';
+
 // Containers
 import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
 import { Group, GroupView } from './View/Container/Group.js';
@@ -301,6 +305,10 @@ const SwiftUI = {
   List, ListView, ListStyle,
   ForEach, Range,
 
+  // Reactive control flow (signal engine)
+  Show,
+  For,
+
   // Containers
   ScrollView, ScrollViewView, Axis,
   Group, GroupView,
@@ -444,6 +452,10 @@ export {
   // Lists
   List, ListView, ListStyle,
   ForEach, Range,
+
+  // Reactive control flow (signal engine)
+  Show,
+  For,
 
   // Containers
   ScrollView, ScrollViewView, Axis,

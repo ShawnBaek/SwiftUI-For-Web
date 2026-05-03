@@ -203,7 +203,14 @@ function computeSelfHash(descriptor) {
     } else if (typeof v === 'boolean') {
       hash = hashMix(hash, v ? 1 : 0);
     } else if (v != null) {
-      hash = hashMix(hash, fnv1a(String(v)));
+      // String coercion can throw on objects with no meaningful toString
+      // (e.g. frozen descriptors used as Show's then/else props). Hash a
+      // stable type token in that case rather than crashing.
+      try {
+        hash = hashMix(hash, fnv1a(String(v)));
+      } catch {
+        hash = hashMix(hash, fnv1a('[object]'));
+      }
     }
   }
 

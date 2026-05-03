@@ -1,20 +1,17 @@
 /**
  * SignalRenderer — fine-grained reactive mount for view descriptors.
  *
- * Replaces the VDOM Reconciler's "rebuild and diff on every state change"
- * model with: mount once, then bind reactive expressions (e.g. Text(() => …))
- * to their target DOM nodes via createEffect. Subsequent state changes
- * execute only the small effect closures, never the view body.
+ * Replaces the deleted VDOM Reconciler. View bodies run once at mount;
+ * subsequent state changes execute only the small effect closures bound
+ * to specific DOM nodes via createEffect. No tree diff, no patches.
  *
- * Phase 3 scope (MVP):
- *   - Reactive Text content via Text(() => ...) — implemented.
- *   - Reactive list/conditional rendering via Show/For/Switch — Phase 4.
- *   - Reactive modifier values (e.g. .foregroundColor(() => ...)) — deferred
- *     to Phase 5 when an example actually needs it (Counter doesn't).
+ * The reactive control-flow primitives (Show, For) are registered as
+ * regular type renderers in src/Core/Renderer.js so they Just Work when
+ * nested inside any container's children. SignalRenderer wraps the whole
+ * mount in createRoot — those handlers run their effects under that root.
  *
- * Reuses src/Core/Renderer.js for static element creation and the per-type
- * registry. After the eager render, we walk the DOM tree, find descriptors
- * with reactive bindings, and wrap the binding-apply step in createEffect.
+ * This module's remaining job is the post-render walk that wires
+ * Text(() => ...) thunks to their textContent updates.
  */
 
 import { render } from './Renderer.js';
@@ -24,12 +21,9 @@ import { createRoot, createEffect, onCleanup } from '../Data/Signal.js';
 /**
  * Mount a view tree into a container with fine-grained reactivity.
  *
- * @param {() => Object|Object} viewFactory - A function that returns the root
- *   descriptor, or the descriptor itself. Function form is preferred so the
- *   factory runs inside the root tracking scope (any signal reads at the
- *   top-level become subscriptions of the mount).
+ * @param {() => Object|Object} viewFactory - Returns the root descriptor.
  * @param {HTMLElement} container - Target container.
- * @returns {() => void} Disposer that tears down all effects + DOM.
+ * @returns {() => void} Disposer.
  */
 export function mount(viewFactory, container) {
   let dispose;
@@ -39,22 +33,18 @@ export function mount(viewFactory, container) {
 
     const view = typeof viewFactory === 'function' ? viewFactory() : viewFactory;
     const element = render(view);
-
-    // Patch reactive bindings on the rendered tree.
     bindReactive(element);
 
-    // Clear and append. Mirrors Reconciler.mount() semantics.
     const oldChild = container.firstChild;
     if (oldChild) releaseTree(oldChild);
     container.textContent = '';
-    container.appendChild(element);
+    if (element) container.appendChild(element);
 
-    // When the root is disposed, drop the DOM too.
     onCleanup(() => {
-      if (element.parentNode === container) {
+      if (element && element.parentNode === container) {
         container.removeChild(element);
       }
-      releaseTree(element);
+      if (element) releaseTree(element);
     });
   });
 
@@ -62,17 +52,14 @@ export function mount(viewFactory, container) {
 }
 
 /**
- * Walk a rendered DOM tree and install reactive bindings for any descriptor
- * that carries one. Currently handles:
+ * Walk the rendered DOM tree and install reactive bindings for any
+ * descriptor that carries one. Currently handles Text(() => ...).
+ * Show/For are handled by their own Renderer handlers.
  *
- *   Text(() => …)   →   effect that updates element.textContent
- *
- * Modifier thunks and Show/For/Switch are added in later phases.
- *
- * @param {HTMLElement} element
+ * @param {Node} element
  */
 function bindReactive(element) {
-  if (!element || element.nodeType !== 1) return; // Element nodes only
+  if (!element || element.nodeType !== 1) return;
 
   const desc = element._descriptor;
   if (desc) {
@@ -84,7 +71,6 @@ function bindReactive(element) {
     }
   }
 
-  // Recurse into children.
   const kids = element.children;
   for (let i = 0; i < kids.length; i++) {
     bindReactive(kids[i]);
