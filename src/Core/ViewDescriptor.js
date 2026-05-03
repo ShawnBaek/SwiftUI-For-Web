@@ -52,11 +52,15 @@ export function createDescriptor(type, props = {}, children = [], key = null, mo
     children: Object.freeze(children.filter(c => c != null)),
     key,
     modifiers: Object.freeze([...modifiers]),
-    // Optimization: cache hash for fast comparison
+    // Cached hashes for fast equality checks. _selfHash covers only this
+    // node's own type/props/modifiers (not its children) so the diff can
+    // distinguish "this node changed" from "a descendant changed". _hash
+    // includes children, used for whole-subtree skip optimization.
+    _selfHash: null,
     _hash: null
   };
 
-  // Compute a simple hash for fast equality checks
+  descriptor._selfHash = computeSelfHash(descriptor);
   descriptor._hash = computeHash(descriptor);
 
   return Object.freeze(descriptor);
@@ -167,7 +171,14 @@ function hashMix(hash, value) {
  * @param {Object} descriptor - View descriptor
  * @returns {number} Numeric hash
  */
-function computeHash(descriptor) {
+/**
+ * Hash of just this node's own type, key, props, and modifiers — children
+ * are *not* mixed in. The reconciler uses this to distinguish "this view's
+ * own attributes changed" from "a descendant's attributes changed", which
+ * lets it patch the affected leaf instead of re-rendering the entire
+ * ancestor chain.
+ */
+function computeSelfHash(descriptor) {
   let hash = fnv1a(descriptor.type);
 
   if (descriptor.key != null) {
@@ -211,6 +222,14 @@ function computeHash(descriptor) {
       hash = hashMix(hash, fnv1a(mv.rgba()));
     }
   }
+
+  return hash;
+}
+
+function computeHash(descriptor) {
+  let hash = descriptor._selfHash != null
+    ? descriptor._selfHash
+    : computeSelfHash(descriptor);
 
   // Mix in child hashes for content-sensitive diffing
   for (let i = 0; i < descriptor.children.length; i++) {

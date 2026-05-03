@@ -36,6 +36,62 @@ import { flushLifecycleCallbacks } from './LifecycleObserver.js';
 // Reusable arrays to avoid allocations during diffing
 const _patchBuffer = [];
 
+// Legacy views that wrap a Binding whose value mutates without changing the
+// Binding reference. They are synced in place (no element replacement) so
+// inputs keep their focus/selection across refreshes.
+const CONTROLLED_LEGACY_VIEWS = new Set([
+  'TextFieldView',
+  'SecureFieldView',
+  'ToggleView',
+  'SliderView',
+  'StepperView',
+  'PickerView',
+  'DatePickerView',
+  'ColorPickerView',
+]);
+
+/**
+ * Sync a controlled view's DOM in place from its current Binding value,
+ * without re-rendering. Updating only the targeted property preserves
+ * focus, selection, and any other transient browser state on the input.
+ */
+function syncControlledViewInPlace(element, view) {
+  if (!element || !view) return;
+
+  // TextField / SecureField — value lives on a single <input>.
+  const tagName = element.tagName;
+  if (tagName === 'INPUT') {
+    const desired = view._text != null && typeof view._text === 'object'
+      ? (view._text.value ?? '')
+      : '';
+    if (element.value !== desired) {
+      element.value = desired;
+    }
+    if (element.disabled !== !!view._isDisabled) {
+      element.disabled = !!view._isDisabled;
+    }
+    return;
+  }
+
+  // Toggle / Slider / Stepper — find the inner control and sync its value.
+  // These views render a wrapper div around an <input> or styled control.
+  const inner = element.querySelector('input');
+  if (inner) {
+    if (view._isOn != null && typeof view._isOn === 'object') {
+      const desired = !!view._isOn.value;
+      if (inner.checked !== desired) inner.checked = desired;
+    } else if (view._value != null && typeof view._value === 'object') {
+      const desired = String(view._value.value ?? '');
+      if (inner.value !== desired) inner.value = desired;
+    }
+    return;
+  }
+
+  // Switch-style toggle uses styled <div> with a `data-on` attribute
+  // (or similar). The view's own _render rebuilds it; that's already
+  // captured by the legacy property fallback below the call site.
+}
+
 /**
  * View node in the virtual tree
  */
@@ -62,14 +118,21 @@ class VNode {
     /** @type {boolean} Whether this node uses descriptors */
     this.isDescriptor = false;
 
-    /** @type {number|null} Descriptor hash for fast comparison */
+    /** @type {number|null} Descriptor hash for fast comparison (subtree). */
     this.hash = null;
+
+    /** @type {number|null} Hash of this node alone, excluding children. */
+    this.selfHash = null;
+
+    /** @type {number} Total nodes in this subtree (self + descendants). */
+    this.subtreeSize = 1;
 
     // Determine type and hash
     if (isDescriptor(view)) {
       this.type = view.type;
       this.isDescriptor = true;
       this.hash = view._hash;
+      this.selfHash = view._selfHash;
     } else {
       this.type = view?.constructor?.name || 'Unknown';
     }
@@ -160,15 +223,18 @@ class ReconcilerClass {
     if (children.length > 0) {
       const childNodes = new Array(children.length);
       let validCount = 0;
+      let descendantSum = 0;
       for (let i = 0; i < children.length; i++) {
         const childNode = this.buildTree(children[i], node.identity, i);
         if (childNode) {
           childNodes[validCount++] = childNode;
+          descendantSum += childNode.subtreeSize;
         }
       }
       if (validCount > 0) {
         childNodes.length = validCount;
         node.children = childNodes;
+        node.subtreeSize = 1 + descendantSum;
       }
     }
 
@@ -372,11 +438,15 @@ class ReconcilerClass {
       return;
     }
 
-    // Fast path: descriptor hash comparison
-    // If both nodes are descriptors and hashes match, skip entire subtree
+    // Fast path: descriptor identity / hash comparison
+    // If both nodes point to the same frozen descriptor, OR are explicitly
+    // memoized with matching subtree hashes, the entire subtree is reusable.
+    // Referential equality is sufficient because createDescriptor() returns
+    // frozen objects — when no consumed state changed, the closure produces
+    // the same reference, and we can skip diffing the whole branch.
     if (oldNode.isDescriptor && newNode.isDescriptor) {
-      if (oldNode.hash === newNode.hash && isMemoized(newNode.view)) {
-        // Subtree is identical - reuse entire DOM
+      if (oldNode.view === newNode.view ||
+          (oldNode.hash === newNode.hash && isMemoized(newNode.view))) {
         newNode.element = oldNode.element;
         newNode.children = oldNode.children;
         this._stats.subtreesSkipped++;
@@ -550,16 +620,34 @@ class ReconcilerClass {
 
     if (!oldView || !newView) return true;
 
-    // For descriptors, use fast equality check
+    // For descriptors, use fast equality check.
     if (oldNode.isDescriptor && newNode.isDescriptor) {
-      // Fast path: hash comparison (numeric, O(1))
-      if (oldNode.hash !== newNode.hash) return true;
+      // Use self-hash, not subtree-hash. A descendant's hash mismatch must
+      // not flag this node as self-changed — that would force an UPDATE
+      // that re-renders the whole subtree, defeating partial reconciliation.
+      if (oldNode.selfHash !== newNode.selfHash) return true;
 
       // Memoized descriptors are considered unchanged
       if (isMemoized(newView)) return false;
 
-      // Hashes match - do full comparison to rule out collision
-      return !descriptorsEqual(oldView, newView);
+      // Self-hashes match. The diff will recurse into children to detect
+      // any descendant change; this node itself does not need an UPDATE.
+      return false;
+    }
+
+    // Mixed legacy/descriptor or both-legacy:
+    //
+    // Controlled legacy views (TextField, SecureField, Toggle, Slider,
+    // Stepper, Picker, DatePicker, ColorPicker) hold a Binding object whose
+    // underlying value mutates without changing the Binding reference. We
+    // sync the DOM property in-place when the binding has drifted from the
+    // current DOM — re-rendering would destroy the <input>'s focus and
+    // selection on every keystroke (TodoApp typing bug).
+    if (!oldNode.isDescriptor || !newNode.isDescriptor) {
+      if (CONTROLLED_LEGACY_VIEWS.has(newNode.type)) {
+        syncControlledViewInPlace(oldNode.element, newView);
+        return false;
+      }
     }
 
     // For legacy views, check properties
@@ -617,12 +705,20 @@ class ReconcilerClass {
       }
     }
 
-    // If root needs full replace or too many patches, do full re-render
-    if (hasRootReplace || patches.length > 30) {
+    // Adaptive full-rerender threshold: scale with tree size so that small
+    // trees don't keep falling back to full re-render on a few patches, and
+    // large trees don't get stuck patching when a wholesale rebuild would
+    // actually be cheaper. The lower bound (50) keeps tiny trees responsive,
+    // and the proportional cap (30% of tree size) caps overhead on big ones.
+    const oldTreeSize = oldTree && oldTree.subtreeSize ? oldTree.subtreeSize : 1;
+    const adaptiveLimit = Math.max(50, oldTreeSize * 0.3);
+    if (hasRootReplace || patches.length > adaptiveLimit) {
       this._stats.fullRerenders++;
 
       if (this._debug) {
-        console.log('[Reconciler] Full re-render:', hasRootReplace ? 'root replaced' : 'too many patches');
+        console.log('[Reconciler] Full re-render:', hasRootReplace
+          ? 'root replaced'
+          : `${patches.length} patches > limit ${adaptiveLimit.toFixed(0)} (tree=${oldTreeSize})`);
       }
 
       // Recycle old tree elements

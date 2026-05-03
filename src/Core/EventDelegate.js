@@ -76,9 +76,15 @@ export function delegateEvent(element, eventType, handler, root) {
   }
   elementHandlers.set(eventType, handler);
 
-  // Ensure root listener exists
-  root = root || document.body;
-  ensureRootListener(root, eventType);
+  // Only attach a root listener when one is explicitly requested. The App's
+  // mount() already calls initDelegation() on the root element, which sets
+  // up listeners for the standard event types. Adding a redundant
+  // document.body listener here causes every event in the App's subtree to
+  // dispatch through TWO root handlers, firing each delegated handler twice
+  // (root cause of the Counter "+2 per click" bug).
+  if (root) {
+    ensureRootListener(root, eventType);
+  }
 }
 
 /**
