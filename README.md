@@ -13,7 +13,7 @@ SwiftUI-For-Web is a declarative UI framework that implements the **full SwiftUI
 
 ---
 
-## Why This Project Is Awesome
+## Key Features
 
 **Write SwiftUI. Ship to browsers. No build step.**
 
@@ -40,10 +40,10 @@ That's it. No `npm install`, no webpack, no JSX transpilation. Just an HTML file
 
 ### What makes it special
 
-- **100% SwiftUI API coverage** — 84 components faithfully matching Apple's [SwiftUI documentation](https://developer.apple.com/documentation/swiftui/). VStack, HStack, ZStack, NavigationStack, ObservableObject, @Published, Environment, ForEach, List... all of it.
+- **Similar with SwiftUI APIs** — 84 components faithfully matching Apple's [SwiftUI documentation](https://developer.apple.com/documentation/swiftui/). VStack, HStack, ZStack, NavigationStack, ObservableObject, @Published, Environment, ForEach, List... all of it.
 - **Swift Charts for Web** — `Chart`, `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `SectorMark`, `RuleMark` — the same declarative charting API from [Swift Charts](https://developer.apple.com/documentation/charts).
 - **Zero dependencies** — No npm packages. No build tools. No bundlers. Copy the `src/` folder and go.
-- **Faster than React 19** — Microtask batching, DOM element recycling, event delegation, and FNV-1a hash diffing deliver lower latency rendering. See [benchmarks](#performance).
+- **Good Performance** — Microtask batching, DOM element recycling, event delegation, and FNV-1a hash diffing deliver lower latency rendering. See [benchmarks](#performance).
 - **~88 KB gzipped** (core) / **~100 KB gzipped** (core + charts) — lighter than React+ReactDOM (~136KB).
 - **Instant developer experience** — Clone, open in browser, start building. No 5-minute setup, no config files.
 - **SwiftUI developers feel at home** — iOS/macOS developers can build web UIs without learning a new paradigm.
