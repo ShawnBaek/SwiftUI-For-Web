@@ -1,5 +1,21 @@
 # Benchmark Results — SwiftUI-For-Web vs React 19 vs Solid.js
 
+> **Note (post signal-engine cutover, 2026-05-04).** The framework's VDOM
+> reconciler has been replaced with a fine-grained signal engine. The
+> harness in `benchmark.js` was built for the reconciler model — it
+> bypasses the State setter (`data._value = …`) and triggers updates via
+> `app.refresh()`. On the signal engine `app.refresh()` is a no-op, so
+> seven of the twelve scenarios now measure "nothing happening" and report
+> sub-millisecond times that are NOT comparable to the React/Solid columns.
+>
+> The five **complex view tree** scenarios at the bottom are still valid —
+> they don't depend on `app.refresh()` semantics. Until the harness is
+> rewritten to use signal-driven mutations (`Text(() => …)` + setter
+> writes), only those rows below should be cited as honest comparisons.
+>
+> The historical "after C.3" numbers (kept as the second-to-last column)
+> were the last apples-to-apples baseline before the cutover.
+
 3-way micro-benchmark comparing rendering, re-rendering, and DOM throughput.
 Methodology: median of N iterations (5–15 per scenario), headless Chromium,
 identical DOM target structures, no React.memo on non-leaf nodes, Solid uses
