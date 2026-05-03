@@ -3,27 +3,24 @@
  *
  * Matches SwiftUI's @main App pattern for bootstrapping the application.
  *
- * Performance features:
- * - Automatic update batching via Scheduler (multiple state changes = 1 re-render)
- * - Event delegation (single root listener per event type)
- * - Partial updates via Reconciler with element pooling
- * - Lifecycle callback batching
+ * Engine: fine-grained reactive (no virtual DOM, no diffing). The view
+ * factory runs once at mount inside a signal root scope; subsequent state
+ * changes execute only the small effect closures bound to the affected
+ * DOM nodes. There is no app.refresh() — state writes auto-propagate.
  *
  * @example
  * App(() =>
  *   VStack(
- *     Text('Hello, SwiftUI for Web!')
+ *     Text(() => 'Count: ' + count.value)
  *       .font(Font.largeTitle)
  *   )
  * ).mount('#root')
  */
 
 import { View } from '../Core/View.js';
-import { Reconciler } from '../Core/Reconciler.js';
-import { ChangeTracker } from '../Core/ChangeTracker.js';
 import { isDescriptor } from '../Core/ViewDescriptor.js';
-import { scheduleWork, DefaultLane } from '../Core/Scheduler.js';
 import { initDelegation, teardownDelegation } from '../Core/EventDelegate.js';
+import { mount as signalMount } from '../Core/SignalRenderer.js';
 
 /**
  * App class implementation for mounting views to the DOM.
@@ -33,51 +30,24 @@ class AppInstance {
    * Creates a new App instance.
    *
    * @param {Function|View} content - View factory function or View class/instance
+   * @param {Object} [options] - Reserved for future use (e.g. dev-mode flags).
    */
-  constructor(content) {
+  constructor(content, options) {
     this._content = content;
+    this._options = options || {};
     this._rootElement = null;
     this._mountedView = null;
-    this._useReconciler = true;
     this._debugMode = false;
     this._renderCount = 0;
-    this._refreshScheduled = false;
-
-    // Bound function for scheduler deduplication
-    this._boundRefresh = () => {
-      this._refreshScheduled = false;
-      this._doRefresh();
-    };
+    this._signalDispose = null;
   }
 
   /**
-   * Enable debug mode - logs render information and enables change tracking.
-   *
-   * @returns {AppInstance} Returns this for chaining
+   * Enable debug mode (logs mount events).
+   * @returns {AppInstance}
    */
   debug() {
     this._debugMode = true;
-    Reconciler.enableDebug();
-    return this;
-  }
-
-  /**
-   * Disable partial updates (use full re-render).
-   *
-   * @returns {AppInstance} Returns this for chaining
-   */
-  disableReconciler() {
-    this._useReconciler = false;
-    return this;
-  }
-
-  /**
-   * Enable partial updates via reconciler.
-   *
-   * @returns {AppInstance} Returns this for chaining
-   */
-  enableReconciler() {
-    this._useReconciler = true;
     return this;
   }
 
@@ -88,7 +58,6 @@ class AppInstance {
    * @returns {AppInstance} Returns this for chaining
    */
   mount(selector) {
-    // Get the root element
     if (typeof selector === 'string') {
       this._rootElement = document.querySelector(selector);
     } else if (selector instanceof HTMLElement) {
@@ -100,32 +69,20 @@ class AppInstance {
       return this;
     }
 
-    // Initialize event delegation on the root element
     initDelegation(this._rootElement);
-
-    // Clear existing content
     this._rootElement.textContent = '';
 
-    // Create the view
-    this._mountedView = this._createView();
+    // Fine-grained mount. The factory runs inside the signal root scope,
+    // so any signal reads at the top-level become subscriptions and
+    // re-execute the appropriate effects on write — no refresh() call.
+    this._signalDispose = signalMount(
+      () => (this._mountedView = this._createView()),
+      this._rootElement,
+    );
 
-    if (this._mountedView) {
-      this._renderCount++;
-
-      if (this._debugMode) {
-        console.log(`[App] Mount #${this._renderCount}`);
-      }
-
-      if (this._useReconciler) {
-        Reconciler.mount(this._mountedView, this._rootElement);
-      } else {
-        const element = this._mountedView._render();
-        this._rootElement.appendChild(element);
-      }
-
-      // Mark as mounted
-      this._rootElement.dataset.swiftuiMounted = 'true';
-    }
+    this._renderCount++;
+    if (this._debugMode) console.log(`[App] Mount #${this._renderCount}`);
+    this._rootElement.dataset.swiftuiMounted = 'true';
 
     return this;
   }
@@ -144,11 +101,9 @@ class AppInstance {
         return new content();
       }
       const result = content();
-
       if (result instanceof View || isDescriptor(result)) {
         return result;
       }
-
       return result;
     }
 
@@ -167,14 +122,13 @@ class AppInstance {
    */
   unmount() {
     if (this._rootElement) {
-      // Tear down event delegation
       teardownDelegation(this._rootElement);
 
-      if (this._useReconciler) {
-        Reconciler.unmount(this._rootElement);
-      } else {
-        this._rootElement.textContent = '';
+      if (this._signalDispose) {
+        this._signalDispose();
+        this._signalDispose = null;
       }
+
       delete this._rootElement.dataset.swiftuiMounted;
       this._mountedView = null;
     }
@@ -182,70 +136,15 @@ class AppInstance {
   }
 
   /**
-   * Schedule a re-render via the Scheduler.
-   * Multiple calls within the same microtask are coalesced into a single re-render.
-   * This is the primary way state changes trigger UI updates.
+   * No-op on the signals engine — state writes auto-propagate.
+   * Kept for backwards compatibility with un-migrated callers; warns in
+   * debug mode so they can be found and removed.
    *
-   * @returns {AppInstance} Returns this for chaining
+   * @returns {AppInstance}
    */
   refresh() {
-    if (!this._rootElement) return this;
-
-    if (!this._refreshScheduled) {
-      this._refreshScheduled = true;
-      scheduleWork(this._boundRefresh, DefaultLane);
-    }
-
-    return this;
-  }
-
-  /**
-   * Actually perform the re-render. Called by the Scheduler.
-   * @private
-   */
-  _doRefresh() {
-    if (!this._rootElement) return;
-
-    this._renderCount++;
-
-    const newView = this._createView();
-    if (!newView) return;
-
     if (this._debugMode) {
-      console.log(`[App] Refresh #${this._renderCount}`);
-    }
-
-    if (this._useReconciler) {
-      Reconciler.update(newView, this._rootElement);
-    } else {
-      this._rootElement.textContent = '';
-      const element = newView._render();
-      this._rootElement.appendChild(element);
-    }
-
-    this._mountedView = newView;
-  }
-
-  /**
-   * Force a full re-render (bypasses reconciler and scheduler).
-   *
-   * @returns {AppInstance} Returns this for chaining
-   */
-  forceRefresh() {
-    if (this._rootElement) {
-      this._renderCount++;
-
-      if (this._debugMode) {
-        console.log(`[App] Force Refresh #${this._renderCount}`);
-      }
-
-      this._rootElement.textContent = '';
-      this._mountedView = this._createView();
-
-      if (this._mountedView) {
-        const element = this._mountedView._render();
-        this._rootElement.appendChild(element);
-      }
+      console.warn('[App] refresh() is a no-op on the signals engine — state writes auto-propagate via tracked effects.');
     }
     return this;
   }
@@ -267,7 +166,7 @@ class AppInstance {
   }
 
   /**
-   * Gets the render count.
+   * Gets the render count (mount count, since there are no re-renders).
    * @returns {number}
    */
   get renderCount() {
@@ -275,15 +174,14 @@ class AppInstance {
   }
 
   /**
-   * Get comprehensive performance statistics.
+   * Diagnostic stats (mostly empty since there's no reconciler to ask).
    * @returns {Object}
    */
   getStats() {
     return {
       renderCount: this._renderCount,
-      reconcilerEnabled: this._useReconciler,
+      engine: 'signals',
       debugMode: this._debugMode,
-      ...Reconciler.getStats()
     };
   }
 }
@@ -292,10 +190,11 @@ class AppInstance {
  * Factory function for creating App instances.
  *
  * @param {Function|View} content - View factory function or View class/instance
+ * @param {Object} [options] - Reserved for future use.
  * @returns {AppInstance} A new App instance
  */
-export function App(content) {
-  return new AppInstance(content);
+export function App(content, options) {
+  return new AppInstance(content, options);
 }
 
 export { AppInstance };

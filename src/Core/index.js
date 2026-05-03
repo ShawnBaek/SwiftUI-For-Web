@@ -4,8 +4,8 @@
  */
 
 export { View, default as ViewDefault } from './View.js';
-export { Reconciler } from './Reconciler.js';
 export { ChangeTracker, createTrackedProperty } from './ChangeTracker.js';
+export { mount as signalMount } from './SignalRenderer.js';
 
 // New descriptor-based system
 export {
