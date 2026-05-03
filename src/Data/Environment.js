@@ -1,3 +1,5 @@
+import { trackObservers, notifyObserversSet } from './Signal.js';
+
 /**
  * Environment - Provides access to environment values
  *
@@ -138,9 +140,25 @@ class EnvironmentStore {
     this._values = new Map();
     this._objects = new Map();
     this._subscribers = new Map();
+    // Per-key observer Sets for the signal-tracking machinery.
+    // Lazily populated on first tracked read.
+    this._keyObservers = new Map();
 
     // Initialize with system defaults
     this._initializeDefaults();
+  }
+
+  /**
+   * Get (or lazily create) the observer Set for a key.
+   * @private
+   */
+  _observersForKey(key) {
+    let set = this._keyObservers.get(key);
+    if (!set) {
+      set = new Set();
+      this._keyObservers.set(key, set);
+    }
+    return set;
   }
 
   /**
@@ -247,6 +265,7 @@ class EnvironmentStore {
    * @returns {*} The environment value
    */
   get(key) {
+    trackObservers(this._observersForKey(key));
     return this._values.get(key);
   }
 
@@ -262,6 +281,7 @@ class EnvironmentStore {
     // Notify subscribers
     if (oldValue !== value) {
       this._notifySubscribers(key, value, oldValue);
+      notifyObserversSet(this._observersForKey(key));
     }
   }
 

@@ -521,6 +521,56 @@ async function runTests() {
       });
     });
 
+    // Phase 2 — compat shim: existing State / ObservableObject reads
+    // auto-track when a signal computation is active.
+    describe('Compat shim: State auto-tracks in createEffect', () => {
+      it('createEffect over state.value re-runs on write — no explicit subscribe', () => {
+        const state = new State(0);
+        let last = -1;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { last = state.value; });
+        });
+        expect(last).toBe(0);
+        state.value = 5;
+        Scheduler.flushSync();
+        expect(last).toBe(5);
+      });
+
+      it('binding reads also auto-track', () => {
+        const state = new State(10);
+        let last = -1;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { last = state.binding.value; });
+        });
+        expect(last).toBe(10);
+        state.value = 20;
+        Scheduler.flushSync();
+        expect(last).toBe(20);
+      });
+
+      it('writes outside a tracking scope still notify legacy subscribers', () => {
+        const state = new State(0);
+        let received = -1;
+        const dispose = state.subscribe((v) => { received = v; });
+        state.value = 7;
+        Scheduler.flushSync();
+        expect(received).toBe(7);
+        dispose();
+      });
+
+      it('untrack inside effect prevents re-runs', () => {
+        const state = new State(0);
+        let runs = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { Signal.untrack(() => state.value); runs++; });
+        });
+        expect(runs).toBe(1);
+        state.value = 1;
+        Scheduler.flushSync();
+        expect(runs).toBe(1);
+      });
+    });
+
     // Test ObservableObject
     const { ObservableObject, Published, createObservable } = await import('./src/Data/ObservableObject.js');
     describe('ObservableObject', () => {
@@ -584,6 +634,56 @@ async function runTests() {
         expect(observable.age).toBe(30);
       });
     });
+
+    describe('Compat shim: ObservableObject auto-tracks in createEffect', () => {
+      it('published-property reads register the active computation', () => {
+        class VM extends ObservableObject {
+          constructor() { super(); this.published('count', 0); this.published('name', 'a'); }
+        }
+        const vm = new VM();
+        let lastCount = -1;
+        let countRuns = 0;
+        let nameRuns = 0;
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { lastCount = vm.count; countRuns++; });
+          Signal.createEffect(() => { vm.name; nameRuns++; });
+        });
+        expect(lastCount).toBe(0);
+        expect(countRuns).toBe(1);
+        expect(nameRuns).toBe(1);
+
+        vm.count = 5;
+        Scheduler.flushSync();
+        expect(lastCount).toBe(5);
+        expect(countRuns).toBe(2);
+        // The 'name' effect must NOT re-run on a 'count' write.
+        expect(nameRuns).toBe(1);
+
+        vm.name = 'b';
+        Scheduler.flushSync();
+        expect(nameRuns).toBe(2);
+        expect(countRuns).toBe(2);
+      });
+
+      it('binding(name) reads also auto-track', () => {
+        class VM extends ObservableObject {
+          constructor() { super(); this.published('text', ''); }
+        }
+        const vm = new VM();
+        let last = '?';
+        Signal.createRoot(() => {
+          Signal.createEffect(() => { last = vm.binding('text').value; });
+        });
+        expect(last).toBe('');
+        vm.text = 'hi';
+        Scheduler.flushSync();
+        expect(last).toBe('hi');
+      });
+    });
+
+    // Note: Environment auto-tracking is verified via e2e tests; this Node
+    // runner can't import src/Data/Environment.js (it touches window/navigator
+    // at module-load time).
 
     // Test Color
     const { Color, ColorValue } = await import('./src/Graphic/Color.js');

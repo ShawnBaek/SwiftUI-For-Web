@@ -21,6 +21,7 @@
 
 import { Binding } from './Binding.js';
 import { scheduleWork, DefaultLane } from '../Core/Scheduler.js';
+import { trackObservers, notifyObserversSet } from './Signal.js';
 
 /**
  * ObservableObject base class
@@ -36,6 +37,22 @@ export class ObservableObject {
     this._boundNotify = null;
     this._batchDepth = 0;
     this._batchDirty = false;
+    // Per-property observer Sets for the signal-tracking machinery.
+    // Lazily populated on first tracked read.
+    this._propertyObservers = new Map();
+  }
+
+  /**
+   * Get (or lazily create) the observer Set for a published property.
+   * @private
+   */
+  _observersFor(name) {
+    let set = this._propertyObservers.get(name);
+    if (!set) {
+      set = new Set();
+      this._propertyObservers.set(name, set);
+    }
+    return set;
   }
 
   /**
@@ -49,13 +66,20 @@ export class ObservableObject {
 
     // Define getter/setter on this object
     Object.defineProperty(this, name, {
-      get: () => this._publishedProperties.get(name),
+      get: () => {
+        // Register the active signal-tracking computation (if any)
+        // against this property's observer Set.
+        trackObservers(this._observersFor(name));
+        return this._publishedProperties.get(name);
+      },
       set: (newValue) => {
         const oldValue = this._publishedProperties.get(name);
         if (oldValue !== newValue) {
           this._publishedProperties.set(name, newValue);
           this._notifyPropertyChange(name, newValue, oldValue);
           this._scheduleNotification();
+          // Wake any tracked computations subscribed to this property.
+          notifyObserversSet(this._observersFor(name));
         }
       },
       enumerable: true,
