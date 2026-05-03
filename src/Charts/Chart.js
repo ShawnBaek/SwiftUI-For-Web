@@ -329,8 +329,12 @@ export class Chart extends View {
   _render() {
     const container = document.createElement('div');
     container.style.width = `${this._width}px`;
-    container.style.height = `${this._height}px`;
+    // min-height (not height) so the legend appended after the SVG can grow
+    // the container instead of overflowing into the next section.
+    container.style.minHeight = `${this._height}px`;
     container.style.position = 'relative';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
 
     if (this._backgroundColor) {
       container.style.backgroundColor = this._backgroundColor;

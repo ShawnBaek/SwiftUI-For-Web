@@ -158,6 +158,7 @@ export function Header() {
       el.style.top = '0';
       el.style.backgroundColor = 'white';
       el.style.zIndex = '100';
+      el.style.width = '100%';
     }
   });
 }
