@@ -12,6 +12,7 @@
 
 import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
+import { createEffect, untrack } from '../../Data/Signal.js';
 
 /**
  * ToggleView class - boolean switch control
@@ -120,8 +121,9 @@ export class ToggleView extends View {
     thumb.style.transition = 'left 0.2s ease';
     thumb.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
 
-    // Update visual state based on isOn
-    const updateState = () => {
+    // Reactive visual state — re-runs when _isOn binding changes from any
+    // source (user click OR external write like vm.isOn = …).
+    createEffect(() => {
       const isOn = this._isOn.value;
       if (isOn) {
         track.style.backgroundColor = this._tint || 'rgba(52, 199, 89, 1)'; // iOS green
@@ -130,9 +132,8 @@ export class ToggleView extends View {
         track.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
         thumb.style.left = '2px';
       }
-    };
+    });
 
-    updateState();
     track.appendChild(thumb);
 
     // Label
@@ -146,11 +147,10 @@ export class ToggleView extends View {
 
     container.appendChild(track);
 
-    // Click handler
+    // Click handler — toggle the binding; the effect above re-renders.
     if (!this._isDisabled) {
       container.addEventListener('click', () => {
-        this._isOn.value = !this._isOn.value;
-        updateState();
+        untrack(() => { this._isOn.value = !this._isOn.value; });
       });
     }
 
@@ -176,7 +176,6 @@ export class ToggleView extends View {
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.checked = this._isOn.value;
     checkbox.disabled = this._isDisabled;
     checkbox.style.width = '18px';
     checkbox.style.height = '18px';
@@ -186,8 +185,14 @@ export class ToggleView extends View {
       checkbox.style.accentColor = this._tint;
     }
 
+    // Reactive sync: keep checkbox.checked aligned with the binding.
+    createEffect(() => {
+      const desired = !!this._isOn.value;
+      if (checkbox.checked !== desired) checkbox.checked = desired;
+    });
+
     checkbox.addEventListener('change', () => {
-      this._isOn.value = checkbox.checked;
+      untrack(() => { this._isOn.value = checkbox.checked; });
     });
 
     container.appendChild(checkbox);
@@ -225,8 +230,8 @@ export class ToggleView extends View {
     button.style.fontSize = 'inherit';
     button.style.transition = 'background-color 0.2s ease';
 
-    // Update visual state
-    const updateState = () => {
+    // Reactive visual state — re-runs when the binding changes.
+    createEffect(() => {
       const isOn = this._isOn.value;
       if (isOn) {
         button.style.backgroundColor = this._tint || 'rgba(0, 122, 255, 1)';
@@ -235,9 +240,7 @@ export class ToggleView extends View {
         button.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
         button.style.color = 'inherit';
       }
-    };
-
-    updateState();
+    });
 
     // Label
     if (this._label) {
@@ -246,11 +249,10 @@ export class ToggleView extends View {
       button.appendChild(this._labelView._render());
     }
 
-    // Click handler
+    // Click handler — toggle the binding; the effect above re-renders.
     button.addEventListener('click', () => {
       if (!this._isDisabled) {
-        this._isOn.value = !this._isOn.value;
-        updateState();
+        untrack(() => { this._isOn.value = !this._isOn.value; });
       }
     });
 

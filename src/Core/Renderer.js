@@ -84,6 +84,13 @@ export function render(descriptor) {
     applyModifiers(element, descriptor.modifiers);
   }
 
+  // Tag with descriptor type for e2e selectors and devtools inspection.
+  // Per-type renderers may override (e.g. TextField sets 'TextField' on
+  // the inner <input>) — we don't clobber a more specific value.
+  if (element && element.dataset && !element.dataset.view) {
+    element.dataset.view = descriptor.type;
+  }
+
   // Store descriptor reference for reconciliation
   element._descriptor = descriptor;
 

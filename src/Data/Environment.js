@@ -241,22 +241,12 @@ class EnvironmentStore {
       ? UserInterfaceSizeClass.compact
       : UserInterfaceSizeClass.regular;
 
-    const oldHorizontal = this._values.get(EnvironmentValues.horizontalSizeClass);
-    const oldVertical = this._values.get(EnvironmentValues.verticalSizeClass);
-
-    this._values.set(EnvironmentValues.horizontalSizeClass, horizontalClass);
-    this._values.set(EnvironmentValues.verticalSizeClass, verticalClass);
-
-    // Also update device idiom
-    this._values.set('deviceIdiom', currentDeviceIdiom());
-
-    // Notify if changed
-    if (oldHorizontal !== horizontalClass) {
-      this._notifySubscribers(EnvironmentValues.horizontalSizeClass, horizontalClass, oldHorizontal);
-    }
-    if (oldVertical !== verticalClass) {
-      this._notifySubscribers(EnvironmentValues.verticalSizeClass, verticalClass, oldVertical);
-    }
+    // Route through set() so legacy subscribers AND signal-tracking
+    // observers both get notified. Direct _values.set bypasses the
+    // signal-engine observer notification (Phase 2 shim).
+    this.set(EnvironmentValues.horizontalSizeClass, horizontalClass);
+    this.set(EnvironmentValues.verticalSizeClass, verticalClass);
+    this.set('deviceIdiom', currentDeviceIdiom());
   }
 
   /**
@@ -278,10 +268,15 @@ class EnvironmentStore {
     const oldValue = this._values.get(key);
     this._values.set(key, value);
 
-    // Notify subscribers
     if (oldValue !== value) {
-      this._notifySubscribers(key, value, oldValue);
+      // Wake signal observers FIRST so a throwing legacy subscriber can't
+      // strand fine-grained reactive bindings.
       notifyObserversSet(this._observersForKey(key));
+      try {
+        this._notifySubscribers(key, value, oldValue);
+      } catch (e) {
+        console.error('[Environment] subscriber threw:', e);
+      }
     }
   }
 

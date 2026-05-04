@@ -80,6 +80,11 @@ import { ForEach, Range } from './View/List/ForEach.js';
 import { Show } from './View/ControlFlow/Show.js';
 import { For } from './View/ControlFlow/For.js';
 
+// Public reactive helpers — for modifier-body reactivity that the
+// framework can't infer (e.g. setting el.style from a tracked read).
+// Returns a disposer; cleanup happens automatically via the active owner.
+import { createEffect as effect, untrack } from './Data/Signal.js';
+
 // Containers
 import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
 import { Group, GroupView } from './View/Container/Group.js';
@@ -308,6 +313,8 @@ const SwiftUI = {
   // Reactive control flow (signal engine)
   Show,
   For,
+  effect,
+  untrack,
 
   // Containers
   ScrollView, ScrollViewView, Axis,
@@ -456,6 +463,8 @@ export {
   // Reactive control flow (signal engine)
   Show,
   For,
+  effect,
+  untrack,
 
   // Containers
   ScrollView, ScrollViewView, Axis,

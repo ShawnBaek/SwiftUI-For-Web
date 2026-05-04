@@ -9,7 +9,7 @@ import SwiftUI from '../../../../src/index.js';
 const {
   VStack, HStack,
   Text, Button, Group,
-  Show, For,
+  Show, For, effect,
   Color, Font
 } = SwiftUI;
 
@@ -42,9 +42,16 @@ export function ListingGrid() {
       .modifier({
         apply(el) {
           el.style.display = 'grid';
-          el.style.gridTemplateColumns = `repeat(${vm.gridColumns}, 1fr)`;
           el.style.gap = '24px';
           el.style.width = '100%';
+          // Reactive: re-runs on resize. vm.gridColumns reads
+          // window.innerWidth (not a signal) so we explicitly subscribe to
+          // vm.horizontalSizeClass — which Environment.set()s on resize —
+          // before computing the column count.
+          effect(() => {
+            vm.horizontalSizeClass; // subscribe to size-class signal
+            el.style.gridTemplateColumns = `repeat(${vm.gridColumns}, 1fr)`;
+          });
         }
       }),
     ),

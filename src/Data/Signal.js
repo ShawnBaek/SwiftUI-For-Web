@@ -206,6 +206,13 @@ function createComputation(fn, owner, options, pure) {
 
     const prevComp = currentComputation;
     const prevOwner = currentOwner;
+    // Reset untrackDepth — an effect's body is its OWN tracking scope.
+    // Without this, an effect created inside an untrack(...) call (e.g.
+    // For/Show wrap their per-row mounts in untrack to isolate the
+    // outer effect from inner reads) would inherit untrackDepth > 0 and
+    // fail to register any of its own tracked reads.
+    const prevUntrack = untrackDepth;
+    untrackDepth = 0;
     currentComputation = comp;
     currentOwner = comp;
     try {
@@ -213,6 +220,7 @@ function createComputation(fn, owner, options, pure) {
     } finally {
       currentComputation = prevComp;
       currentOwner = prevOwner;
+      untrackDepth = prevUntrack;
     }
   };
 

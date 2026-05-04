@@ -13,7 +13,7 @@ const {
   // Controls
   Button, TextField, SecureField, Toggle, Slider, Stepper, Picker, Menu, DatePicker, ColorPicker,
   // Lists
-  List, ForEach, Section,
+  List, ForEach, For, Show, Section,
   // Containers
   ScrollView, Group, Form, DisclosureGroup,
   // Navigation
@@ -296,7 +296,7 @@ const ControlSection = () =>
       HStack({ spacing: 16 },
         Toggle(vm.binding('isOn'))
           .modifier({ apply(el) { el.dataset.testid = 'toggle'; } }),
-        Text(vm.isOn ? 'ON' : 'OFF')
+        Text(() => vm.isOn ? 'ON' : 'OFF')
           .modifier({ apply(el) { el.dataset.testid = 'toggle-label'; } })
       )
     ),
@@ -308,7 +308,7 @@ const ControlSection = () =>
         Slider(vm.binding('sliderValue'), { min: 0, max: 100 })
           .frame({ width: 150 })
           .modifier({ apply(el) { el.dataset.testid = 'slider'; } }),
-        Text(String(Math.round(vm.sliderValue)))
+        Text(() => String(Math.round(vm.sliderValue)))
           .modifier({ apply(el) { el.dataset.testid = 'slider-value'; } })
       )
     ),
@@ -316,7 +316,10 @@ const ControlSection = () =>
     // Stepper
     VStack({ alignment: 'leading', spacing: 4 },
       ComponentLabel('Stepper'),
-      Stepper(`Value: ${vm.counter}`, {
+      // Stepper label is static here — the live counter value is shown via
+      // the dedicated Text(() => String(vm.counter)) binding in the State
+      // section below; Stepper just exercises increment/decrement actions.
+      Stepper('Value: counter', {
         onIncrement: () => vm.increment(),
         onDecrement: () => vm.decrement()
       })
@@ -366,13 +369,16 @@ const ListSection = () =>
     VStack({ alignment: 'leading', spacing: 4 },
       ComponentLabel('ForEach'),
       VStack({ alignment: 'leading', spacing: 4 },
-        ForEach(vm.items, { id: (item, i) => i }, (item, index) =>
-          HStack({ spacing: 8 },
-            Text(item).modifier({ apply(el) { el.dataset.testid = `foreach-item-${index}`; } }),
-            Button('X', () => vm.removeItem(index))
-              .foregroundColor(Color.red)
-              .modifier({ apply(el) { el.dataset.testid = `foreach-remove-${index}`; } })
-          )
+        For(
+          () => vm.items,
+          (item, index) =>
+            HStack({ spacing: 8 },
+              Text(item).modifier({ apply(el) { el.dataset.testid = `foreach-item-${index}`; } }),
+              Button('X', () => vm.removeItem(index))
+                .foregroundColor(Color.red)
+                .modifier({ apply(el) { el.dataset.testid = `foreach-remove-${index}`; } })
+            ),
+          (item, i) => `${item}-${i}`,
         )
       )
       .modifier({ apply(el) { el.dataset.testid = 'foreach-container'; } }),
@@ -588,7 +594,7 @@ const StateSection = () =>
           .foregroundColor(Color.white)
           .cornerRadius(8)
           .modifier({ apply(el) { el.dataset.testid = 'counter-decrement'; } }),
-        Text(String(vm.counter))
+        Text(() => String(vm.counter))
           .font(Font.system(24, Font.Weight.bold))
           .frame({ width: 60 })
           .modifier({ apply(el) { el.dataset.testid = 'counter-value'; } }),
@@ -608,7 +614,7 @@ const StateSection = () =>
         .textFieldStyle('roundedBorder')
         .frame({ width: 200 })
         .modifier({ apply(el) { el.dataset.testid = 'binding-input'; } }),
-      Text(`Current: ${vm.text}`)
+      Text(() => `Current: ${vm.text}`)
         .modifier({ apply(el) { el.dataset.testid = 'binding-output'; } })
     ),
 
@@ -618,7 +624,7 @@ const StateSection = () =>
       HStack({ spacing: 12 },
         Toggle(vm.binding('isOn'))
           .modifier({ apply(el) { el.dataset.testid = 'binding-toggle'; } }),
-        Text(vm.isOn ? 'Enabled' : 'Disabled')
+        Text(() => vm.isOn ? 'Enabled' : 'Disabled')
           .modifier({ apply(el) { el.dataset.testid = 'binding-toggle-status'; } })
       )
     ),
@@ -626,20 +632,23 @@ const StateSection = () =>
     // Dynamic list test (partial re-rendering)
     VStack({ alignment: 'leading', spacing: 8 },
       ComponentLabel('Dynamic List (Partial Re-render)'),
-      Text(`Items: ${vm.items.length}`)
+      Text(() => `Items: ${vm.items.length}`)
         .modifier({ apply(el) { el.dataset.testid = 'dynamic-list-count'; } }),
       VStack({ alignment: 'leading', spacing: 4 },
-        ForEach(vm.items, { id: (item, i) => `${item}-${i}` }, (item, index) =>
-          HStack({ spacing: 8 },
-            Text(item).modifier({ apply(el) { el.dataset.testid = `dynamic-item-${index}`; } }),
-            Button('Remove', () => vm.removeItem(index))
-              .foregroundColor(Color.red)
-              .font(Font.caption)
-              .modifier({ apply(el) { el.dataset.testid = `dynamic-remove-${index}`; } })
-          )
-          .padding(8)
-          .background(Color.hex('#f0f0f0'))
-          .cornerRadius(4)
+        For(
+          () => vm.items,
+          (item, index) =>
+            HStack({ spacing: 8 },
+              Text(item).modifier({ apply(el) { el.dataset.testid = `dynamic-item-${index}`; } }),
+              Button('Remove', () => vm.removeItem(index))
+                .foregroundColor(Color.red)
+                .font(Font.caption)
+                .modifier({ apply(el) { el.dataset.testid = `dynamic-remove-${index}`; } })
+            )
+            .padding(8)
+            .background(Color.hex('#f0f0f0'))
+            .cornerRadius(4),
+          (item, i) => `${item}-${i}`,
         )
       )
       .modifier({ apply(el) { el.dataset.testid = 'dynamic-list-container'; } }),
@@ -677,25 +686,10 @@ function TestShowcase() {
   .modifier({ apply(el) { el.dataset.testid = 'test-showcase'; } });
 }
 
-// Mount the app
+// Mount. Reactive Text(() => …) thunks + For/Show drive updates;
+// no subscribe/refresh plumbing needed on the signals engine.
 const app = App(TestShowcase);
 app.mount('#root');
-
-// Set up reactive updates with debouncing to prevent excessive re-renders
-let refreshPending = false;
-function debouncedRefresh() {
-  if (refreshPending) return;
-  refreshPending = true;
-  requestAnimationFrame(() => {
-    refreshPending = false;
-    // Use forceRefresh to bypass reconciler for more reliable updates
-    app.forceRefresh();
-  });
-}
-
-vm.subscribe(() => {
-  debouncedRefresh();
-});
 
 // Export for testing access
 window.testViewModel = vm;
