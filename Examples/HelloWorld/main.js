@@ -44,5 +44,5 @@ const FeatureRow = (label) =>
       .font(Font.body)
   );
 
-// Mount the app
+// Mount.
 App(ContentView).mount('#root');

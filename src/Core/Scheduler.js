@@ -180,27 +180,47 @@ export function flushSync() {
   if (_isFlushing) return;
   _isFlushing = true;
 
+  // Re-iterate until all microtask-priority lanes are quiescent. A callback
+  // run during this flush can enqueue more work at the same or higher
+  // priority (e.g. a memo whose recompute schedules its observers); without
+  // the outer loop, that work was stranded until the next microtask tick.
+  // Cap the iterations so a runaway self-rescheduling effect surfaces as
+  // an explicit error instead of an infinite loop.
+  const MAX_ITERATIONS = 100;
+  let iteration = 0;
+
   try {
-    // Process lanes in priority order
-    for (let lane = SyncLane; lane <= DefaultLane; lane++) {
-      const work = _pendingWork.get(lane);
-      if (work.size === 0) continue;
+    for (;;) {
+      let didWork = false;
+      for (let lane = SyncLane; lane <= DefaultLane; lane++) {
+        const work = _pendingWork.get(lane);
+        if (work.size === 0) continue;
+        didWork = true;
 
-      _stats.totalFlushes++;
-      _stats.maxBatchSize = Math.max(_stats.maxBatchSize, work.size);
-      _stats.batchedUpdates += work.size;
+        _stats.totalFlushes++;
+        _stats.maxBatchSize = Math.max(_stats.maxBatchSize, work.size);
+        _stats.batchedUpdates += work.size;
 
-      // Copy and clear before executing (callbacks may schedule more work)
-      const callbacks = Array.from(work);
-      work.clear();
+        // Copy and clear before executing (callbacks may schedule more work)
+        const callbacks = Array.from(work);
+        work.clear();
 
-      // Clean up dedup map
-      for (const cb of callbacks) {
-        _callbackLanes.delete(cb);
+        // Clean up dedup map
+        for (const cb of callbacks) {
+          _callbackLanes.delete(cb);
+        }
+
+        for (const callback of callbacks) {
+          callback();
+        }
       }
-
-      for (const callback of callbacks) {
-        callback();
+      if (!didWork) break;
+      if (++iteration >= MAX_ITERATIONS) {
+        console.error(
+          '[Scheduler] flushSync hit ' + MAX_ITERATIONS +
+          ' iterations — likely a runaway effect that re-schedules itself.'
+        );
+        break;
       }
     }
 

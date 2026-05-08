@@ -71,11 +71,10 @@ export class AppViewModel extends ObservableObject {
    * @private
    */
   _setupEnvironmentListeners() {
-    // Subscribe to size class changes from Environment
-    Environment.subscribe(EnvironmentValues.horizontalSizeClass, () => {
-      // Trigger re-render when size class changes
-      this._notifyAll();
-    });
+    // Reactive bindings on the signals engine pick up Environment changes
+    // automatically — Environment.set() wakes signal observers via the
+    // Phase 2 shim. The legacy `_notifyAll` callback used to drive
+    // app.refresh() is no longer needed (and didn't exist as a method).
   }
 
   /**

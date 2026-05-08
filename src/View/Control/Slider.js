@@ -16,6 +16,7 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
+import { createEffect, untrack } from '../../Data/Signal.js';
 
 /**
  * Slider view class
@@ -72,8 +73,10 @@ export class SliderView extends View {
       input.step = String(this._step);
     }
 
-    // Set initial value from binding
-    const currentValue = this._valueBinding?.value ?? this._valueBinding?.wrappedValue ?? 0;
+    // Read initial value (untracked — we install a tracked effect below).
+    const currentValue = untrack(
+      () => this._valueBinding?.value ?? this._valueBinding?.wrappedValue ?? 0,
+    );
     input.value = String(currentValue);
 
     // Style the slider
@@ -96,22 +99,28 @@ export class SliderView extends View {
       input.style.background = `linear-gradient(to right, ${tintColor} 0%, ${tintColor} ${percent}%, rgba(120, 120, 128, 0.2) ${percent}%, rgba(120, 120, 128, 0.2) 100%)`;
     };
 
-    updateTrackFill(currentValue);
+    // Reactive sync: keep input.value + track fill aligned with the binding
+    // when it changes from any source (user drag OR external write).
+    createEffect(() => {
+      const v = this._valueBinding?.value ?? this._valueBinding?.wrappedValue ?? 0;
+      const desired = String(v);
+      if (input.value !== desired) input.value = desired;
+      updateTrackFill(v);
+    });
 
-    // Handle value changes
+    // Handle value changes — write the binding (untracked); the effect
+    // above re-syncs the track fill.
     input.addEventListener('input', (e) => {
       const newValue = parseFloat(e.target.value);
-
-      // Update binding
-      if (this._valueBinding) {
-        if ('value' in this._valueBinding) {
-          this._valueBinding.value = newValue;
-        } else if ('wrappedValue' in this._valueBinding) {
-          this._valueBinding.wrappedValue = newValue;
+      untrack(() => {
+        if (this._valueBinding) {
+          if ('value' in this._valueBinding) {
+            this._valueBinding.value = newValue;
+          } else if ('wrappedValue' in this._valueBinding) {
+            this._valueBinding.wrappedValue = newValue;
+          }
         }
-      }
-
-      updateTrackFill(newValue);
+      });
     });
 
     // Handle editing changed

@@ -29,6 +29,8 @@
  * }
  */
 
+import { trackObservers, notifyObserversSet } from './Signal.js';
+
 /**
  * Current tracking context for automatic observation
  */
@@ -76,6 +78,13 @@ function createObservableProxy(target) {
   const subscribers = new Map(); // property -> Set of callbacks
   const propertyAccessors = new Map(); // For nested observation
   const globalSubscribers = new Set(); // Subscribe to any change
+  // Per-property observer Sets for the signal-tracking machinery (Phase 2).
+  const propertyObservers = new Map();
+  const observersFor = (prop) => {
+    let s = propertyObservers.get(prop);
+    if (!s) { s = new Set(); propertyObservers.set(prop, s); }
+    return s;
+  };
 
   const proxy = new Proxy(target, {
     get(obj, prop) {
@@ -93,6 +102,12 @@ function createObservableProxy(target) {
           }
           subscribers.get(prop).add(currentTrackingContext.onUpdate);
         }
+      }
+
+      // Register the active signal-tracking computation against this
+      // property's observer Set (no-op outside a tracking scope).
+      if (typeof prop === 'string') {
+        trackObservers(observersFor(prop));
       }
 
       const value = obj[prop];
@@ -140,6 +155,11 @@ function createObservableProxy(target) {
             console.error('Observable callback error:', e);
           }
         });
+
+        // Wake any signal-tracked computations subscribed to this property.
+        if (typeof prop === 'string' && propertyObservers.has(prop)) {
+          notifyObserversSet(propertyObservers.get(prop));
+        }
       }
 
       return true;

@@ -30,6 +30,7 @@
 
 import { Binding } from './Binding.js';
 import { scheduleWork, DefaultLane, batch as schedulerBatch } from '../Core/Scheduler.js';
+import { trackObservers, notifyObserversSet } from './Signal.js';
 
 /**
  * State class for reactive state management.
@@ -45,6 +46,9 @@ export class State {
     this._subscribers = new Set();
     this._binding = null;
     this._notificationScheduled = false;
+    // Observers from the signal-tracking machinery (Phase 2 compat shim).
+    // Lazily populated when a tracked computation reads `state.value`.
+    this._observers = new Set();
   }
 
   /**
@@ -53,6 +57,10 @@ export class State {
    * @returns {*} The current value
    */
   get value() {
+    // If a signal computation is currently executing, register it as an
+    // observer so writes auto-trigger re-execution. No-op outside a tracking
+    // scope.
+    trackObservers(this._observers);
     return this._value;
   }
 
@@ -66,6 +74,8 @@ export class State {
     if (this._value !== newValue) {
       this._value = newValue;
       this._scheduleNotification();
+      // Wake any signal-tracked computations. Safe when _observers is empty.
+      notifyObserversSet(this._observers);
     }
   }
 
@@ -75,6 +85,7 @@ export class State {
    * @returns {*} The current value
    */
   get wrappedValue() {
+    trackObservers(this._observers);
     return this._value;
   }
 
@@ -94,8 +105,10 @@ export class State {
    */
   get binding() {
     if (!this._binding) {
+      // Route through the getter so binding reads also register with the
+      // active signal-tracking computation.
       this._binding = new Binding(
-        () => this._value,
+        () => this.value,
         (newValue) => { this.value = newValue; }
       );
     }
