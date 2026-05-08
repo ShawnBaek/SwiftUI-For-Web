@@ -27,7 +27,10 @@ import {
   // Environment for adaptive layout
   Environment,
   EnvironmentValues,
-  UserInterfaceSizeClass
+  UserInterfaceSizeClass,
+  // Public reactive helper — wraps a closure in a tracked effect so it
+  // re-runs when any signal it reads changes.
+  effect,
 } from '../../src/index.js';
 
 import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
@@ -407,21 +410,28 @@ function MovieRow(category) {
       .foregroundColor('white')
       .padding({ left: layout.horizontalPadding }),
 
-    // Responsive grid container
+    // Responsive grid container — reactive on viewport size class.
+    // Wraps the layout-derived style + child mount in `effect()` so that
+    // when the window resizes (and Environment.horizontalSizeClass changes)
+    // the grid re-templates and re-renders its visible cards.
     new View().modifier({
       apply(el) {
         el.style.display = 'grid';
-        el.style.gridTemplateColumns = `repeat(${layout.gridColumns}, 1fr)`;
-        el.style.gap = `${layout.gridGap}px`;
-        el.style.padding = `0 ${layout.horizontalPadding}px`;
-
-        // Render movie cards into the grid
-        category.items.slice(0, layout.gridColumns).forEach(movie => {
-          const cardView = MovieCardGrid(movie);
-          const rendered = renderView(cardView);
-          if (rendered) {
-            el.appendChild(rendered);
-          }
+        effect(() => {
+          // Subscribe to the size-class signal so this re-runs on resize.
+          Environment.get(EnvironmentValues.horizontalSizeClass);
+          // Re-derive layout from the now-current viewport.
+          const live = getLayoutInfo();
+          el.style.gridTemplateColumns = `repeat(${live.gridColumns}, 1fr)`;
+          el.style.gap = `${live.gridGap}px`;
+          el.style.padding = `0 ${live.horizontalPadding}px`;
+          // Replace card children — count depends on gridColumns.
+          el.replaceChildren();
+          category.items.slice(0, live.gridColumns).forEach(movie => {
+            const cardView = MovieCardGrid(movie);
+            const rendered = renderView(cardView);
+            if (rendered) el.appendChild(rendered);
+          });
         });
       }
     })
