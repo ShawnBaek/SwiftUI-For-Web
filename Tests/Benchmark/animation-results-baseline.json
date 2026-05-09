@@ -1,0 +1,106 @@
+[
+  {
+    "label": "Counter rapid increments",
+    "fps": 118.3,
+    "avgFrameMs": 8.45,
+    "p95FrameMs": 8.8,
+    "p99FrameMs": 9.2,
+    "longestFrameMs": 33.5,
+    "jankPct": 0.6,
+    "droppedFrames": 1,
+    "totalFrames": 177,
+    "longTaskCount": 0,
+    "loafCount": 0,
+    "loafLongestMs": 0,
+    "loafTopScripts": []
+  },
+  {
+    "label": "TodoApp typing + add",
+    "fps": 118.5,
+    "avgFrameMs": 8.44,
+    "p95FrameMs": 9,
+    "p99FrameMs": 9.2,
+    "longestFrameMs": 32.8,
+    "jankPct": 0.4,
+    "droppedFrames": 1,
+    "totalFrames": 237,
+    "longTaskCount": 0,
+    "loafCount": 0,
+    "loafLongestMs": 0,
+    "loafTopScripts": []
+  },
+  {
+    "label": "Netflix card open + close",
+    "fps": 120,
+    "avgFrameMs": 8.33,
+    "p95FrameMs": 8.9,
+    "p99FrameMs": 9.2,
+    "longestFrameMs": 9.3,
+    "jankPct": 0,
+    "droppedFrames": 0,
+    "totalFrames": 300,
+    "longTaskCount": 0,
+    "loafCount": 1,
+    "loafLongestMs": 54,
+    "loafTopScripts": [
+      {
+        "duration": 14,
+        "fn": "",
+        "url": "http://localhost:8000/Examples/Netflix/main.js",
+        "frameDur": 54
+      }
+    ]
+  },
+  {
+    "label": "Netflix page scroll",
+    "fps": 119.3,
+    "avgFrameMs": 8.38,
+    "p95FrameMs": 9.2,
+    "p99FrameMs": 9.3,
+    "longestFrameMs": 16.8,
+    "jankPct": 0,
+    "droppedFrames": 0,
+    "totalFrames": 178,
+    "longTaskCount": 0,
+    "loafCount": 0,
+    "loafLongestMs": 0,
+    "loafTopScripts": []
+  },
+  {
+    "label": "Charts idle (post-mount)",
+    "fps": 121,
+    "avgFrameMs": 8.26,
+    "p95FrameMs": 9.2,
+    "p99FrameMs": 9.3,
+    "longestFrameMs": 9.3,
+    "jankPct": 0,
+    "droppedFrames": 0,
+    "totalFrames": 145,
+    "longTaskCount": 0,
+    "loafCount": 0,
+    "loafLongestMs": 0,
+    "loafTopScripts": []
+  },
+  {
+    "label": "Airbnb scroll grid",
+    "fps": 120,
+    "avgFrameMs": 8.33,
+    "p95FrameMs": 9.2,
+    "p99FrameMs": 9.3,
+    "longestFrameMs": 9.3,
+    "jankPct": 0,
+    "droppedFrames": 0,
+    "totalFrames": 180,
+    "longTaskCount": 0,
+    "loafCount": 2,
+    "loafLongestMs": 83.8,
+    "loafTopScripts": [
+      {
+        "duration": 17,
+        "fn": "",
+        "url": "http://localhost:8000/Examples/Airbnb/main.js",
+        "frameDur": 52.09999990463257
+      }
+    ]
+  }
+]
