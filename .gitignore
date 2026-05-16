@@ -19,3 +19,4 @@ test-results/
 # Misc
 *.log
 .claude/
+Tests/Benchmark/animation-results-*Z.json

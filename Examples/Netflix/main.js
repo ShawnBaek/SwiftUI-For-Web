@@ -27,7 +27,10 @@ import {
   // Environment for adaptive layout
   Environment,
   EnvironmentValues,
-  UserInterfaceSizeClass
+  UserInterfaceSizeClass,
+  // Public reactive helper — wraps a closure in a tracked effect so it
+  // re-runs when any signal it reads changes.
+  effect,
 } from '../../src/index.js';
 
 import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
@@ -318,7 +321,11 @@ function MovieCard(movie) {
     apply(el) {
       el.id = cardId;
       el.style.cursor = 'pointer';
-      el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+      // transform-only transition stays on the compositor; box-shadow needs
+      // paint and gets dropped from the animation. Promote with will-change
+      // so the GPU layer is allocated at hover time, not first frame of it.
+      el.style.transition = 'transform 0.2s ease';
+      el.style.willChange = 'transform';
 
       el.addEventListener('mouseenter', () => {
         el.style.transform = 'scale(1.05)';
@@ -407,21 +414,28 @@ function MovieRow(category) {
       .foregroundColor('white')
       .padding({ left: layout.horizontalPadding }),
 
-    // Responsive grid container
+    // Responsive grid container — reactive on viewport size class.
+    // Wraps the layout-derived style + child mount in `effect()` so that
+    // when the window resizes (and Environment.horizontalSizeClass changes)
+    // the grid re-templates and re-renders its visible cards.
     new View().modifier({
       apply(el) {
         el.style.display = 'grid';
-        el.style.gridTemplateColumns = `repeat(${layout.gridColumns}, 1fr)`;
-        el.style.gap = `${layout.gridGap}px`;
-        el.style.padding = `0 ${layout.horizontalPadding}px`;
-
-        // Render movie cards into the grid
-        category.items.slice(0, layout.gridColumns).forEach(movie => {
-          const cardView = MovieCardGrid(movie);
-          const rendered = renderView(cardView);
-          if (rendered) {
-            el.appendChild(rendered);
-          }
+        effect(() => {
+          // Subscribe to the size-class signal so this re-runs on resize.
+          Environment.get(EnvironmentValues.horizontalSizeClass);
+          // Re-derive layout from the now-current viewport.
+          const live = getLayoutInfo();
+          el.style.gridTemplateColumns = `repeat(${live.gridColumns}, 1fr)`;
+          el.style.gap = `${live.gridGap}px`;
+          el.style.padding = `0 ${live.horizontalPadding}px`;
+          // Replace card children — count depends on gridColumns.
+          el.replaceChildren();
+          category.items.slice(0, live.gridColumns).forEach(movie => {
+            const cardView = MovieCardGrid(movie);
+            const rendered = renderView(cardView);
+            if (rendered) el.appendChild(rendered);
+          });
         });
       }
     })
@@ -454,41 +468,64 @@ function openCard(movie, rect) {
     pointer-events: auto;
   `;
 
-  // Backdrop
+  // Backdrop — animate opacity (compositor) instead of background-color (paint).
   const backdrop = document.createElement('div');
   backdrop.style.cssText = `
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0);
-    transition: background 0.4s ease;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    opacity: 0;
+    will-change: opacity;
+    transition: opacity 0.4s ease;
   `;
   backdrop.addEventListener('click', closeCard);
   overlay.appendChild(backdrop);
 
-  // Expanded card container
+  // Expanded card container.
+  //
+  // Animation strategy — all compositor-thread, zero layout/paint per frame:
+  //   • Card is placed at its FINAL geometry from the start (fixed-centered
+  //     at expandedWidth × expandedHeight). left/top/width/height never
+  //     animate.
+  //   • Initial frame: a translate3d() + scale() positions the card on top
+  //     of the source thumbnail — visually identical to "starting at the
+  //     thumbnail's location and size".
+  //   • Open animates `transform` from that initial value back to
+  //     translate(-50%, -50%) scale(1). transform-only animation stays on
+  //     the compositor; the main thread is free.
+  //
+  // Previously this transitioned `all` on left/top/width/height, which
+  // hit layout + paint + composite every frame — the LoAF profiler showed
+  // 59ms+ animation frames here.
   const card = document.createElement('div');
-  const startX = rect ? rect.x : window.innerWidth / 2;
-  const startY = rect ? rect.y : window.innerHeight / 2;
-  const startWidth = rect ? rect.width : 0;
-  const startHeight = rect ? rect.height : 0;
+  const vpW = window.innerWidth;
+  const vpH = window.innerHeight;
+  const startX = rect ? rect.x : vpW / 2;
+  const startY = rect ? rect.y : vpH / 2;
+  const startWidth = rect ? rect.width : layout.expandedWidth;
+  const initScale = startWidth / layout.expandedWidth;
+  // Translate so the (centered) card visually lands on the thumbnail's centre.
+  const dx = startX - vpW / 2;
+  const dy = startY - vpH / 2;
+  const initialTransform =
+    `translate(-50%, -50%) translate3d(${dx}px, ${dy}px, 0) scale(${initScale})`;
 
   card.style.cssText = `
     position: absolute;
-    left: ${startX}px;
-    top: ${startY}px;
-    width: ${startWidth}px;
-    height: ${startHeight}px;
-    transform: translate(-50%, -50%);
+    top: 50%;
+    left: 50%;
+    width: ${layout.expandedWidth}px;
+    height: ${layout.expandedHeight}px;
+    transform: ${initialTransform};
     background: #181818;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   `;
   card.id = 'expanded-card';
+  card._initialTransform = initialTransform; // stash for closeCard()
 
   // Image
   const img = document.createElement('img');
@@ -618,15 +655,11 @@ function openCard(movie, rect) {
   // Append to body (outside view tree)
   document.body.appendChild(overlay);
 
-  // Animate open
+  // Animate open — transform + opacity only, all on the compositor.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      backdrop.style.background = 'rgba(0, 0, 0, 0.85)';
-
-      card.style.left = '50%';
-      card.style.top = '50%';
-      card.style.width = `${layout.expandedWidth}px`;
-      card.style.height = `${layout.expandedHeight}px`;
+      backdrop.style.opacity = '1';
+      card.style.transform = 'translate(-50%, -50%) scale(1)';
 
       closeBtn.style.opacity = '1';
       closeBtn.style.transform = 'scale(1)';
@@ -653,16 +686,14 @@ function closeCard() {
   selectedMovie = null;
 
   if (card && rect) {
-    // Animate close back to original card position
-    card.style.transition = 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
-    card.style.left = `${rect.x}px`;
-    card.style.top = `${rect.y}px`;
-    card.style.width = `${rect.width}px`;
-    card.style.height = `${rect.height}px`;
-    card.style.borderRadius = '6px';
+    // Animate close back to original — transform + opacity only.
+    // The card's _initialTransform was stashed at open() time; replaying
+    // it inverts the open animation cleanly without touching layout props.
+    card.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease';
+    card.style.transform = card._initialTransform || 'translate(-50%, -50%)';
     card.style.opacity = '0.8';
 
-    // Hide text overlay and close button
+    // Hide text overlay and close button (opacity-only, compositor-friendly)
     const textOverlay = card.querySelector('div:nth-child(2)');
     const closeBtn = card.querySelector('button:last-of-type');
     if (textOverlay) {
@@ -674,21 +705,17 @@ function closeCard() {
       closeBtn.style.opacity = '0';
     }
 
-    // Fade backdrop
+    // Fade backdrop via opacity (was animating background-color → repaint).
     if (backdrop) {
-      backdrop.style.background = 'rgba(0, 0, 0, 0)';
+      backdrop.style.opacity = '0';
     }
 
-    // Remove overlay after animation completes
     const removeOverlay = () => {
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     };
 
     card.addEventListener('transitionend', function handler(e) {
-      // Only act on the card's own transitions (e.g. 'left', 'width')
-      if (e.target === card) {
+      if (e.target === card && e.propertyName === 'transform') {
         card.removeEventListener('transitionend', handler);
         removeOverlay();
       }

@@ -149,7 +149,7 @@ async function benchmarkSwiftUI(container) {
   const SwiftUI = await import('../../src/index.js');
   const {
     App, VStack, HStack, Text, Button, Spacer, Font, Color, Divider,
-    State, batch
+    State, batch, For, flushSync
   } = SwiftUI;
 
   const results = [];
@@ -161,12 +161,16 @@ async function benchmarkSwiftUI(container) {
     data = new State([]);
     app = App(() =>
       VStack({ spacing: 0 },
-        ...data.value.map(item =>
-          HStack({ spacing: 8 },
-            Text(String(item.id)).frame({ width: 60 }).foregroundColor(Color.secondary),
-            Text(item.label),
-            Spacer()
-          ).padding({ vertical: 2, horizontal: 8 }).id(item.id)
+        // Reactive: For re-mounts/diffs rows when data.value changes.
+        For(
+          () => data.value,
+          (item) =>
+            HStack({ spacing: 8 },
+              Text(String(item.id)).frame({ width: 60 }).foregroundColor(Color.secondary),
+              Text(item.label),
+              Spacer()
+            ).padding({ vertical: 2, horizontal: 8 }).id(item.id),
+          (item) => item.id,
         )
       )
     ).mount(container);
@@ -177,72 +181,79 @@ async function benchmarkSwiftUI(container) {
 
   results.push(await runBenchmark(
     'Create 1,000 rows',
-    () => { if (app) app.unmount(); container.textContent = ''; },
+    () => { if (app) app.unmount(); container.textContent = ''; data = new State([]); },
     () => {
-      data = new State(generateData(1000));
+      // Mount, then push 1000 rows so the For effect runs and creates DOM.
       app = App(() =>
         VStack({ spacing: 0 },
-          ...data.value.map(item =>
-            HStack({ spacing: 8 },
-              Text(String(item.id)).frame({ width: 60 }),
-              Text(item.label),
-              Spacer()
-            ).padding({ vertical: 2, horizontal: 8 }).id(item.id)
+          For(
+            () => data.value,
+            (item) =>
+              HStack({ spacing: 8 },
+                Text(String(item.id)).frame({ width: 60 }),
+                Text(item.label),
+                Spacer()
+              ).padding({ vertical: 2, horizontal: 8 }).id(item.id),
+            (item) => item.id,
           )
         )
       ).mount(container);
+      data.value = generateData(1000);
+      flushSync();
     },
     null, 5
   ));
 
   results.push(await runBenchmark(
     'Update every 10th row',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
     () => {
       const nd = [...data.value];
       for (let i = 0; i < nd.length; i += 10) nd[i] = { ...nd[i], label: nd[i].label + ' !!!' };
-      data._value = nd; app.refresh();
+      data.value = nd;
+      flushSync();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Replace all 1,000 rows',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = generateData(1000, 1000); app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
+    () => { data.value = generateData(1000, 1000); flushSync(); },
     null, 5
   ));
 
   results.push(await runBenchmark(
     'Append 1,000 rows to 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = [...data.value, ...generateData(1000, 1000)]; app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
+    () => { data.value = [...data.value, ...generateData(1000, 1000)]; flushSync(); },
     null, 5
   ));
 
   results.push(await runBenchmark(
     'Remove one row from 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
     () => {
-      const nd = [...data.value]; nd.splice(500, 1); data._value = nd; app.refresh();
+      const nd = [...data.value]; nd.splice(500, 1); data.value = nd; flushSync();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Swap two rows in 1,000',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
     () => {
       const nd = [...data.value]; const t = nd[1]; nd[1] = nd[998]; nd[998] = t;
-      data._value = nd; app.refresh();
+      data.value = nd;
+      flushSync();
     },
     null, 10
   ));
 
   results.push(await runBenchmark(
     'Clear 1,000 rows',
-    () => { createListApp(); data.value = generateData(1000); app.refresh(); },
-    () => { data._value = []; app.refresh(); },
+    () => { createListApp(); data.value = generateData(1000); flushSync(); },
+    () => { data.value = []; flushSync(); },
     null, 10
   ));
 

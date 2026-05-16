@@ -191,6 +191,12 @@ export function ListingCard(listing) {
   .modifier({
     apply(el) {
       el.style.animation = 'fadeIn 0.3s ease';
+      // Skip layout/paint for off-screen cards. The browser fast-skips
+      // the subtree until it scrolls near the viewport. Reserve a
+      // realistic intrinsic size so the scroll height stays correct
+      // and `For` doesn't see giant layout shifts on entry.
+      el.style.contentVisibility = 'auto';
+      el.style.containIntrinsicSize = '0 360px';
     }
   });
 }
