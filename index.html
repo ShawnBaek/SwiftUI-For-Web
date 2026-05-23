@@ -6,65 +6,217 @@
   <title>SwiftUI for Web</title>
   <link rel="stylesheet" href="./src/styles/index.css">
   <style>
-    /* Demo page styles */
-    .demo-container {
-      max-width: 800px;
+    body {
+      margin: 0;
+      padding: 0;
+      background:
+        radial-gradient(60% 80% at 20% 0%, rgba(96, 84, 255, 0.18) 0%, transparent 60%),
+        radial-gradient(50% 70% at 80% 100%, rgba(255, 64, 192, 0.14) 0%, transparent 60%),
+        linear-gradient(180deg, #0a0d1a 0%, #050811 100%);
+      color: #f4f4f8;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 920px;
       margin: 0 auto;
-      padding: 40px 20px;
+      padding: 64px 24px 96px;
     }
-    .demo-header {
-      text-align: center;
-      margin-bottom: 40px;
+    h1 {
+      font-size: 56px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 12px;
+      background: linear-gradient(120deg, #fff 0%, #c4baff 50%, #ffb5e0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .demo-header h1 {
-      font-size: var(--font-large-title);
-      font-weight: var(--font-weight-bold);
-      color: var(--color-blue);
-      margin-bottom: 8px;
+    .tagline {
+      font-size: 18px;
+      color: #aab0c0;
+      max-width: 640px;
+      margin: 0 0 40px;
+      line-height: 1.5;
     }
-    .demo-header p {
-      font-size: var(--font-subheadline);
-      color: var(--color-secondary);
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
     }
-    .demo-status {
-      background: var(--color-secondary-background);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      margin-bottom: 20px;
+    .badge {
+      font-size: 12px;
+      color: #d9d6ff;
+      background: rgba(140, 100, 255, 0.16);
+      border: 1px solid rgba(140, 100, 255, 0.35);
+      padding: 4px 10px;
+      border-radius: 999px;
     }
-    .demo-status h2 {
-      font-size: var(--font-headline);
-      margin-bottom: 10px;
+    h2 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #8b91a8;
+      margin: 0 0 16px;
     }
-    .demo-status code {
-      font-family: 'SF Mono', Monaco, monospace;
-      font-size: var(--font-footnote);
-      background: var(--color-gray-5);
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    .card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      padding: 20px 22px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(180, 160, 255, 0.55);
+      background: rgba(140, 100, 255, 0.08);
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 6px;
+      color: #fff;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: #9aa0b4;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .card-flag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffb5e0;
+      background: rgba(255, 100, 200, 0.12);
+      border: 1px solid rgba(255, 100, 200, 0.4);
       padding: 2px 6px;
       border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
     }
+    pre {
+      background: #0c0f1c;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #d6d9e4;
+      margin: 0 0 32px;
+    }
+    code { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; }
+    .links a {
+      color: #b9b0ff;
+      text-decoration: none;
+      margin-right: 16px;
+      font-size: 14px;
+    }
+    .links a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <div class="demo-container">
-    <header class="demo-header">
-      <h1>SwiftUI for Web</h1>
-      <p>A zero-dependency UI framework inspired by Apple's SwiftUI</p>
-    </header>
+  <div class="container">
+    <h1>SwiftUI for Web</h1>
+    <p class="tagline">
+      A zero-dependency UI framework that brings Apple's SwiftUI declarative model to the browser.
+      Vanilla JS, signal-driven reactivity, 84+ components matching SwiftUI 1:1.
+    </p>
 
-    <div class="demo-status">
-      <h2>Project Status</h2>
-      <p>Framework is being built. Check back soon!</p>
-      <p style="margin-top: 10px;">
-        <code>Sprint 0: Project Setup</code> - In Progress
-      </p>
+    <div class="badges">
+      <span class="badge">zero deps</span>
+      <span class="badge">~52KB gzipped</span>
+      <span class="badge">signals engine</span>
+      <span class="badge">SwiftUI parity</span>
     </div>
 
-    <!-- App mount point -->
-    <div id="root"></div>
-  </div>
+    <h2>Runnable examples</h2>
+    <div class="grid">
+      <a class="card" href="./Examples/HelloWorld/">
+        <p class="card-title">Hello World</p>
+        <p class="card-desc">Static layout — minimal mount path.</p>
+      </a>
+      <a class="card" href="./Examples/Counter/">
+        <p class="card-title">Counter</p>
+        <p class="card-desc">State, thunks, button actions — proof of fine-grained reactivity.</p>
+      </a>
+      <a class="card" href="./Examples/TodoApp/">
+        <p class="card-title">Todo App</p>
+        <p class="card-desc">ObservableObject, For, Show, two-way Binding — MVVM end-to-end.</p>
+      </a>
+      <a class="card" href="./Examples/Netflix/">
+        <p class="card-title">Netflix</p>
+        <p class="card-desc">Carousels, hero sections, image grids, scroll-driven layout.</p>
+      </a>
+      <a class="card" href="./Examples/Charts/">
+        <p class="card-title">Charts</p>
+        <p class="card-desc">Bar / Line / Area / Point / Pie / Donut — the Swift Charts API.</p>
+      </a>
+      <a class="card" href="./Examples/Airbnb/">
+        <p class="card-title">Airbnb</p>
+        <p class="card-desc">Sticky header, modal detail view, responsive grid, image gallery.</p>
+      </a>
+      <a class="card" href="./Examples/TestShowcase/">
+        <p class="card-title">Test Showcase</p>
+        <p class="card-desc">Every component in one page — integration smoke test.</p>
+      </a>
+      <a class="card" href="./Examples/ShaderEffects/">
+        <p class="card-title">Shader Effects<span class="card-flag">new</span></p>
+        <p class="card-desc">Static catalogue of <code>.colorEffect</code> / <code>.distortionEffect</code> / <code>.layerEffect</code>.</p>
+      </a>
+      <a class="card" href="./Examples/MetalShaderGallery/">
+        <p class="card-title">Metal Shader Gallery<span class="card-flag">new</span></p>
+        <p class="card-desc">Animated shader effects — hue cycles, heat shimmer, holographic, neon text.</p>
+      </a>
+    </div>
 
-  <!-- Main application entry point -->
-  <script type="module" src="./src/index.js"></script>
+    <h2>Shader effects — Metal-style on the web</h2>
+    <pre><code>import { Image, Text, ShaderLibrary, Color, Font } from 'swiftui-for-web';
+
+const Lib = ShaderLibrary.default;
+
+// Static — same API as SwiftUI's .colorEffect / .layerEffect / .distortionEffect
+Image('photo.jpg')
+  .resizable().frame({ width: 200, height: 150 })
+  .colorEffect(Lib.hueRotate(90))
+  .layerEffect(Lib.blur(4));
+
+// Animated — SVG &lt;animate&gt; embedded in the filter graph,
+// GPU-driven, no requestAnimationFrame
+Image('portrait.jpg')
+  .colorEffect(Lib.animatedHueRotate({ duration: 4 }))
+  .layerEffect(Lib.animatedGlow({
+    color: 'rgba(255,80,200,0.7)', baseRadius: 3, peakRadius: 16, duration: 2.4
+  }));
+
+Text('NEON')
+  .font(Font.largeTitle).foregroundColor(Color.white)
+  .layerEffect(Lib.animatedGlow({
+    color: 'rgba(0,200,255,0.85)', baseRadius: 2, peakRadius: 16, duration: 1.6
+  }));</code></pre>
+
+    <h2>Links</h2>
+    <p class="links">
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+      <a href="./README.md">README</a>
+      <a href="./AGENTS.md">AGENTS.md</a>
+      <a href="./Examples/">All examples</a>
+    </p>
+  </div>
 </body>
 </html>

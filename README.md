@@ -156,7 +156,7 @@ vm.items = [...vm.items, item];         // setter notifies tracked observers
 
 ## Examples
 
-Seven runnable examples in `Examples/`, each a self-contained HTML + module:
+Nine runnable examples in `Examples/`, each a self-contained HTML + module:
 
 | Example | What it shows |
 |---|---|
@@ -167,11 +167,90 @@ Seven runnable examples in `Examples/`, each a self-contained HTML + module:
 | **Charts** | Bar / Line / Area / Point / Pie / Donut / target-line — Swift Charts API |
 | **Airbnb** | Sticky header, modal detail view, responsive grid, image gallery |
 | **TestShowcase** | Every component in one page — integration smoke test |
+| **ShaderEffects** | Static catalogue of `.colorEffect` / `.distortionEffect` / `.layerEffect` presets |
+| **MetalShaderGallery** | Animated shader effects — hue cycles, heat shimmer, holographic, neon text |
 
 ```bash
 python3 serve.py
 # open http://localhost:8000/Examples/Airbnb/
 ```
+
+---
+
+## Shader effects (Metal-style, web-side)
+
+Mirrors Apple's iOS 17+ shader-effect modifiers — `.colorEffect`, `.distortionEffect`, `.layerEffect` — backed by SVG filter graphs. Zero deps, GPU-accelerated in every modern browser, applies to any view (Image, Text, anything).
+
+```js
+import { Image, Text, ShaderLibrary, Color, Font } from 'swiftui-for-web';
+
+const Lib = ShaderLibrary.default;
+
+// Static color/layer/distortion effects on Image
+Image('photo.jpg')
+  .resizable()
+  .frame({ width: 200, height: 150 })
+  .colorEffect(Lib.hueRotate(90))            // per-pixel color
+  .layerEffect(Lib.blur(4));                 // full-layer sampling
+
+// Distortion — turbulence-displaced ripple
+Image('photo.jpg')
+  .resizable()
+  .frame({ width: 200, height: 150 })
+  .distortionEffect(
+    Lib.ripple({ amplitude: 12, frequency: 0.02 }),
+    { maxSampleOffset: { width: 12, height: 12 } }
+  );
+
+// Chained modifiers compose left-to-right: sepia then blur
+Image('photo.jpg')
+  .colorEffect(Lib.sepia(1))
+  .layerEffect(Lib.blur(2));
+
+// Shaders work on Text too — same SVG-filter pipeline
+Text('SHADER')
+  .font(Font.largeTitle)
+  .foregroundColor(Color.white)
+  .layerEffect(Lib.dropShadow({ radius: 6, y: 4, color: 'rgba(255,0,200,0.8)' }));
+```
+
+### Animated presets
+
+Embed SVG `<animate>` inside the filter graph — the GPU drives the animation, no `requestAnimationFrame`, no JS in the hot path:
+
+```js
+// Hue cycles the full 360° wheel every 3 seconds
+Image('photo.jpg').colorEffect(Lib.animatedHueRotate({ duration: 3 }));
+
+// Heat-shimmer: displacement breathes 0 → amplitude → 0, looping
+Image('photo.jpg').distortionEffect(
+  Lib.animatedRipple({ amplitude: 14, duration: 2.5 }),
+  { maxSampleOffset: { width: 14, height: 14 } }
+);
+
+// Pulsing neon glow — drop shadow radius animates in/out
+Text('NEON')
+  .font(Font.largeTitle)
+  .foregroundColor(Color.white)
+  .layerEffect(Lib.animatedGlow({
+    color: 'rgba(0,200,255,0.85)', baseRadius: 2, peakRadius: 16, duration: 1.6
+  }));
+
+// Compose static + animated freely
+Image('portrait.jpg')
+  .colorEffect(Lib.animatedHueRotate({ duration: 4 }))
+  .layerEffect(Lib.animatedGlow({ color: 'rgba(255,80,200,0.7)', duration: 2.4 }));
+```
+
+### `ShaderLibrary.default` catalogue
+
+| Kind | Presets |
+|---|---|
+| `.colorEffect` | `colorize`, `brightness`, `contrast`, `saturation`, `hueRotate`, `grayscale`, `invert`, `sepia`, `animatedHueRotate` |
+| `.layerEffect` | `blur`, `dropShadow`, `animatedGlow` |
+| `.distortionEffect` | `ripple`, `animatedRipple` |
+
+See the live demos: [`Examples/ShaderEffects/`](Examples/ShaderEffects/) (static catalogue) and [`Examples/MetalShaderGallery/`](Examples/MetalShaderGallery/) (animated). Apple references: [`Shader`](https://developer.apple.com/documentation/swiftui/shader), [`.colorEffect`](https://developer.apple.com/documentation/swiftui/view/coloreffect(_:isenabled:)), [`.distortionEffect`](https://developer.apple.com/documentation/swiftui/view/distortioneffect(_:maxsampleoffset:isenabled:)), [`.layerEffect`](https://developer.apple.com/documentation/swiftui/view/layereffect(_:maxsampleoffset:isenabled:)).
 
 ---
 
@@ -189,7 +268,7 @@ python3 serve.py
 | **State** | `State`, `Binding`, `ObservableObject` + `@Published`, `StateObject`, `Observable`, `Environment`, `EnvironmentObject` |
 | **Reactive control flow** | `Show`, `For` *(new — required for conditional/list rendering on the signal engine)* |
 | **Shapes** | `Rectangle`, `RoundedRectangle`, `UnevenRoundedRectangle`, `Circle`, `Ellipse`, `Capsule`, `Path` |
-| **Graphics** | `Color`, `Font`, `LinearGradient`, `RadialGradient`, `AngularGradient` |
+| **Graphics** | `Color`, `Font`, `LinearGradient`, `RadialGradient`, `AngularGradient`, `Shader` / `ShaderLibrary` (+ `.colorEffect` / `.distortionEffect` / `.layerEffect`) |
 | **Animation** | `withAnimation`, `Animation` (spring/easing), `AnyTransition`, `matchedGeometryEffect` |
 | **Gestures** | `TapGesture`, `LongPressGesture`, `DragGesture`, `MagnificationGesture`, `RotationGesture` |
 | **App** | `App`, `WindowGroup`, `Scene`, `Settings`, `DocumentGroup` |

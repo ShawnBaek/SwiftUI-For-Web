@@ -44,6 +44,16 @@ export function chainable(descriptor) {
   chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
   chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
 
+  // Shader effect modifiers (Apple's `.colorEffect` / `.distortionEffect` / `.layerEffect`).
+  // Backed by SVG filter graphs; the second arg accepts the same options
+  // SwiftUI carries (`isEnabled`, `maxSampleOffset`) for forward-compat.
+  chain.colorEffect = (shader, opts) =>
+    chainable(addModifier(descriptor, createModifier(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) })));
+  chain.distortionEffect = (shader, opts) =>
+    chainable(addModifier(descriptor, createModifier(ModifierType.DISTORTION_EFFECT, { shader, ...(opts || {}) })));
+  chain.layerEffect = (shader, opts) =>
+    chainable(addModifier(descriptor, createModifier(ModifierType.LAYER_EFFECT, { shader, ...(opts || {}) })));
+
   // Identity
   chain.id = (key) => chainable(setKey(descriptor, key));
 

@@ -370,6 +370,9 @@ export const ModifierType = {
   ON_APPEAR: 'onAppear',
   ON_DISAPPEAR: 'onDisappear',
   CLIP_SHAPE: 'clipShape',
+  COLOR_EFFECT: 'colorEffect',
+  DISTORTION_EFFECT: 'distortionEffect',
+  LAYER_EFFECT: 'layerEffect',
   CUSTOM: 'custom'
 };
 
