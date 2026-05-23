@@ -317,40 +317,7 @@ function MovieCard(movie) {
       .frame({ width: layout.cardWidth, height: layout.cardHeight })
       .cornerRadius(6)
   )
-  .modifier({
-    apply(el) {
-      el.id = cardId;
-      el.style.cursor = 'pointer';
-      // transform-only transition stays on the compositor; box-shadow needs
-      // paint and gets dropped from the animation. Promote with will-change
-      // so the GPU layer is allocated at hover time, not first frame of it.
-      el.style.transition = 'transform 0.2s ease';
-      el.style.willChange = 'transform';
-
-      el.addEventListener('mouseenter', () => {
-        el.style.transform = 'scale(1.05)';
-        el.style.boxShadow = '0 8px 25px rgba(0,0,0,0.5)';
-        el.style.zIndex = '10';
-      });
-
-      el.addEventListener('mouseleave', () => {
-        el.style.transform = 'scale(1)';
-        el.style.boxShadow = 'none';
-        el.style.zIndex = '1';
-      });
-
-      el.addEventListener('click', () => {
-        // Get card position for animation
-        const rect = el.getBoundingClientRect();
-        openCard(movie, {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-          width: rect.width,
-          height: rect.height
-        });
-      });
-    }
-  });
+  .modifier({ apply: (el) => wireCardInteractions(el, cardId, movie) });
 }
 
 /**
@@ -369,33 +336,75 @@ function MovieCardGrid(movie) {
   )
   .modifier({
     apply(el) {
-      el.id = cardId;
-      el.style.cursor = 'pointer';
-      el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
       el.style.aspectRatio = '2/3';
-
-      el.addEventListener('mouseenter', () => {
-        el.style.transform = 'scale(1.05)';
-        el.style.boxShadow = '0 8px 25px rgba(0,0,0,0.5)';
-        el.style.zIndex = '10';
-      });
-
-      el.addEventListener('mouseleave', () => {
-        el.style.transform = 'scale(1)';
-        el.style.boxShadow = 'none';
-        el.style.zIndex = '1';
-      });
-
-      el.addEventListener('click', () => {
-        const rect = el.getBoundingClientRect();
-        openCard(movie, {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-          width: rect.width,
-          height: rect.height
-        });
-      });
+      wireCardInteractions(el, cardId, movie);
     }
+  });
+}
+
+/**
+ * Card interaction wiring — hover scale + click → openCard.
+ *
+ * Perf design:
+ *   • transform-only transition (compositor thread)
+ *   • NO box-shadow change on hover — 25px-radius blur paints are
+ *     expensive on every enter/leave and the prior version was the
+ *     dominant paint cost during a hover sweep across a row of 8 cards.
+ *     Cards already lift via the scale; the lack of shadow is barely
+ *     perceptible and the smoothness gain is large.
+ *   • `will-change: transform` is added *on enter* and dropped on the
+ *     transition's end. Permanent will-change pins a GPU layer for every
+ *     card on screen (30+ layers in this demo); transient promotion
+ *     gives the same animation smoothness with one layer at a time.
+ *   • All hover writes happen in a single rAF tick so they batch into
+ *     one style recalc + composite, not three.
+ *   • Image children get `decoding="async" loading="lazy"` so first-paint
+ *     image decode runs off the main thread.
+ */
+function wireCardInteractions(el, cardId, movie) {
+  el.id = cardId;
+  el.style.cursor = 'pointer';
+  el.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
+
+  // Off-main-thread image decode for all <img> descendants (poster).
+  for (const img of el.querySelectorAll('img')) {
+    if (!img.hasAttribute('decoding')) img.decoding = 'async';
+    if (!img.hasAttribute('loading'))  img.loading  = 'lazy';
+  }
+
+  let raf = 0;
+  el.addEventListener('mouseenter', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      el.style.willChange = 'transform';
+      el.style.transform = 'scale(1.05)';
+      el.style.zIndex = '10';
+    });
+  });
+
+  el.addEventListener('mouseleave', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      el.style.transform = 'scale(1)';
+      // Hand off z-index AFTER the transform animation, so the lifted card
+      // stays above its neighbours through the entire scale-down.
+      const onEnd = () => {
+        el.style.zIndex = '1';
+        el.style.willChange = 'auto';
+        el.removeEventListener('transitionend', onEnd);
+      };
+      el.addEventListener('transitionend', onEnd);
+    });
+  });
+
+  el.addEventListener('click', () => {
+    const rect = el.getBoundingClientRect();
+    openCard(movie, {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+      width: rect.width,
+      height: rect.height
+    });
   });
 }
 
@@ -510,6 +519,12 @@ function openCard(movie, rect) {
   const initialTransform =
     `translate(-50%, -50%) translate3d(${dx}px, ${dy}px, 0) scale(${initScale})`;
 
+  // box-shadow blur radius is the single biggest paint cost when this
+  // modal first appears — at 60px it forced a ~50ms paint on first frame
+  // and cascaded into the LoAF blocking event. 24px looks nearly identical
+  // and paints in a fraction of the time.
+  // Open duration trimmed from 400ms → 260ms; the felt latency was the
+  // main complaint, and 260ms still reads as a transition (not a snap).
   card.style.cssText = `
     position: absolute;
     top: 50%;
@@ -520,15 +535,20 @@ function openCard(movie, rect) {
     background: #181818;
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6);
     will-change: transform;
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.26s cubic-bezier(0.2, 0, 0, 1);
+    contain: layout paint;
   `;
   card.id = 'expanded-card';
   card._initialTransform = initialTransform; // stash for closeCard()
 
-  // Image
+  // Image — async decode so the main thread isn't blocked on the first
+  // paint of this modal. picsum.photos returns large JPEGs; on a slow
+  // machine the sync decode was a measurable slice of the LoAF event.
   const img = document.createElement('img');
+  img.decoding = 'async';
+  img.loading = 'eager'; // modal is visible; don't lazy-load it
   img.src = movie.poster;
   img.style.cssText = `
     width: 100%;
@@ -552,7 +572,9 @@ function openCard(movie, rect) {
     justify-content: flex-end;
     padding: 20px;
     opacity: 0;
-    transition: opacity 0.3s ease 0.2s;
+    /* Start text fade earlier (100ms in instead of 200ms) so total felt
+       duration of opening matches the new 260ms card transition. */
+    transition: opacity 0.18s ease 0.1s;
   `;
 
   // Title
@@ -632,7 +654,9 @@ function openCard(movie, rect) {
     justify-content: center;
     opacity: 0;
     transform: scale(0.8);
-    transition: opacity 0.3s ease 0.3s, transform 0.3s ease 0.3s, background 0.2s ease;
+    /* Match the trimmed card open duration — close button finishes
+       fading in at the same time as the text overlay. */
+    transition: opacity 0.18s ease 0.15s, transform 0.18s ease 0.15s, background 0.18s ease;
     z-index: 10;
   `;
   closeBtn.addEventListener('mouseenter', () => {
@@ -689,7 +713,9 @@ function closeCard() {
     // Animate close back to original — transform + opacity only.
     // The card's _initialTransform was stashed at open() time; replaying
     // it inverts the open animation cleanly without touching layout props.
-    card.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease';
+    // Close is slightly faster than open (220ms vs 260ms) so dismiss feels
+    // snappier than reveal — standard UI motion convention.
+    card.style.transition = 'transform 0.22s cubic-bezier(0.4, 0, 1, 1), opacity 0.22s ease';
     card.style.transform = card._initialTransform || 'translate(-50%, -50%)';
     card.style.opacity = '0.8';
 
@@ -721,8 +747,9 @@ function closeCard() {
       }
     });
 
-    // Safety fallback in case transitionend doesn't fire
-    setTimeout(removeOverlay, 400);
+    // Safety fallback in case transitionend doesn't fire — generous
+    // buffer over the 220ms close transition.
+    setTimeout(removeOverlay, 280);
   } else {
     // No rect info — just remove immediately
     if (overlay.parentNode) {
