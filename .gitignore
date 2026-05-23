@@ -21,3 +21,7 @@ test-results/
 .claude/
 Tests/Benchmark/animation-results-*Z.json
 metal-shader-gallery.png
+netflix-perf-profile.mjs
+hover-sweep.mjs
+test-results/
+playwright-report/
