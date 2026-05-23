@@ -351,9 +351,23 @@ function applyClipShape(element, value) {
 // ============================================================================
 
 // Text
+const TEXT_HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 registerRenderer('Text', (props) => {
-  const element = acquireElement('span');
+  // Default <span>; `.accessibilityHeading(.h1..h6)` swaps to a heading tag
+  // so both screen readers and search engines see the right semantics.
+  const tag = TEXT_HEADING_TAGS.has(props.headingLevel) ? props.headingLevel : 'span';
+  const element = acquireElement(tag);
   element.textContent = String(props.content ?? '');
+
+  if (tag !== 'span') {
+    // Match SwiftUI: `.accessibilityHeading(_:)` changes semantics only, not
+    // appearance. Neutralise the user-agent <h1>..<h6> styling so visuals
+    // stay driven by `.font()` / `.fontWeight()` modifiers.
+    element.style.fontSize = 'inherit';
+    element.style.fontWeight = 'inherit';
+    element.style.margin = '0';
+    element.style.display = 'inline';
+  }
 
   if (props.fontWeight) {
     element.style.fontWeight = getFontWeightValue(props.fontWeight);

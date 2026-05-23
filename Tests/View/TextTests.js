@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from '../TestUtils.js';
-import { Text } from '../../src/View/Text.js';
+import { Text, AccessibilityHeadingLevel } from '../../src/View/Text.js';
 import { render } from '../../src/Core/Renderer.js';
 
 describe('Text', () => {
@@ -342,6 +342,64 @@ describe('Text', () => {
       expect(element.style.color).toBe('red');
       expect(element.style.padding).toBe('10px');
       expect(element.style.backgroundColor).toBe('white');
+    });
+  });
+
+  describe('accessibilityHeading()', () => {
+    it('should expose h1..h6 + unspecified on AccessibilityHeadingLevel', () => {
+      expect(AccessibilityHeadingLevel.h1).toBe('h1');
+      expect(AccessibilityHeadingLevel.h2).toBe('h2');
+      expect(AccessibilityHeadingLevel.h3).toBe('h3');
+      expect(AccessibilityHeadingLevel.h4).toBe('h4');
+      expect(AccessibilityHeadingLevel.h5).toBe('h5');
+      expect(AccessibilityHeadingLevel.h6).toBe('h6');
+      expect(AccessibilityHeadingLevel.unspecified).toBe('unspecified');
+    });
+
+    it('should render h1 when level is .h1', () => {
+      const text = Text('Title').accessibilityHeading(AccessibilityHeadingLevel.h1);
+      const element = render(text);
+      expect(element.tagName).toBe('H1');
+      expect(element.textContent).toBe('Title');
+    });
+
+    it('should render h2 through h6 for matching levels', () => {
+      for (const level of ['h2', 'h3', 'h4', 'h5', 'h6']) {
+        const element = render(Text('x').accessibilityHeading(AccessibilityHeadingLevel[level]));
+        expect(element.tagName).toBe(level.toUpperCase());
+      }
+    });
+
+    it('should fall back to span for .unspecified', () => {
+      const text = Text('Hello').accessibilityHeading(AccessibilityHeadingLevel.unspecified);
+      const element = render(text);
+      expect(element.tagName).toBe('SPAN');
+    });
+
+    it('should neutralise user-agent heading styles so visuals stay modifier-driven', () => {
+      const element = render(Text('Hi').accessibilityHeading(AccessibilityHeadingLevel.h1));
+      expect(element.style.fontSize).toBe('inherit');
+      expect(element.style.fontWeight).toBe('inherit');
+    });
+
+    it('should keep other Text modifiers chainable after accessibilityHeading()', () => {
+      const text = Text('Hi')
+        .accessibilityHeading(AccessibilityHeadingLevel.h2)
+        .bold()
+        .foregroundColor('red');
+      const element = render(text);
+      expect(element.tagName).toBe('H2');
+      // bold overrides fontWeight: 'inherit' because the Text renderer
+      // applies its own fontWeight after the heading reset.
+      expect(element.style.fontWeight).toBe('700');
+      expect(element.style.color).toBe('red');
+    });
+
+    it('should return a new descriptor (immutable)', () => {
+      const text = Text('Hi');
+      const heading = text.accessibilityHeading(AccessibilityHeadingLevel.h1);
+      expect(heading).not.toBe(text);
+      expect(heading.type).toBe('Text');
     });
   });
 
