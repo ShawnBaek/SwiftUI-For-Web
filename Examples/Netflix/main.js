@@ -24,6 +24,9 @@ import {
   Font,
   LinearGradient,
   View,
+  // Animation — public SwiftUI API; GSAP runs internally
+  Animation,
+  withAnimation,
   // Environment for adaptive layout
   Environment,
   EnvironmentValues,
@@ -35,7 +38,6 @@ import {
 
 import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../src/Core/Renderer.js';
-import { Animator } from '../../src/Animation/Animator.js';
 
 /**
  * Helper function to render either a descriptor or a legacy View
@@ -483,9 +485,9 @@ const OPEN_CURVE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const CLOSE_CURVE = 'cubic-bezier(0.4, 0, 1, 0.6)';
 
 // Track in-flight animations so we can kill them mid-flight on rapid
-// open/close toggles instead of stacking. Animator returns either a GSAP
-// Tween (.kill()) or a WAAPI Animation (.cancel()) depending on whether
-// GSAP has loaded yet, so we try both.
+// open/close toggles instead of stacking. Animation.animate() returns a
+// GSAP Tween (.kill()) or a WAAPI Animation (.cancel()) depending on
+// whether the internal engine has finished loading; we try both.
 let activeAnims = [];
 function cancelActiveAnims() {
   for (const a of activeAnims) {
@@ -666,33 +668,31 @@ function openCard(movie, rect) {
     `translate(-50%, -50%) translate3d(${dx}px, ${dy}px, 0) scale(${initScale})`;
   const finalTransform = 'translate(-50%, -50%) scale(1)';
   card._initialTransform = initialTransform;
+  card._finalTransform   = finalTransform;
 
   cancelActiveAnims();
   overlay.style.visibility = 'visible';
   overlay.style.pointerEvents = 'auto';
 
-  // One GSAP timeline driving four tweens — shares a single ticker
-  // subscription. Falls back to parallel WAAPI animations if the GSAP
-  // bundle hasn't loaded yet (first paint after a hard refresh).
-  // Public SwiftUI API surface is unchanged; only the internal engine moved.
+  // Animate open: four elements coordinated via Animation.animate(),
+  // which routes through Animator.js (GSAP when loaded, WAAPI fallback).
+  // No direct GSAP/Animator import — the public SwiftUI animation API
+  // handles the engine choice transparently.
   const openDurSec = OPEN_DURATION_MS / 1000;
-  const tl = Animator.timeline({ defaults: { ease: 'power2.out' } });
-  if (tl) {
-    tl.fromTo(card,     { transform: initialTransform }, { transform: finalTransform, duration: openDurSec }, 0)
-      .fromTo(backdrop, { opacity: 0 },                  { opacity: 1, duration: openDurSec, ease: 'power1.out' }, 0)
-      .fromTo(textOverlay, { opacity: 0 },               { opacity: 1, duration: 0.16, ease: 'power1.out' }, 0.06)
-      .fromTo(closeBtn, { opacity: 0, scale: 0.8 },      { opacity: 1, scale: 1, duration: 0.16, ease: 'power1.out' }, 0.10);
-    activeAnims = [tl];
-  } else {
-    // GSAP not loaded yet — fall back to parallel Animator.fromTo calls,
-    // which Animator.js will route to WAAPI internally.
-    activeAnims = [
-      Animator.fromTo(card,        { transform: initialTransform }, { transform: finalTransform, duration: openDurSec, ease: 'power2.out' }),
-      Animator.fromTo(backdrop,    { opacity: 0 }, { opacity: 1, duration: openDurSec, ease: 'power1.out' }),
-      Animator.fromTo(textOverlay, { opacity: 0 }, { opacity: 1, duration: 0.16, delay: 0.06, ease: 'power1.out' }),
-      Animator.fromTo(closeBtn,    { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.16, delay: 0.1, ease: 'power1.out' })
-    ];
-  }
+  activeAnims = [
+    Animation.easeOut(openDurSec).animate(
+      card, { transform: initialTransform }, { transform: finalTransform }
+    ),
+    Animation.easeOut(openDurSec).animate(
+      backdrop, { opacity: 0 }, { opacity: 1 }
+    ),
+    Animation.easeOut(0.16).delay(0.06).animate(
+      textOverlay, { opacity: 0 }, { opacity: 1 }
+    ),
+    Animation.easeOut(0.16).delay(0.10).animate(
+      closeBtn, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1 }
+    ),
+  ];
 
   // Defer the only DOM-mutating write to a microtask, so it doesn't add
   // to the click handler's frame budget. The meta row lives inside the
@@ -736,23 +736,29 @@ function closeCard() {
   cancelActiveAnims();
 
   const initialTransform = card._initialTransform || 'translate(-50%, -50%)';
+  const finalTransform   = card._finalTransform   || 'translate(-50%, -50%) scale(1)';
   const closeDurSec = CLOSE_DURATION_MS / 1000;
 
-  const tl = Animator.timeline({ defaults: { ease: 'power2.in' }, onComplete: finishHide });
-  if (tl) {
-    tl.to(card,        { transform: initialTransform, opacity: 0.85, duration: closeDurSec }, 0)
-      .to(backdrop,    { opacity: 0, duration: closeDurSec, ease: 'power1.out' }, 0)
-      .to(textOverlay, { opacity: 0, duration: 0.12, ease: 'power1.out' }, 0)
-      .to(closeBtn,    { opacity: 0, duration: 0.12, ease: 'power1.out' }, 0);
-    activeAnims = [tl];
-  } else {
-    activeAnims = [
-      Animator.to(card,        { transform: initialTransform, opacity: 0.85, duration: closeDurSec, ease: 'power2.in', onComplete: finishHide }),
-      Animator.to(backdrop,    { opacity: 0, duration: closeDurSec, ease: 'power1.out' }),
-      Animator.to(textOverlay, { opacity: 0, duration: 0.12, ease: 'power1.out' }),
-      Animator.to(closeBtn,    { opacity: 0, duration: 0.12, ease: 'power1.out' })
-    ];
-  }
+  // Animate close: reverse of open.  We know the post-open state so we
+  // can specify explicit from→to for each element.  onComplete on the
+  // card tween (the longest) fires finishHide to flip visibility back.
+  activeAnims = [
+    Animation.easeIn(closeDurSec).animate(
+      card,
+      { transform: finalTransform, opacity: 1 },
+      { transform: initialTransform, opacity: 0.85 },
+      { onComplete: finishHide }
+    ),
+    Animation.easeOut(closeDurSec).animate(
+      backdrop, { opacity: 1 }, { opacity: 0 }
+    ),
+    Animation.easeOut(0.12).animate(
+      textOverlay, { opacity: 1 }, { opacity: 0 }
+    ),
+    Animation.easeOut(0.12).animate(
+      closeBtn, { opacity: 1 }, { opacity: 0 }
+    ),
+  ];
 
   // Safety fallback in case onComplete doesn't fire (e.g. tab backgrounded).
   setTimeout(finishHide, CLOSE_DURATION_MS + 80);
@@ -795,13 +801,11 @@ function NetflixApp() {
 const app = App(() => NetflixApp());
 app.mount('#root');
 
-// Prewarm during browser idle: overlay DOM + the GSAP animation engine.
-// By the time the user's first click reaches openCard(), both are ready
-// so click → first frame of motion is one compositor frame.
-const prewarm = () => {
-  ensureOverlay();
-  Animator.ready().catch(() => {/* fallback to WAAPI handled inside Animator */});
-};
+// Prewarm during browser idle: build the overlay DOM so the first open
+// is allocation-free.  The GSAP animation engine prewarms automatically
+// when Animation.js is imported (Animator.js self-prewarms on module
+// load), so no explicit engine prewarm is needed here.
+const prewarm = () => ensureOverlay();
 if (typeof requestIdleCallback === 'function') {
   requestIdleCallback(prewarm, { timeout: 1500 });
 } else {
