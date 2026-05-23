@@ -1,0 +1,59 @@
+# CI — unit + e2e tests on the self-hosted macOS runner.
+#
+# Targets the runner labeled `swiftui-for-web` (alongside the default
+# `self-hosted` / `macOS` / `ARM64` labels) so this workflow can never
+# accidentally land on a different self-hosted runner the maintainer owns.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to keep the queue short.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Defense in depth against the public-repo / self-hosted-runner risk:
+    # fork PRs never run on this runner. The repo-level setting
+    # `Settings → Actions → General → Fork pull request workflows` is the
+    # primary gate; this `if` is a belt-and-braces second layer.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    runs-on: [self-hosted, swiftui-for-web]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --no-progress
+
+      - name: Unit tests (node run-tests.js)
+        run: node run-tests.js
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
