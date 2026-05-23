@@ -258,6 +258,111 @@ export const ShaderLibrary = Object.freeze({
           yChannelSelector: 'G'
         });
       });
+    },
+
+    // ---------- Animated effects ----------
+    // These embed SVG <animate> elements inside their filter primitives so
+    // the GPU drives the animation; no JS / rAF needed. Same Shader API.
+
+    /**
+     * Continuously cycles the hue around the full 360° wheel.
+     * opts: { duration } seconds for one full cycle.
+     */
+    animatedHueRotate(opts) {
+      const o = opts || {};
+      const args = { duration: o.duration ?? 3 };
+      return new Shader(ShaderKind.color, 'animatedHueRotate', args, (filter, a) => {
+        const m = appendPrimitive(filter, 'feColorMatrix', {
+          type: 'hueRotate',
+          values: '0'
+        });
+        appendPrimitive(m, 'animate', {
+          attributeName: 'values',
+          from: '0',
+          to: '360',
+          dur: `${a.duration}s`,
+          repeatCount: 'indefinite'
+        });
+      });
+    },
+
+    /**
+     * Heat-shimmer / breathing ripple. The displacement scale animates
+     * 0 → amplitude → 0 in a loop.
+     * opts: { amplitude, frequency, duration }
+     */
+    animatedRipple(opts) {
+      const o = opts || {};
+      const args = {
+        amplitude: o.amplitude ?? 12,
+        frequency: o.frequency ?? 0.02,
+        duration: o.duration ?? 2.5,
+        seed: o.seed ?? 1
+      };
+      return new Shader(ShaderKind.distortion, 'animatedRipple', args, (filter, a) => {
+        appendPrimitive(filter, 'feTurbulence', {
+          type: 'turbulence',
+          baseFrequency: String(a.frequency),
+          numOctaves: '2',
+          seed: String(a.seed),
+          result: 'turbulence'
+        });
+        const disp = appendPrimitive(filter, 'feDisplacementMap', {
+          in: 'SourceGraphic',
+          in2: 'turbulence',
+          scale: '0',
+          xChannelSelector: 'R',
+          yChannelSelector: 'G'
+        });
+        appendPrimitive(disp, 'animate', {
+          attributeName: 'scale',
+          values: `0;${a.amplitude};0`,
+          dur: `${a.duration}s`,
+          repeatCount: 'indefinite'
+        });
+      });
+    },
+
+    /**
+     * Pulsing neon glow — drop shadow whose radius breathes in/out.
+     * opts: { color, baseRadius, peakRadius, duration }
+     */
+    animatedGlow(opts) {
+      const o = opts || {};
+      const args = {
+        color: o.color ?? 'rgba(0,200,255,0.85)',
+        baseRadius: o.baseRadius ?? 4,
+        peakRadius: o.peakRadius ?? 14,
+        duration: o.duration ?? 1.8
+      };
+      return new Shader(ShaderKind.layer, 'animatedGlow', args, (filter, a) => {
+        const [r, g, b, alpha] = resolveColorRGBA(a.color);
+        const blur = appendPrimitive(filter, 'feGaussianBlur', {
+          in: 'SourceAlpha',
+          stdDeviation: String(a.baseRadius),
+          result: 'blur'
+        });
+        appendPrimitive(blur, 'animate', {
+          attributeName: 'stdDeviation',
+          values: `${a.baseRadius};${a.peakRadius};${a.baseRadius}`,
+          dur: `${a.duration}s`,
+          repeatCount: 'indefinite'
+        });
+        appendPrimitive(filter, 'feFlood', {
+          'flood-color': `rgba(${r * 255},${g * 255},${b * 255},${alpha})`,
+          'flood-opacity': '1',
+          result: 'colorFlood'
+        });
+        appendPrimitive(filter, 'feComposite', {
+          in: 'colorFlood',
+          in2: 'blur',
+          operator: 'in',
+          result: 'glow'
+        });
+        const merge = appendPrimitive(filter, 'feMerge', {});
+        appendPrimitive(merge, 'feMergeNode', { in: 'glow' });
+        appendPrimitive(merge, 'feMergeNode', { in: 'SourceGraphic' });
+      });
     }
   })
 });
