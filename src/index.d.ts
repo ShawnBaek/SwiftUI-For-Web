@@ -67,6 +67,24 @@ export class View {
   /** Match geometry for hero animations */
   matchedGeometryEffect(id: string, namespace: Namespace): this;
 
+  // Shader Effect Modifiers (iOS 17+ in SwiftUI, SVG-filter-backed here)
+  /**
+   * Apply a per-pixel color shader (hueRotate, colorize, saturation, etc.).
+   * @param shader From `ShaderLibrary.default.<colorize|brightness|hueRotate|...>`
+   * @see https://developer.apple.com/documentation/swiftui/view/coloreffect(_:isenabled:)
+   */
+  colorEffect(shader: Shader, options?: ShaderModifierOptions): this;
+  /**
+   * Apply a per-pixel position warp shader (ripple, displace, etc.).
+   * @see https://developer.apple.com/documentation/swiftui/view/distortioneffect(_:maxsampleoffset:isenabled:)
+   */
+  distortionEffect(shader: Shader, options?: ShaderModifierOptions & { maxSampleOffset?: { width: number; height: number } }): this;
+  /**
+   * Apply a full-layer sampling shader (blur, dropShadow, animatedGlow, etc.).
+   * @see https://developer.apple.com/documentation/swiftui/view/layereffect(_:maxsampleoffset:isenabled:)
+   */
+  layerEffect(shader: Shader, options?: ShaderModifierOptions & { maxSampleOffset?: { width: number; height: number } }): this;
+
   // Environment
   /** Inject environment value */
   environment(keyPath: string, value: any): this;
@@ -263,7 +281,37 @@ export function Text(content: string | number): View & {
   minimumScaleFactor(factor: number): View;
   /** Use monospaced digits */
   monospacedDigit(): View;
+  /**
+   * Marks this text as a heading at the given level. On the web this maps
+   * the underlying tag to `<h1>`–`<h6>`, giving both screen-reader semantics
+   * and SEO. `AccessibilityHeadingLevel.unspecified` (the default) keeps
+   * the underlying `<span>`.
+   *
+   * @see https://developer.apple.com/documentation/swiftui/view/accessibilityheading(_:)
+   *
+   * @example
+   * Text('Pricing')
+   *   .accessibilityHeading(AccessibilityHeadingLevel.h1)
+   *   .font(Font.largeTitle)
+   */
+  accessibilityHeading(level: AccessibilityHeadingLevelValue): View;
 };
+
+/**
+ * Heading level for `Text(...).accessibilityHeading(_:)`. Mirrors
+ * SwiftUI's `AccessibilityHeadingLevel`.
+ */
+export const AccessibilityHeadingLevel: {
+  readonly h1: 'h1';
+  readonly h2: 'h2';
+  readonly h3: 'h3';
+  readonly h4: 'h4';
+  readonly h5: 'h5';
+  readonly h6: 'h6';
+  readonly unspecified: 'unspecified';
+};
+
+export type AccessibilityHeadingLevelValue = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'unspecified';
 
 /** Display an image */
 export function Image(source: string | { systemName: string }): View & {
@@ -585,7 +633,7 @@ export function NavigationStack(
   /** Configure toolbar */
   toolbar(content: () => View): View;
   /** Define navigation destinations */
-  navigationDestination<T>(for: new () => T, destination: (value: T) => View): View;
+  navigationDestination<T>(forType: new () => T, destination: (value: T) => View): View;
 };
 
 /** Trigger navigation to a destination */
@@ -821,6 +869,86 @@ export const UnitPoint: {
   topTrailing: { x: number; y: number };
   bottomLeading: { x: number; y: number };
   bottomTrailing: { x: number; y: number };
+};
+
+// =============================================================================
+// Shader Effects (SwiftUI iOS 17+ shader modifiers, SVG-filter-backed)
+// =============================================================================
+
+/** The three shader kinds — mirrors the modifier each Shader is valid for. */
+export const ShaderKind: {
+  readonly color: 'color';
+  readonly distortion: 'distortion';
+  readonly layer: 'layer';
+};
+
+export type ShaderKindValue = 'color' | 'distortion' | 'layer';
+
+/**
+ * A compiled shader effect. Constructed via `ShaderLibrary.default.<name>(args)`.
+ * Pass to `.colorEffect()` / `.distortionEffect()` / `.layerEffect()` on any View.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/shader
+ */
+export class Shader {
+  readonly kind: ShaderKindValue;
+  readonly name: string;
+  readonly id: string;
+}
+
+export interface ShaderModifierOptions {
+  isEnabled?: boolean;
+}
+
+/**
+ * `ShaderLibrary.default` is the curated catalogue of preset shaders.
+ * Each factory returns a `Shader` instance ready for a `.xxxEffect()` modifier.
+ *
+ * @example
+ *   Image('cat.jpg')
+ *     .colorEffect(ShaderLibrary.default.hueRotate(90))
+ *     .layerEffect(ShaderLibrary.default.blur(4));
+ *
+ * @see https://developer.apple.com/documentation/swiftui/shaderlibrary
+ */
+export const ShaderLibrary: {
+  default: {
+    // ── Color effects ──
+    /** Multiply RGB by a target color. */
+    colorize(color: Color | string | [number, number, number, number?]): Shader;
+    /** amount: 0 = black, 1 = unchanged, >1 = brighter. */
+    brightness(amount: number): Shader;
+    /** amount: 0 = grey, 1 = unchanged, >1 = punchier. */
+    contrast(amount: number): Shader;
+    /** amount: 0 = greyscale, 1 = unchanged. */
+    saturation(amount: number): Shader;
+    /** Rotate hue by N degrees. */
+    hueRotate(angleDegrees: number): Shader;
+    /** amount: 0 = unchanged, 1 = fully greyscale. */
+    grayscale(amount?: number): Shader;
+    /** amount: 0 = unchanged, 1 = fully inverted. */
+    invert(amount?: number): Shader;
+    /** amount: 0 = unchanged, 1 = full sepia tone. */
+    sepia(amount?: number): Shader;
+
+    // ── Layer effects ──
+    /** Gaussian blur. radius in pixels. */
+    blur(radius: number): Shader;
+    /** SwiftUI-style drop shadow. */
+    dropShadow(opts: { color?: Color | string; radius?: number; x?: number; y?: number }): Shader;
+
+    // ── Distortion effects ──
+    /** Turbulence-displaced ripple. */
+    ripple(opts: { amplitude?: number; frequency?: number; seed?: number }): Shader;
+
+    // ── Animated effects (embed SVG <animate>, GPU-driven, no rAF) ──
+    /** Continuously cycles the hue around the full 360° wheel. */
+    animatedHueRotate(opts: { duration?: number }): Shader;
+    /** Heat-shimmer / breathing ripple. */
+    animatedRipple(opts: { amplitude?: number; frequency?: number; duration?: number; seed?: number }): Shader;
+    /** Pulsing neon glow — drop shadow whose radius breathes in/out. */
+    animatedGlow(opts: { color?: Color | string; baseRadius?: number; peakRadius?: number; duration?: number }): Shader;
+  };
 };
 
 // =============================================================================
