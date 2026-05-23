@@ -18,7 +18,14 @@ the rules that, if violated, will get a PR rejected.
      by exactly one file: [`src/Animation/Animator.js`](src/Animation/Animator.js).
      Do not add a `package.json` dependency; do not import GSAP from
      anywhere else. If you need an animation primitive, route it through
-     `Animator.{to, fromTo, timeline}`.
+     `Animator.{to, fromTo, timeline, killAll}`.
+   - `Animator.ready()` returns a Promise that resolves when GSAP has loaded.
+     Call it during idle prewarming (`requestIdleCallback`) so the first
+     user gesture hits the fast path. The module self-prewarms on import,
+     so in practice you only need `ready()` if you want to await it explicitly.
+   - If GSAP hasn't loaded yet (first-frame race), `Animator.to/fromTo`
+     automatically fall back to the Web Animations API (WAAPI) — the UI
+     never breaks due to a network hiccup.
 2. **SwiftUI API parity is law.** Every public symbol must already exist in
    Apple SwiftUI with the same name, same parameter labels, same semantics.
    - ✅ `.foregroundColor(Color.blue)`, `.padding(20)`, `.accessibilityHeading(.h1)`
@@ -42,6 +49,9 @@ Immutable view descriptor   { type, props, children, modifiers, key }
 DOM element (acquireElement from ElementPool)
    ▼  SignalRenderer.bindReactive
 Reactive bindings via createEffect (signals → textContent / styles)
+   ▼  withAnimation / .transition / .animation
+Animator.js  ──►  GSAP 3.13 (vendored, internal only)
+                  └─ WAAPI fallback on first-frame race
 ```
 
 Key files (read these before adding anything non-trivial):
@@ -51,11 +61,16 @@ Key files (read these before adding anything non-trivial):
 - [src/Core/SignalRenderer.js](src/Core/SignalRenderer.js) — mount + reactive binding walk
 - [src/Core/ElementPool.js](src/Core/ElementPool.js) — DOM recycling
 - [src/Data/Signal.js](src/Data/Signal.js) — `createEffect`, `createRoot`, `untrack`
+- [src/Animation/Animator.js](src/Animation/Animator.js) — **the only file** that imports GSAP; public surface: `ready`, `to`, `fromTo`, `timeline`, `killAll`
+- [src/Graphic/Shader.js](src/Graphic/Shader.js) — `Shader`, `ShaderLibrary`, `ShaderKind` for `.colorEffect` / `.distortionEffect` / `.layerEffect`
 - [src/index.js](src/index.js) — public exports (default + named, both required)
+- [src/index.d.ts](src/index.d.ts) — TypeScript / VSCode intellisense definitions; **update this whenever you add or change a public API**
 
 **Mental model:** descriptors are immutable. Modifiers return *new* frozen
 descriptors. The body runs **once** at mount; updates happen via signal
 effects that mutate specific DOM properties — there is no VDOM diff.
+Animations run through `Animator.js`, which is a thin facade over GSAP and
+invisible to the user's SwiftUI code.
 
 ---
 
@@ -107,6 +122,63 @@ Every chainable wrapper ends with `return Object.freeze(chain);`. This is
 load-bearing — it prevents mutation and lets the runtime trust descriptors.
 If you find yourself wanting to mutate a descriptor, you want a *new* one
 via `createDescriptor(...)` / `addModifier(...)`.
+
+### 3.4 Animation — always route through Animator.js
+
+Users author `withAnimation`, `.transition`, `.animation`, and
+`matchedGeometryEffect`. The framework implements those via `Animator.*`.
+**Never import GSAP directly from any file other than `Animator.js`.**
+
+```js
+// ✅ Correct — framework implementation code
+import { Animator } from '../Animation/Animator.js';
+
+// Simple tween
+Animator.to(el, { opacity: 0, duration: 0.22, ease: 'power2.out' });
+
+// Explicit from→to (matches SwiftUI .transition semantics)
+Animator.fromTo(el, { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.28 });
+
+// Multi-element choreography — ONE shared RAF ticker, no dropped frames
+const tl = Animator.timeline();
+tl.fromTo(backdropEl, { opacity: 0 }, { opacity: 1, duration: 0.18 })
+  .fromTo(cardEl,     { scale: 0.9 }, { scale: 1, duration: 0.26, ease: 'power2.out' }, '<');
+
+// Clean up when an element leaves the DOM
+Animator.killAll(el);
+```
+
+```js
+// ❌ Wrong — import gsap directly
+import gsap from '../internal/gsap/gsap.min.js';  // NEVER
+import { gsap } from 'gsap';                       // NEVER
+```
+
+**Prewarming** — if your feature is interaction-driven (button, hover),
+prewarm GSAP before the first gesture so there's no cold-load stutter:
+
+```js
+if (typeof requestIdleCallback !== 'undefined') {
+  requestIdleCallback(() => Animator.ready());
+} else {
+  setTimeout(() => Animator.ready(), 200);
+}
+```
+
+### 3.5 TypeScript / VSCode intellisense (`src/index.d.ts`)
+
+Every public symbol exported from `src/index.js` needs a matching definition
+in [`src/index.d.ts`](src/index.d.ts). The `.d.ts` file is the only thing
+that gives users autocomplete in VSCode without a build step.
+
+Rules:
+- Add the type when you add the export — don't defer it.
+- Mirror SwiftUI's exact parameter labels (avoid JS reserved words like `for`
+  — rename to e.g. `forType` with a `@see` comment pointing to the Apple doc).
+- Chainable modifiers return the same interface type, e.g.
+  `foregroundColor(color: Color): this`.
+- Enums (like `AccessibilityHeadingLevel`, `ShaderKind`) are typed as
+  `const` objects with a string/number union value type.
 
 ---
 
@@ -180,6 +252,19 @@ shader source code can slot in later behind the same `Shader` API.
   props use the `xxxThunk` pattern + `createEffect` in `bindReactive`.
 - **Don't add MutationObservers.** A shared `LifecycleObserver` already
   handles `onAppear` / `onDisappear`.
+- **`visibility` over `display` for animated elements.** Toggling
+  `display:none → block` triggers a full layout pass and causes dropped
+  frames. Use `visibility:hidden / pointer-events:none` to hide, and
+  `visibility:visible / pointer-events:auto` to show — the element stays
+  in the layout tree, so the compositor can animate it without a reflow.
+- **One timeline for coordinated animations.** Running N separate
+  `Animator.to()` calls gives the GSAP scheduler N independent tickers
+  and can drop frames at 4× CPU throttle. Collect related tweens into a
+  single `Animator.timeline()` so they share one RAF callback.
+- **Prewarm before interactions.** If an animation fires on a click/hover,
+  call `Animator.ready()` inside `requestIdleCallback` at mount time so
+  GSAP is already loaded when the user acts. Target: click → first frame
+  under 10 ms.
 
 ---
 
@@ -196,14 +281,17 @@ shader source code can slot in later behind the same `Shader` API.
 ## 7. PR checklist (paste into the PR body)
 
 ```
-- [ ] Zero new dependencies
+- [ ] Zero new dependencies (GSAP is the sole permitted exception, already vendored)
 - [ ] Public API name + parameter labels match SwiftUI exactly
 - [ ] SwiftUI doc URL referenced for any new API
 - [ ] No invented non-SwiftUI views/modifiers
 - [ ] Renderer uses acquireElement (not document.createElement)
 - [ ] Exported from src/index.js (default namespace + named)
+- [ ] src/index.d.ts updated for any new/changed public symbol
 - [ ] Tests added under Tests/<Category>/
 - [ ] Test runner loads the new test file
+- [ ] Animation code routes through Animator.js (no direct gsap import)
+- [ ] Animated show/hide uses visibility:hidden (not display:none)
 ```
 
 ---
@@ -221,6 +309,20 @@ shader source code can slot in later behind the same `Shader` API.
 - ❌ Forgetting the named export in `src/index.js` (default-only breaks
   tree-shaking imports).
 - ❌ Writing a new MutationObserver instead of using `LifecycleObserver`.
+- ❌ Importing GSAP directly in any file other than `Animator.js`. Even
+  `import { gsap } from '../internal/gsap/gsap.min.js'` is wrong — route
+  through `Animator.*`.
+- ❌ Toggling `display:none / display:block` on elements that animate.
+  This forces a layout pass and causes a dropped frame. Use
+  `visibility:hidden / pointer-events:none` instead.
+- ❌ Running multiple separate `Animator.to()` calls for a coordinated
+  sequence. Each call is its own ticker. Use `Animator.timeline()` so all
+  tweens share one RAF callback.
+- ❌ Forgetting to update `src/index.d.ts` after adding a public API.
+  Without the `.d.ts` entry, VSCode shows no autocomplete for the new symbol.
+- ❌ Using a JavaScript reserved word (`for`, `in`, `class`, `default`) as a
+  TypeScript parameter label in `.d.ts`. Rename to e.g. `forType` and add a
+  `@see` comment pointing to the Apple doc.
 
 When in doubt: read the nearest already-shipped view in `src/View/` and
 mirror its shape exactly.
