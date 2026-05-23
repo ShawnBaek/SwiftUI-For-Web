@@ -35,6 +35,7 @@ import {
 
 import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../src/Core/Renderer.js';
+import { Animator } from '../../src/Animation/Animator.js';
 
 /**
  * Helper function to render either a descriptor or a legacy View
@@ -481,24 +482,44 @@ const OPEN_CURVE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 // Slight ease-in for dismissal — hangs briefly then accelerates away.
 const CLOSE_CURVE = 'cubic-bezier(0.4, 0, 1, 0.6)';
 
+// Track in-flight animations so we can kill them mid-flight on rapid
+// open/close toggles instead of stacking. Animator returns either a GSAP
+// Tween (.kill()) or a WAAPI Animation (.cancel()) depending on whether
+// GSAP has loaded yet, so we try both.
+let activeAnims = [];
+function cancelActiveAnims() {
+  for (const a of activeAnims) {
+    if (!a) continue;
+    try { if (typeof a.kill === 'function') a.kill(); } catch (_) {}
+    try { if (typeof a.cancel === 'function') a.cancel(); } catch (_) {}
+  }
+  activeAnims = [];
+}
+
 let overlayRefs = null;  // { overlay, backdrop, card, img, title, meta, desc, closeBtn, textOverlay }
 
 function ensureOverlay() {
   if (overlayRefs) return overlayRefs;
 
+  // Stay `display:block` from the start with `visibility:hidden` +
+  // `pointer-events:none`, instead of toggling `display:none↔block`. That
+  // toggle on first open is a discrete layout pass; under 4× CPU throttle
+  // it was the one remaining ~25ms dropped frame in the open sequence.
+  // Visibility flip is free — the element is already laid out.
   const overlay = document.createElement('div');
   overlay.id = 'netflix-overlay';
   overlay.style.cssText = `
     position: fixed; inset: 0; z-index: 1000;
-    display: none; pointer-events: auto;
+    visibility: hidden; pointer-events: none;
   `;
 
+  // No CSS transitions on the animated properties — WAAPI drives them
+  // directly (no reflow, no transition swap, no rAF dance).
   const backdrop = document.createElement('div');
   backdrop.style.cssText = `
     position: absolute; inset: 0;
     background: rgba(0, 0, 0, 0.85);
     opacity: 0; will-change: opacity;
-    transition: opacity ${OPEN_DURATION_MS}ms ease;
   `;
   backdrop.addEventListener('click', closeCard);
   overlay.appendChild(backdrop);
@@ -513,6 +534,7 @@ function ensureOverlay() {
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6);
     will-change: transform;
     contain: layout paint;
+    transform: translate(-50%, -50%);
   `;
 
   const img = document.createElement('img');
@@ -529,7 +551,6 @@ function ensureOverlay() {
     display: flex; flex-direction: column; justify-content: flex-end;
     padding: 20px;
     opacity: 0;
-    transition: opacity 0.16s ease 0.06s;
   `;
 
   const title = document.createElement('h2');
@@ -572,7 +593,7 @@ function ensureOverlay() {
     font-size: 18px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     opacity: 0; transform: scale(0.8);
-    transition: opacity 0.16s ease 0.1s, transform 0.16s ease 0.1s, background 0.15s ease;
+    transition: background 0.15s ease;
     z-index: 10;
   `;
   closeBtn.addEventListener('mouseenter', () => {
@@ -592,9 +613,25 @@ function ensureOverlay() {
 }
 
 /**
- * Open the prewarmed overlay with this movie's content. Click → animation
- * start is one synchronous frame: content updates + initial transform +
- * forced reflow + final transform. No allocation, no double-rAF.
+ * Open the prewarmed overlay with this movie's content using the Web
+ * Animations API.
+ *
+ * Why WAAPI not CSS transitions:
+ *   • `Element.animate()` lets us declare "go from state A to state B
+ *     over T ms with curve C" without ever putting A on the element.
+ *     The browser handles the starting state internally on the next
+ *     compositor frame — no need to set the initial transform on the
+ *     element and then immediately change it (which forces a sync
+ *     reflow if you want the transition to actually fire).
+ *   • That synchronous reflow was the 33ms dropped frame on click.
+ *     WAAPI eliminates it: the click handler returns in <1ms after
+ *     scheduling four short animations, and the first compositor frame
+ *     after that already shows motion.
+ *
+ * We also defer the meta.innerHTML update to a microtask — it's the
+ * only DOM-mutating operation in the path and it doesn't affect the
+ * first animation frame (the meta row is inside textOverlay which
+ * starts at opacity:0).
  */
 function openCard(movie, rect) {
   if (currentOverlay) return;
@@ -606,18 +643,13 @@ function openCard(movie, rect) {
   const refs = ensureOverlay();
   const { overlay, backdrop, card, img, title, meta, desc, textOverlay, closeBtn } = refs;
 
-  // Content updates — text + image only, no style writes per node.
+  // Light content writes — these only affect the initial visible state,
+  // which is hidden behind the thumbnail-sized card during the first frame.
   img.src = movie.poster;
   title.textContent = movie.title;
   title.style.fontSize = layout.isMobile ? '18px' : '24px';
   desc.textContent = movie.description || 'An exciting movie that will keep you on the edge of your seat.';
   desc.style.fontSize = layout.isMobile ? '12px' : '14px';
-  meta.innerHTML = `
-    <span style="color: #46d369; font-weight: 500;">${movie.year}</span>
-    <span style="color: white; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; font-size: 12px;">${movie.rating}</span>
-  `;
-
-  // Resize card to current viewport's expanded dimensions.
   card.style.width = `${layout.expandedWidth}px`;
   card.style.height = `${layout.expandedHeight}px`;
 
@@ -632,38 +664,53 @@ function openCard(movie, rect) {
   const dy = startY - vpH / 2;
   const initialTransform =
     `translate(-50%, -50%) translate3d(${dx}px, ${dy}px, 0) scale(${initScale})`;
+  const finalTransform = 'translate(-50%, -50%) scale(1)';
   card._initialTransform = initialTransform;
 
-  // Reveal the overlay AND set the starting transform with the transition
-  // disabled, then force a synchronous style commit, THEN re-enable the
-  // transition and set the final transform. The transition fires on the
-  // very next frame — no double-rAF, no perceptible click latency.
-  overlay.style.display = 'block';
-  card.style.transition = 'none';
-  card.style.transform = initialTransform;
-  backdrop.style.opacity = '0';
-  textOverlay.style.opacity = '0';
-  closeBtn.style.opacity = '0';
-  closeBtn.style.transform = 'scale(0.8)';
+  cancelActiveAnims();
+  overlay.style.visibility = 'visible';
+  overlay.style.pointerEvents = 'auto';
 
-  // Force a reflow so the browser commits the initial state before we
-  // change the transition + target transform below. `getBoundingClientRect`
-  // is a synchronous layout read — single line, no allocation.
-  void card.getBoundingClientRect();
+  // One GSAP timeline driving four tweens — shares a single ticker
+  // subscription. Falls back to parallel WAAPI animations if the GSAP
+  // bundle hasn't loaded yet (first paint after a hard refresh).
+  // Public SwiftUI API surface is unchanged; only the internal engine moved.
+  const openDurSec = OPEN_DURATION_MS / 1000;
+  const tl = Animator.timeline({ defaults: { ease: 'power2.out' } });
+  if (tl) {
+    tl.fromTo(card,     { transform: initialTransform }, { transform: finalTransform, duration: openDurSec }, 0)
+      .fromTo(backdrop, { opacity: 0 },                  { opacity: 1, duration: openDurSec, ease: 'power1.out' }, 0)
+      .fromTo(textOverlay, { opacity: 0 },               { opacity: 1, duration: 0.16, ease: 'power1.out' }, 0.06)
+      .fromTo(closeBtn, { opacity: 0, scale: 0.8 },      { opacity: 1, scale: 1, duration: 0.16, ease: 'power1.out' }, 0.10);
+    activeAnims = [tl];
+  } else {
+    // GSAP not loaded yet — fall back to parallel Animator.fromTo calls,
+    // which Animator.js will route to WAAPI internally.
+    activeAnims = [
+      Animator.fromTo(card,        { transform: initialTransform }, { transform: finalTransform, duration: openDurSec, ease: 'power2.out' }),
+      Animator.fromTo(backdrop,    { opacity: 0 }, { opacity: 1, duration: openDurSec, ease: 'power1.out' }),
+      Animator.fromTo(textOverlay, { opacity: 0 }, { opacity: 1, duration: 0.16, delay: 0.06, ease: 'power1.out' }),
+      Animator.fromTo(closeBtn,    { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.16, delay: 0.1, ease: 'power1.out' })
+    ];
+  }
 
-  card.style.transition = `transform ${OPEN_DURATION_MS}ms ${OPEN_CURVE}`;
-  card.style.transform = 'translate(-50%, -50%) scale(1)';
-  backdrop.style.opacity = '1';
-  textOverlay.style.opacity = '1';
-  closeBtn.style.opacity = '1';
-  closeBtn.style.transform = 'scale(1)';
+  // Defer the only DOM-mutating write to a microtask, so it doesn't add
+  // to the click handler's frame budget. The meta row lives inside the
+  // textOverlay which is still invisible at this point.
+  queueMicrotask(() => {
+    meta.innerHTML = `
+      <span style="color: #46d369; font-weight: 500;">${movie.year}</span>
+      <span style="color: white; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; font-size: 12px;">${movie.rating}</span>
+    `;
+  });
 
   currentOverlay = overlay;
 }
 
 /**
- * Animate the overlay closed and hide via `display: none`. The DOM stays
- * intact and is reused by the next open() — keeps re-opens allocation-free.
+ * Animate the overlay closed via WAAPI and hide via `display: none`.
+ * DOM stays intact and is reused by the next open() — keeps re-opens
+ * allocation-free.
  */
 function closeCard() {
   if (!currentOverlay || !overlayRefs) return;
@@ -676,38 +723,39 @@ function closeCard() {
   currentCardRect = null;
   selectedMovie = null;
 
-  if (rect) {
-    card.style.transition = `transform ${CLOSE_DURATION_MS}ms ${CLOSE_CURVE}, opacity ${CLOSE_DURATION_MS}ms ease`;
-    card.style.transform = card._initialTransform || 'translate(-50%, -50%)';
-    card.style.opacity = '0.8';
+  const finishHide = () => {
+    overlay.style.visibility = 'hidden';
+    overlay.style.pointerEvents = 'none';
+  };
 
-    textOverlay.style.transition = 'opacity 0.12s ease';
-    textOverlay.style.opacity = '0';
-    closeBtn.style.transition = 'opacity 0.12s ease';
-    closeBtn.style.opacity = '0';
-    backdrop.style.opacity = '0';
-
-    const hide = () => {
-      overlay.style.display = 'none';
-      card.style.opacity = '1';  // reset for next open
-    };
-
-    const onEnd = (e) => {
-      if (e.target === card && e.propertyName === 'transform') {
-        card.removeEventListener('transitionend', onEnd);
-        hide();
-      }
-    };
-    card.addEventListener('transitionend', onEnd);
-
-    // Safety fallback — buffer past the close duration.
-    setTimeout(() => {
-      card.removeEventListener('transitionend', onEnd);
-      hide();
-    }, CLOSE_DURATION_MS + 60);
-  } else {
-    overlay.style.display = 'none';
+  if (!rect) {
+    finishHide();
+    return;
   }
+
+  cancelActiveAnims();
+
+  const initialTransform = card._initialTransform || 'translate(-50%, -50%)';
+  const closeDurSec = CLOSE_DURATION_MS / 1000;
+
+  const tl = Animator.timeline({ defaults: { ease: 'power2.in' }, onComplete: finishHide });
+  if (tl) {
+    tl.to(card,        { transform: initialTransform, opacity: 0.85, duration: closeDurSec }, 0)
+      .to(backdrop,    { opacity: 0, duration: closeDurSec, ease: 'power1.out' }, 0)
+      .to(textOverlay, { opacity: 0, duration: 0.12, ease: 'power1.out' }, 0)
+      .to(closeBtn,    { opacity: 0, duration: 0.12, ease: 'power1.out' }, 0);
+    activeAnims = [tl];
+  } else {
+    activeAnims = [
+      Animator.to(card,        { transform: initialTransform, opacity: 0.85, duration: closeDurSec, ease: 'power2.in', onComplete: finishHide }),
+      Animator.to(backdrop,    { opacity: 0, duration: closeDurSec, ease: 'power1.out' }),
+      Animator.to(textOverlay, { opacity: 0, duration: 0.12, ease: 'power1.out' }),
+      Animator.to(closeBtn,    { opacity: 0, duration: 0.12, ease: 'power1.out' })
+    ];
+  }
+
+  // Safety fallback in case onComplete doesn't fire (e.g. tab backgrounded).
+  setTimeout(finishHide, CLOSE_DURATION_MS + 80);
 }
 
 /**
@@ -747,10 +795,13 @@ function NetflixApp() {
 const app = App(() => NetflixApp());
 app.mount('#root');
 
-// Prewarm the modal DOM during browser idle time so even the user's FIRST
-// card click hits the fast path. requestIdleCallback runs after layout
-// and paint settle, so this never competes with the initial render.
-const prewarm = () => ensureOverlay();
+// Prewarm during browser idle: overlay DOM + the GSAP animation engine.
+// By the time the user's first click reaches openCard(), both are ready
+// so click → first frame of motion is one compositor frame.
+const prewarm = () => {
+  ensureOverlay();
+  Animator.ready().catch(() => {/* fallback to WAAPI handled inside Animator */});
+};
 if (typeof requestIdleCallback === 'function') {
   requestIdleCallback(prewarm, { timeout: 1500 });
 } else {

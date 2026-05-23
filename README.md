@@ -1,6 +1,8 @@
 # SwiftUI-For-Web
 
-**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. Zero dependencies, no build step.**
+**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. No build step, no `npm install` required.**
+
+> **Animation engine.** The SwiftUI animation surface (`withAnimation`, `.animation`, `.transition`, `matchedGeometryEffect`, the Netflix demo's modal) is internally driven by [GSAP 3.13](https://gsap.com/) — vendored at [`src/internal/gsap/`](src/internal/gsap/) (~28 KB gzipped) under GreenSock's free no-charge license. Users author against the SwiftUI API; GSAP is the system layer beneath it and is never imported in user code. `src/Animation/Animator.js` is the only framework file that touches GSAP directly.
 
 If you know SwiftUI, you already know this framework. Same component names (`VStack`, `Text`, `Button`, `NavigationStack`, `ForEach`, `ObservableObject`), same modifier chain (`.padding()`, `.foregroundColor()`, `.cornerRadius()`), the same `Chart`/`BarMark`/`LineMark` API from Swift Charts — implemented in plain JavaScript, mounted with a `<script type="module">`.
 
@@ -8,8 +10,9 @@ Under the hood, view bodies run **once at mount**. State changes execute only th
 
 [![Version](https://img.shields.io/badge/version-2.0.0--alpha-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Engine](https://img.shields.io/badge/engine-fine--grained%20reactive-purple.svg)](#architecture)
-[![Bundle](https://img.shields.io/badge/gzipped-~98KB-brightgreen.svg)](#bundle-size)
+[![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
+[![Animation](https://img.shields.io/badge/animation%20engine-GSAP%203.13-88ce02.svg)](#animation-engine-gsap-under-the-hood)
+[![Bundle](https://img.shields.io/badge/gzipped-~126KB-brightgreen.svg)](#bundle-size)
 
 > **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
 
@@ -154,6 +157,55 @@ vm.items = [...vm.items, item];         // setter notifies tracked observers
 
 ---
 
+## Animation engine (GSAP under the hood)
+
+The framework's animation surface is **pure SwiftUI** at the API level. Internally it is driven by [GSAP 3.13](https://gsap.com/) — vendored at [`src/internal/gsap/`](src/internal/gsap/) (~28 KB gzipped, GreenSock's free no-charge license). You never `import gsap` and you never type `gsap` — that's the system layer.
+
+```js
+// Your code — pure SwiftUI, no awareness GSAP exists
+import { withAnimation, State, Animation } from 'swiftui-for-web';
+
+const isExpanded = new State(false);
+
+// Tap → state mutates → views re-render → GSAP timeline drives the motion.
+withAnimation(Animation.spring(), () => {
+  isExpanded.value = !isExpanded.value;
+});
+```
+
+### Why GSAP
+
+| | Why it matters here |
+|---|---|
+| **Unified timeline** | `withAnimation { … }` becomes a GSAP `timeline()` under the hood. Child views' tweens land on one shared ticker — one rAF callback for the whole composition. |
+| **Spring physics** | `Animation.spring(response:, dampingFraction:)` maps cleanly onto GSAP's spring eases. CSS easing curves can approximate, but never feel right. |
+| **Mid-flight kill / re-target** | Rapid state toggles (think: card open/close while another is still animating) interrupt cleanly without state desync. |
+| **One ticker** | Every animation in your app shares GSAP's single `requestAnimationFrame` loop — fewer rAF subscriptions than per-element CSS transitions or WAAPI. |
+
+### Architecture (layering)
+
+```
+Your code                  withAnimation, .transition(.scale), .animation(.spring(), value)
+                           no `gsap` import, no awareness it exists
+       │
+       ▼
+Framework facade           src/Animation/Animator.js
+                           the ONLY file that touches GSAP directly.
+                           exposes { to, fromTo, timeline, killAll, ready }
+       │
+       ▼
+Internal engine            src/internal/gsap/gsap.min.js   (vendored)
+                           GSAP 3.13.0 · 28 KB gzipped · GreenSock no-charge license
+```
+
+If you ever need to bump GSAP, replace the vendored file by re-pulling from the official CDN — see [`src/internal/gsap/NOTICE.md`](src/internal/gsap/NOTICE.md). Any framework file that wants to animate routes through `Animator` — never `gsap` directly. That's the single boundary that lets the engine swap without touching the SwiftUI API surface.
+
+### Graceful fallback
+
+On the very first paint after a hard refresh, before the GSAP `<script>` has finished loading, `Animator` falls back to the Web Animations API (`Element.animate()`). Same compositor-thread guarantees, slightly less expressive — the UI never breaks because of a network hiccup. Once GSAP is in `window.gsap`, every subsequent tween routes through it.
+
+---
+
 ## Examples
 
 Nine runnable examples in `Examples/`, each a self-contained HTML + module:
@@ -269,7 +321,7 @@ See the live demos: [`Examples/ShaderEffects/`](Examples/ShaderEffects/) (static
 | **Reactive control flow** | `Show`, `For` *(new — required for conditional/list rendering on the signal engine)* |
 | **Shapes** | `Rectangle`, `RoundedRectangle`, `UnevenRoundedRectangle`, `Circle`, `Ellipse`, `Capsule`, `Path` |
 | **Graphics** | `Color`, `Font`, `LinearGradient`, `RadialGradient`, `AngularGradient`, `Shader` / `ShaderLibrary` (+ `.colorEffect` / `.distortionEffect` / `.layerEffect`) |
-| **Animation** | `withAnimation`, `Animation` (spring/easing), `AnyTransition`, `matchedGeometryEffect` |
+| **Animation** | `withAnimation`, `Animation` (spring/easing), `AnyTransition`, `matchedGeometryEffect` *(driven by [GSAP 3.13](#animation-engine-gsap-under-the-hood) internally)* |
 | **Gestures** | `TapGesture`, `LongPressGesture`, `DragGesture`, `MagnificationGesture`, `RotationGesture` |
 | **App** | `App`, `WindowGroup`, `Scene`, `Settings`, `DocumentGroup` |
 
@@ -304,7 +356,16 @@ src/
 ├── Layout/                VStack, HStack, ZStack, Lazy*, Grid,
 │                          GeometryReader, ViewThatFits
 ├── Modifier/              padding, frame, font, color, background, etc.
-├── Shape/, Graphic/, Animation/, Gesture/, App/, Charts/
+├── Shape/, Graphic/, Gesture/, App/, Charts/
+├── Animation/
+│   ├── Animation.js       SwiftUI Animation type (easing/spring presets)
+│   └── Animator.js        ← internal facade; the ONLY file that imports
+│                            GSAP. Exposes { to, fromTo, timeline,
+│                            killAll, ready } to the rest of the framework.
+├── internal/
+│   └── gsap/              Vendored GSAP 3.13.0 (28 KB gzipped). Never
+│       ├── gsap.min.js    surfaced through src/index.js — user code
+│       └── NOTICE.md      stays GSAP-unaware.
 └── styles/                reset.css, base.css
 ```
 
@@ -406,22 +467,23 @@ Honest take: **competitive with React 19 on real workloads** (within 1.4–1.6×
 
 ## Bundle size
 
-| Build | Gzipped |
-|---|---:|
-| Core (no charts) | ~98 KB |
-| Core + charts | ~109 KB |
+| Build | Gzipped | What's in it |
+|---|---:|---|
+| Core (no charts) | ~98 KB | views, layout, state, reactivity, modifiers, gestures, basic animation |
+| Core + animation engine | ~126 KB | + GSAP 3.13 (28 KB) for `withAnimation` / `.transition` / `.animation` / `matchedGeometryEffect` |
+| Core + charts | ~109 KB | + Swift Charts surface (~11 KB) |
+| Core + animation + charts | ~137 KB | everything |
 
 For honest perspective:
 
-| Framework | Gzipped runtime |
-|---|---:|
-| Solid 1.x (`solid-js` + `solid-js/web`) | ~10 KB |
-| Vue 3 (`vue` runtime + compiler) | ~34 KB |
-| React 18 + ReactDOM (production) | ~44 KB |
-| **SwiftUI-For-Web (core)** | **98 KB** |
-| **SwiftUI-For-Web (core + charts)** | **109 KB** |
+| Framework | Gzipped runtime | + comparable animation lib |
+|---|---:|---|
+| Solid 1.x | ~10 KB | + Solid Spring (~6 KB) → 16 KB |
+| Vue 3 | ~34 KB | + GSAP (~28 KB) or Motion One (~4 KB) → 38–62 KB |
+| React 18 + ReactDOM | ~44 KB | + Framer Motion (~52 KB gzipped) → ~96 KB |
+| **SwiftUI-For-Web** (with GSAP) | **126 KB** | (GSAP already inside) |
 
-We are **larger** than React+ReactDOM at the runtime level. The trade-off is API surface: 84 components covering layout, controls, lists, navigation, shapes, animation, gestures, charts, and the SwiftUI state primitives all in the box. To match the surface area with React you'd add React Router, Recharts, Framer Motion, react-hook-form, and a chunk of Material UI / Radix; the resulting bundle ends up substantially larger. If you only need React's runtime, React is smaller. Pick what fits.
+We are **larger** than the bare-runtime competition. The trade-off is API surface: 84 components covering layout, controls, lists, navigation, shapes, animation, gestures, charts, the SwiftUI state primitives, *and a fully-featured animation engine* all in the box. To match the surface area with React you'd add React Router, Recharts, Framer Motion, react-hook-form, and a chunk of Material UI / Radix; the resulting bundle ends up substantially larger. If you only need React's runtime, React is smaller. Pick what fits.
 
 A real bundler with tree-shaking will cut this further if you only import a subset.
 
