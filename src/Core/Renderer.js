@@ -210,6 +210,12 @@ function applyModifier(element, modifier) {
       applyClipShape(element, value);
       break;
 
+    case ModifierType.COLOR_EFFECT:
+    case ModifierType.DISTORTION_EFFECT:
+    case ModifierType.LAYER_EFFECT:
+      applyShaderEffect(element, value, type);
+      break;
+
     case ModifierType.CUSTOM:
       if (typeof value === 'function') {
         value(element);
@@ -344,6 +350,103 @@ function applyClipShape(element, value) {
       break;
   }
   element.style.overflow = 'hidden';
+}
+
+// ============================================================================
+// Shader effect modifiers
+//
+// SwiftUI's `.colorEffect()` / `.distortionEffect()` / `.layerEffect()`
+// are backed here by SVG filter graphs (W3C Filter Effects Module 1).
+// Each Shader instance owns a stable id; the renderer keeps a single
+// hidden <svg><defs> in document.head and lazily mounts each unique
+// filter exactly once. Composing multiple effects on a view appends to
+// the element's `style.filter` (e.g. "url(#a) url(#b)").
+// ============================================================================
+
+/** @type {Set<string>} ids of <filter> elements already mounted */
+const _mountedShaderFilters = new Set();
+let _shaderDefsRoot = null;
+
+/**
+ * Lazily create the shared hidden <svg> in document.head that holds all
+ * registered filter definitions.
+ */
+function getShaderDefsRoot() {
+  if (_shaderDefsRoot && _shaderDefsRoot.ownerDocument) return _shaderDefsRoot;
+  if (typeof document === 'undefined' || !document.head) return null;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.position = 'absolute';
+  svg.style.width = '0';
+  svg.style.height = '0';
+  svg.style.overflow = 'hidden';
+  svg.style.pointerEvents = 'none';
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  svg.appendChild(defs);
+  document.head.appendChild(svg);
+  _shaderDefsRoot = defs;
+  return defs;
+}
+
+/**
+ * Apply a shader effect modifier. `value` shape is either a raw Shader
+ * instance OR `{ shader, isEnabled, maxSampleOffset }` from the
+ * `.distortionEffect` / `.layerEffect` modifiers (whose extra options
+ * are accepted but currently informational — SVG filters don't need a
+ * sample-offset hint).
+ */
+/**
+ * Mount a Shader's <filter> into the shared defs (if not already) and
+ * append its `url(#id)` to the element's `style.filter`. Exported so
+ * class-based views (e.g. ImageView) can drive shader effects without
+ * going through the descriptor-modifier pipeline.
+ */
+export function applyShaderToElement(element, shader) {
+  if (!shader || !shader.id || typeof shader._populate !== 'function') return;
+
+  if (!_mountedShaderFilters.has(shader.id)) {
+    const defs = getShaderDefsRoot();
+    if (defs) {
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const filter = defs.ownerDocument.createElementNS(SVG_NS, 'filter');
+      filter.setAttribute('id', shader.id);
+      filter.setAttribute('x', '-20%');
+      filter.setAttribute('y', '-20%');
+      filter.setAttribute('width', '140%');
+      filter.setAttribute('height', '140%');
+      filter.setAttribute('color-interpolation-filters', 'sRGB');
+      shader._populate(filter);
+      defs.appendChild(filter);
+      _mountedShaderFilters.add(shader.id);
+    }
+  }
+
+  // Compose: append this filter to whatever the element already has so
+  // chained .colorEffect().layerEffect() builds "url(#a) url(#b)".
+  const existing = element.style.filter || '';
+  const ref = `url(#${shader.id})`;
+  element.style.filter = existing.includes(ref) ? existing : (existing ? `${existing} ${ref}` : ref);
+}
+
+function applyShaderEffect(element, value, modifierType) {
+  const shader = value && value.shader ? value.shader : value;
+  const isEnabled = value && value.isEnabled !== undefined ? value.isEnabled : true;
+  if (!shader || !isEnabled) return;
+
+  // Guard: warn if the wrong kind was passed (e.g. blur into .colorEffect).
+  // Don't throw — silent best-effort matches SwiftUI's behavior.
+  const expected = {
+    [ModifierType.COLOR_EFFECT]: 'color',
+    [ModifierType.DISTORTION_EFFECT]: 'distortion',
+    [ModifierType.LAYER_EFFECT]: 'layer'
+  }[modifierType];
+  if (expected && shader.kind && shader.kind !== expected) {
+    // eslint-disable-next-line no-console
+    console.warn(`Shader '${shader.name}' is kind '${shader.kind}' but was passed to .${expected}Effect()`);
+  }
+
+  applyShaderToElement(element, shader);
 }
 
 // ============================================================================

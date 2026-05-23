@@ -16,6 +16,7 @@
  */
 
 import { View } from '../Core/View.js';
+import { applyShaderToElement } from '../Core/Renderer.js';
 
 /**
  * ContentMode enum - matches SwiftUI's ContentMode
@@ -132,6 +133,48 @@ export class ImageView extends View {
   accessibilityLabel(text) {
     this._alt = text;
     return this;
+  }
+
+  /**
+   * Apply a color-effect shader (per-pixel color transform).
+   *
+   * @param {Shader} shader - From `ShaderLibrary.default.<colorize|brightness|hueRotate|...>`
+   * @param {{ isEnabled?: boolean }} [opts]
+   * @returns {ImageView}
+   * @see https://developer.apple.com/documentation/swiftui/view/coloreffect(_:isenabled:)
+   */
+  colorEffect(shader, opts) {
+    const isEnabled = opts && opts.isEnabled !== undefined ? opts.isEnabled : true;
+    if (!isEnabled) return this;
+    return this.modifier({ apply: (el) => applyShaderToElement(el, shader) });
+  }
+
+  /**
+   * Apply a distortion-effect shader (per-pixel position warp).
+   *
+   * @param {Shader} shader - e.g. `ShaderLibrary.default.ripple({ amplitude: 10 })`
+   * @param {{ maxSampleOffset?: { width: number, height: number }, isEnabled?: boolean }} [opts]
+   * @returns {ImageView}
+   * @see https://developer.apple.com/documentation/swiftui/view/distortioneffect(_:maxsampleoffset:isenabled:)
+   */
+  distortionEffect(shader, opts) {
+    const isEnabled = opts && opts.isEnabled !== undefined ? opts.isEnabled : true;
+    if (!isEnabled) return this;
+    return this.modifier({ apply: (el) => applyShaderToElement(el, shader) });
+  }
+
+  /**
+   * Apply a layer-effect shader (full-layer sampling, e.g. blur / drop-shadow).
+   *
+   * @param {Shader} shader - e.g. `ShaderLibrary.default.blur(4)`
+   * @param {{ maxSampleOffset?: { width: number, height: number }, isEnabled?: boolean }} [opts]
+   * @returns {ImageView}
+   * @see https://developer.apple.com/documentation/swiftui/view/layereffect(_:maxsampleoffset:isenabled:)
+   */
+  layerEffect(shader, opts) {
+    const isEnabled = opts && opts.isEnabled !== undefined ? opts.isEnabled : true;
+    if (!isEnabled) return this;
+    return this.modifier({ apply: (el) => applyShaderToElement(el, shader) });
   }
 
   /**

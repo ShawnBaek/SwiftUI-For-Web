@@ -7,11 +7,22 @@
 class MockDocument {
   constructor() {
     this.body = this.createElement('body');
+    this.head = this.createElement('head');
     this.elements = new Map();
   }
 
   createElement(tag) {
     const element = new MockElement(tag);
+    element.ownerDocument = this;
+    return element;
+  }
+
+  // Used by the Shader renderer to mount SVG <filter> definitions.
+  // Tag the element with its namespace so tests can introspect.
+  createElementNS(ns, tag) {
+    const element = new MockElement(tag);
+    element.ownerDocument = this;
+    element.namespaceURI = ns;
     return element;
   }
 
@@ -726,6 +737,88 @@ async function runTests() {
       it('should support bold modifier', () => {
         const font = Font.body.bold();
         expect(font._weight).toBe('700');
+      });
+    });
+
+    // Test Shader / ShaderLibrary
+    const { Shader, ShaderLibrary, ShaderKind } = await import('./src/Graphic/Shader.js');
+    const RendererMod = await import('./src/Core/Renderer.js');
+    const { Text: ShaderText } = await import('./src/View/Text.js');
+
+    describe('Shader / ShaderLibrary', () => {
+      it('should expose ShaderKind enum', () => {
+        expect(ShaderKind.color).toBe('color');
+        expect(ShaderKind.distortion).toBe('distortion');
+        expect(ShaderKind.layer).toBe('layer');
+      });
+
+      it('should produce a frozen Shader from ShaderLibrary.default.colorize()', () => {
+        const s = ShaderLibrary.default.colorize([1, 0, 0, 1]);
+        expect(s).toBeInstanceOf(Shader);
+        expect(s.kind).toBe('color');
+        expect(s.name).toBe('colorize');
+        expect(Object.isFrozen(s)).toBeTruthy();
+      });
+
+      it('should give the same id for the same args (filter reuse)', () => {
+        const a = ShaderLibrary.default.brightness(0.5);
+        const b = ShaderLibrary.default.brightness(0.5);
+        expect(a.id).toBe(b.id);
+      });
+
+      it('should give different ids for different args', () => {
+        const a = ShaderLibrary.default.brightness(0.5);
+        const b = ShaderLibrary.default.brightness(0.7);
+        expect(a.id).not.toBe(b.id);
+      });
+
+      it('should tag distortion shaders with the distortion kind', () => {
+        const s = ShaderLibrary.default.ripple({ amplitude: 8 });
+        expect(s.kind).toBe('distortion');
+      });
+
+      it('should tag layer shaders with the layer kind', () => {
+        const s = ShaderLibrary.default.blur(4);
+        expect(s.kind).toBe('layer');
+      });
+    });
+
+    describe('Text · shader effect modifiers', () => {
+      it('.colorEffect() should set element.style.filter to url(#shaderId)', () => {
+        const shader = ShaderLibrary.default.hueRotate(90);
+        const view = ShaderText('Hi').colorEffect(shader);
+        const el = RendererMod.render(view);
+        expect(String(el.style.filter)).toContain(`url(#${shader.id})`);
+      });
+
+      it('should compose two effects via space-separated url() refs', () => {
+        const a = ShaderLibrary.default.saturation(0.5);
+        const b = ShaderLibrary.default.blur(3);
+        const view = ShaderText('Hi').colorEffect(a).layerEffect(b);
+        const el = RendererMod.render(view);
+        expect(String(el.style.filter)).toContain(`url(#${a.id})`);
+        expect(String(el.style.filter)).toContain(`url(#${b.id})`);
+      });
+
+      it('.distortionEffect() should use the same filter machinery', () => {
+        const shader = ShaderLibrary.default.ripple({ amplitude: 4 });
+        const view = ShaderText('Hi').distortionEffect(shader);
+        const el = RendererMod.render(view);
+        expect(String(el.style.filter)).toContain(`url(#${shader.id})`);
+      });
+
+      it('should return a new immutable descriptor', () => {
+        const base = ShaderText('Hi');
+        const next = base.colorEffect(ShaderLibrary.default.grayscale(1));
+        expect(next).not.toBe(base);
+        expect(next.type).toBe('Text');
+      });
+
+      it('should silently skip when isEnabled:false', () => {
+        const shader = ShaderLibrary.default.hueRotate(180);
+        const view = ShaderText('Hi').colorEffect(shader, { isEnabled: false });
+        const el = RendererMod.render(view);
+        expect(String(el.style.filter || '')).not.toContain(`url(#${shader.id})`);
       });
     });
 

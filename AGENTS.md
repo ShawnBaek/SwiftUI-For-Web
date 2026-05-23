@@ -113,6 +113,7 @@ over inventing web-only escape hatches.
 | `alt=` on images         | `Image(...).accessibilityLabel('…')`         |
 | `aria-label` on controls | `Button(...).accessibilityLabel('…')` *(when added)* |
 | Landmark role / heading  | `.accessibilityAddTraits(.isHeader)` *(when added)*  |
+| Shader-style effects     | `.colorEffect(ShaderLibrary.default.<fn>())` / `.distortionEffect()` / `.layerEffect()` — see "Shader effects" below |
 
 `AccessibilityHeadingLevel` exposes `.h1` … `.h6` and `.unspecified`. The
 renderer swaps `<span>` → `<h1..h6>` and resets user-agent heading styling
@@ -129,6 +130,34 @@ If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
 **find Apple's modifier first**, then mirror it. Don't ship a web-only API.
 
 ---
+
+## 4b. Shader effects (`.colorEffect`, `.distortionEffect`, `.layerEffect`)
+
+Apple's Metal-shader modifiers (iOS 17+) are backed on the web by **SVG
+filter graphs** in [src/Graphic/Shader.js](src/Graphic/Shader.js), mounted
+into a single shared `<svg><defs>` in `document.head` by the renderer.
+Every modern browser GPU-accelerates these.
+
+Use the curated `ShaderLibrary.default` catalogue:
+
+```js
+Image('cat.jpg')
+  .colorEffect(ShaderLibrary.default.hueRotate(90))
+  .layerEffect(ShaderLibrary.default.blur(4));
+```
+
+To add a new preset shader: add a factory to `ShaderLibrary.default` in
+[src/Graphic/Shader.js](src/Graphic/Shader.js) that returns
+`new Shader(kind, name, args, (filterEl, args) => { appendPrimitive(...) })`.
+The `kind` (`color` | `distortion` | `layer`) gates which modifier accepts
+it, and the `(name, args)` pair gives the resulting `<filter>` a stable id
+so reused shaders share a single DOM definition.
+
+**Do not** add an `.h1Effect()` / `.cssFilter()` / arbitrary-GLSL escape
+hatch as a new public API yet — the SwiftUI surface is `colorEffect` /
+`distortionEffect` / `layerEffect` and the only thing that changes between
+them is what shader they accept. A WebGL2 / WGSL backend for user-supplied
+shader source code can slot in later behind the same `Shader` API.
 
 ## 5. Performance rules that aren't optional
 

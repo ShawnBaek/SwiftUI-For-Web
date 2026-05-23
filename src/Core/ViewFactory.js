@@ -61,6 +61,9 @@ function chainable(descriptor) {
   chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
   chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
   chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  chain.colorEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) })));
+  chain.distortionEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.DISTORTION_EFFECT, { shader, ...(opts || {}) })));
+  chain.layerEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.LAYER_EFFECT, { shader, ...(opts || {}) })));
   chain.id = (key) => chainable(setKey(descriptor, key));
 
   // Custom modifier support
