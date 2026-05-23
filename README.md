@@ -1,6 +1,8 @@
 # SwiftUI-For-Web
 
-**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. Zero dependencies, no build step.**
+**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. No build step, no `npm install` required.**
+
+> **Animation engine.** The SwiftUI animation surface (`withAnimation`, `.animation`, `.transition`, `matchedGeometryEffect`, the Netflix demo's modal) is internally driven by [GSAP 3.13](https://gsap.com/) — vendored at [`src/internal/gsap/`](src/internal/gsap/) (~28 KB gzipped) under GreenSock's free no-charge license. Users author against the SwiftUI API; GSAP is the system layer beneath it and is never imported in user code. `src/Animation/Animator.js` is the only framework file that touches GSAP directly.
 
 If you know SwiftUI, you already know this framework. Same component names (`VStack`, `Text`, `Button`, `NavigationStack`, `ForEach`, `ObservableObject`), same modifier chain (`.padding()`, `.foregroundColor()`, `.cornerRadius()`), the same `Chart`/`BarMark`/`LineMark` API from Swift Charts — implemented in plain JavaScript, mounted with a `<script type="module">`.
 

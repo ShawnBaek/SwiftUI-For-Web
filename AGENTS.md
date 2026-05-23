@@ -9,8 +9,16 @@ the rules that, if violated, will get a PR rejected.
 
 ## 1. Non-negotiable constraints
 
-1. **Zero dependencies.** No npm packages, no build step, no TS, no Sass.
-   Pure ES modules + CSS3 + HTML5. If you reach for a bundler, stop.
+1. **No `npm install` for users; no build step.** Pure ES modules +
+   CSS3 + HTML5 at the user's edge. The framework imports its own source
+   directly; users add zero npm packages and run no bundler.
+   - **One vendored exception:** [GSAP 3.13](https://gsap.com/) lives at
+     [`src/internal/gsap/`](src/internal/gsap/) as the internal animation
+     engine. It is the *only* third-party JS in the framework. Touched
+     by exactly one file: [`src/Animation/Animator.js`](src/Animation/Animator.js).
+     Do not add a `package.json` dependency; do not import GSAP from
+     anywhere else. If you need an animation primitive, route it through
+     `Animator.{to, fromTo, timeline}`.
 2. **SwiftUI API parity is law.** Every public symbol must already exist in
    Apple SwiftUI with the same name, same parameter labels, same semantics.
    - ✅ `.foregroundColor(Color.blue)`, `.padding(20)`, `.accessibilityHeading(.h1)`
