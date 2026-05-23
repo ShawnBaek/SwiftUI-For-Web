@@ -24,6 +24,28 @@ import {
 } from '../Core/ViewDescriptor.js';
 
 /**
+ * Heading level for `.accessibilityHeading(_:)`.
+ *
+ * Matches SwiftUI's `AccessibilityHeadingLevel`. On the web this also drives
+ * semantic markup: a non-`unspecified` level renders the underlying element
+ * as `<h1>`–`<h6>` instead of `<span>`, so headings are picked up by
+ * assistive tech AND search engines without introducing non-SwiftUI views.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/accessibilityheadinglevel
+ */
+export const AccessibilityHeadingLevel = Object.freeze({
+  h1: 'h1',
+  h2: 'h2',
+  h3: 'h3',
+  h4: 'h4',
+  h5: 'h5',
+  h6: 'h6',
+  unspecified: 'unspecified'
+});
+
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+
+/**
  * Create a chainable descriptor with Text-specific modifier methods
  */
 function chainable(descriptor) {
@@ -105,6 +127,15 @@ function chainable(descriptor) {
 
   chain.baselineOffset = (offset) => {
     const newProps = { ...descriptor.props, baselineOffset: offset };
+    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
+  };
+
+  // Accessibility: marks the Text as a heading. On the web this maps to
+  // <h1>..<h6>, giving both VoiceOver/screen-reader semantics and SEO.
+  // Passing AccessibilityHeadingLevel.unspecified (or null) reverts to <span>.
+  chain.accessibilityHeading = (level) => {
+    const tag = HEADING_TAGS.has(level) ? level : null;
+    const newProps = { ...descriptor.props, headingLevel: tag };
     return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
   };
 

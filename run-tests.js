@@ -753,7 +753,59 @@ async function runTests() {
 
     // Test ForEach
     const { ForEach, ForEachView, Range } = await import('./src/View/List/ForEach.js');
-    const { Text } = await import('./src/View/Text.js');
+    const { Text, AccessibilityHeadingLevel } = await import('./src/View/Text.js');
+    const { render: renderText } = await import('./src/Core/Renderer.js');
+
+    describe('Text · accessibilityHeading()', () => {
+      it('should expose h1..h6 + unspecified on AccessibilityHeadingLevel', () => {
+        expect(AccessibilityHeadingLevel.h1).toBe('h1');
+        expect(AccessibilityHeadingLevel.h6).toBe('h6');
+        expect(AccessibilityHeadingLevel.unspecified).toBe('unspecified');
+      });
+
+      it('should render <h1> when level is .h1', () => {
+        const el = renderText(Text('Title').accessibilityHeading(AccessibilityHeadingLevel.h1));
+        expect(el.tagName).toBe('H1');
+        expect(el.textContent).toBe('Title');
+      });
+
+      it('should render the matching tag for h2..h6', () => {
+        for (const level of ['h2', 'h3', 'h4', 'h5', 'h6']) {
+          const el = renderText(Text('x').accessibilityHeading(AccessibilityHeadingLevel[level]));
+          expect(el.tagName).toBe(level.toUpperCase());
+        }
+      });
+
+      it('should fall back to <span> for .unspecified', () => {
+        const el = renderText(Text('x').accessibilityHeading(AccessibilityHeadingLevel.unspecified));
+        expect(el.tagName).toBe('SPAN');
+      });
+
+      it('should not change tag when no heading is set', () => {
+        const el = renderText(Text('plain'));
+        expect(el.tagName).toBe('SPAN');
+      });
+
+      it('should neutralise user-agent heading styles so visuals stay modifier-driven', () => {
+        const el = renderText(Text('Hi').accessibilityHeading(AccessibilityHeadingLevel.h1));
+        expect(el.style.fontSize).toBe('inherit');
+        expect(el.style.fontWeight).toBe('inherit');
+      });
+
+      it('should let .bold() / .fontWeight() override the heading reset', () => {
+        const el = renderText(Text('Hi').accessibilityHeading(AccessibilityHeadingLevel.h2).bold());
+        expect(el.tagName).toBe('H2');
+        expect(el.style.fontWeight).toBe('700');
+      });
+
+      it('should return a new immutable descriptor', () => {
+        const base = Text('Hi');
+        const heading = base.accessibilityHeading(AccessibilityHeadingLevel.h1);
+        expect(heading).not.toBe(base);
+        expect(heading.type).toBe('Text');
+      });
+    });
+
     describe('ForEach', () => {
       it('should create a ForEachView instance', () => {
         const forEach = ForEach(['a', 'b'], item => Text(item));

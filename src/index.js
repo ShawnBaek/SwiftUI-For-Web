@@ -57,7 +57,7 @@ import {
 // =============================================================================
 // View Components
 // =============================================================================
-import { Text } from './View/Text.js';
+import { Text, AccessibilityHeadingLevel } from './View/Text.js';
 import { Image, ImageView, ContentMode } from './View/Image.js';
 import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
 
@@ -291,6 +291,7 @@ const SwiftUI = {
 
   // Views
   Text,
+  AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
 
@@ -441,6 +442,7 @@ export {
 
   // Views
   Text,
+  AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
 
