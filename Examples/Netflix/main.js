@@ -24,9 +24,8 @@ import {
   Font,
   LinearGradient,
   View,
-  // Animation — public SwiftUI API; GSAP runs internally
+  // Animation — public SwiftUI-style API; native engine internally
   Animation,
-  withAnimation,
   // Environment for adaptive layout
   Environment,
   EnvironmentValues,
@@ -484,10 +483,8 @@ const OPEN_CURVE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 // Slight ease-in for dismissal — hangs briefly then accelerates away.
 const CLOSE_CURVE = 'cubic-bezier(0.4, 0, 1, 0.6)';
 
-// Track in-flight animations so we can kill them mid-flight on rapid
-// open/close toggles instead of stacking. Animation.animate() returns a
-// GSAP Tween (.kill()) or a WAAPI Animation (.cancel()) depending on
-// whether the internal engine has finished loading; we try both.
+// Track in-flight animations so we can cancel them mid-flight on rapid
+// open/close toggles instead of stacking.
 let activeAnims = [];
 function cancelActiveAnims() {
   for (const a of activeAnims) {
@@ -615,20 +612,13 @@ function ensureOverlay() {
 }
 
 /**
- * Open the prewarmed overlay with this movie's content using the Web
- * Animations API.
+ * Open the prewarmed overlay with this movie's content using the public
+ * SwiftUI-style Animation API.
  *
- * Why WAAPI not CSS transitions:
- *   • `Element.animate()` lets us declare "go from state A to state B
- *     over T ms with curve C" without ever putting A on the element.
- *     The browser handles the starting state internally on the next
- *     compositor frame — no need to set the initial transform on the
- *     element and then immediately change it (which forces a sync
- *     reflow if you want the transition to actually fire).
- *   • That synchronous reflow was the 33ms dropped frame on click.
- *     WAAPI eliminates it: the click handler returns in <1ms after
- *     scheduling four short animations, and the first compositor frame
- *     after that already shows motion.
+ * The framework's animation helper owns the native compositor scheduling:
+ * product code describes the start/end visual states with Animation values
+ * instead of wiring CSS transitions, requestAnimationFrame, or Element.animate
+ * calls directly.
  *
  * We also defer the meta.innerHTML update to a microtask — it's the
  * only DOM-mutating operation in the path and it doesn't affect the
@@ -674,10 +664,8 @@ function openCard(movie, rect) {
   overlay.style.visibility = 'visible';
   overlay.style.pointerEvents = 'auto';
 
-  // Animate open: four elements coordinated via Animation.animate(),
-  // which routes through Animator.js (GSAP when loaded, WAAPI fallback).
-  // No direct GSAP/Animator import — the public SwiftUI animation API
-  // handles the engine choice transparently.
+  // Animate open: four elements coordinated via SwiftUI-style Animation values.
+  // No raw CSS transition or Element.animate calls in product code.
   const openDurSec = OPEN_DURATION_MS / 1000;
   activeAnims = [
     Animation.easeOut(openDurSec).animate(
@@ -802,9 +790,7 @@ const app = App(() => NetflixApp());
 app.mount('#root');
 
 // Prewarm during browser idle: build the overlay DOM so the first open
-// is allocation-free.  The GSAP animation engine prewarms automatically
-// when Animation.js is imported (Animator.js self-prewarms on module
-// load), so no explicit engine prewarm is needed here.
+// is allocation-free. The native animation engine has no package load path.
 const prewarm = () => ensureOverlay();
 if (typeof requestIdleCallback === 'function') {
   requestIdleCallback(prewarm, { timeout: 1500 });

@@ -145,6 +145,8 @@ import {
   Animation,
   AnyTransition,
   Namespace,
+  animate,
+  animateStyles,
   withAnimation,
   isAnimating,
   currentAnimation,
@@ -288,6 +290,7 @@ const SwiftUICore = {
 
   // Animation
   Animation, AnyTransition, Namespace,
+  animate, animateStyles,
   withAnimation, isAnimating, currentAnimation,
   isViewTransitionSupported, prefersReducedMotion,
 
@@ -408,6 +411,7 @@ export {
 
   // Animation
   Animation, AnyTransition, Namespace,
+  animate, animateStyles,
   withAnimation, isAnimating, currentAnimation,
   extendViewWithAnimation,
   isViewTransitionSupported, prefersReducedMotion,

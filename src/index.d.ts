@@ -956,8 +956,21 @@ export const ShaderLibrary: {
 // =============================================================================
 
 /** Animate changes within the block */
-export function withAnimation(animation?: Animation, body?: () => void): void;
-export function withAnimation(body: () => void): void;
+export function withAnimation(animation?: Animation, body?: () => void): Promise<void>;
+export function withAnimation(body: () => void): Promise<void>;
+export function animate(animation?: Animation, body?: () => void, completion?: () => void): Promise<void>;
+export function animate(body: () => void, completion?: () => void): Promise<void>;
+export function animateStyles(
+  element: HTMLElement,
+  styles: Partial<CSSStyleDeclaration>,
+  options?: { properties?: string[] | string; completion?: () => void }
+): Promise<void>;
+export function animateStyles(
+  element: HTMLElement,
+  animation: Animation,
+  styles: Partial<CSSStyleDeclaration>,
+  options?: { properties?: string[] | string; completion?: () => void }
+): Promise<void>;
 
 /** Animation configuration */
 export class Animation {
@@ -1201,6 +1214,8 @@ declare const SwiftUI: {
   Animation: typeof Animation;
   AnyTransition: typeof AnyTransition;
   Namespace: typeof Namespace;
+  animate: typeof animate;
+  animateStyles: typeof animateStyles;
   withAnimation: typeof withAnimation;
   TapGesture: typeof TapGesture;
   LongPressGesture: typeof LongPressGesture;

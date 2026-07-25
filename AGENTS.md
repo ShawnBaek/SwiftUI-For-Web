@@ -12,20 +12,10 @@ the rules that, if violated, will get a PR rejected.
 1. **No `npm install` for users; no build step.** Pure ES modules +
    CSS3 + HTML5 at the user's edge. The framework imports its own source
    directly; users add zero npm packages and run no bundler.
-   - **One vendored exception:** [GSAP 3.13](https://gsap.com/) lives at
-     [`src/internal/gsap/`](src/internal/gsap/) as the internal animation
-     engine. It is the *only* third-party JS in the framework. Touched
-     by exactly one file: [`src/Animation/Animator.js`](src/Animation/Animator.js).
-     Do not add a `package.json` dependency; do not import GSAP from
-     anywhere else. If you need an animation primitive, route it through
-     `Animator.{to, fromTo, timeline, killAll}`.
-   - `Animator.ready()` returns a Promise that resolves when GSAP has loaded.
-     Call it during idle prewarming (`requestIdleCallback`) so the first
-     user gesture hits the fast path. The module self-prewarms on import,
-     so in practice you only need `ready()` if you want to await it explicitly.
-   - If GSAP hasn't loaded yet (first-frame race), `Animator.to/fromTo`
-     automatically fall back to the Web Animations API (WAAPI) — the UI
-     never breaks due to a network hiccup.
+   - **No vendored runtime exceptions.** Do not add third-party JS,
+     package dependencies, bundlers, or transpilers. Animation code routes
+     through SwiftUI-shaped APIs in [`src/Animation/Animation.js`](src/Animation/Animation.js)
+     and uses native browser primitives internally.
 2. **SwiftUI API parity is law.** Every public symbol must already exist in
    Apple SwiftUI with the same name, same parameter labels, same semantics.
    - ✅ `.foregroundColor(Color.blue)`, `.padding(20)`, `.accessibilityHeading(.h1)`
@@ -50,8 +40,7 @@ DOM element (acquireElement from ElementPool)
    ▼  SignalRenderer.bindReactive
 Reactive bindings via createEffect (signals → textContent / styles)
    ▼  withAnimation / .transition / .animation
-Animator.js  ──►  GSAP 3.13 (vendored, internal only)
-                  └─ WAAPI fallback on first-frame race
+Animation.js ──►  Web Animations API / CSS transitions / View Transitions API
 ```
 
 Key files (read these before adding anything non-trivial):
@@ -61,7 +50,7 @@ Key files (read these before adding anything non-trivial):
 - [src/Core/SignalRenderer.js](src/Core/SignalRenderer.js) — mount + reactive binding walk
 - [src/Core/ElementPool.js](src/Core/ElementPool.js) — DOM recycling
 - [src/Data/Signal.js](src/Data/Signal.js) — `createEffect`, `createRoot`, `untrack`
-- [src/Animation/Animator.js](src/Animation/Animator.js) — **the only file** that imports GSAP; public surface: `ready`, `to`, `fromTo`, `timeline`, `killAll`
+- [src/Animation/Animation.js](src/Animation/Animation.js) — `Animation`, `withAnimation`, `animate`, `animateStyles`, `AnyTransition`, `Namespace`
 - [src/Graphic/Shader.js](src/Graphic/Shader.js) — `Shader`, `ShaderLibrary`, `ShaderKind` for `.colorEffect` / `.distortionEffect` / `.layerEffect`
 - [src/index.js](src/index.js) — public exports (default + named, both required)
 - [src/index.d.ts](src/index.d.ts) — TypeScript / VSCode intellisense definitions; **update this whenever you add or change a public API**
@@ -69,8 +58,8 @@ Key files (read these before adding anything non-trivial):
 **Mental model:** descriptors are immutable. Modifiers return *new* frozen
 descriptors. The body runs **once** at mount; updates happen via signal
 effects that mutate specific DOM properties — there is no VDOM diff.
-Animations run through `Animator.js`, which is a thin facade over GSAP and
-invisible to the user's SwiftUI code.
+Animations run through `Animation.js`, which exposes SwiftUI-shaped APIs and
+keeps native browser animation details invisible to the user's code.
 
 ---
 
@@ -123,46 +112,29 @@ load-bearing — it prevents mutation and lets the runtime trust descriptors.
 If you find yourself wanting to mutate a descriptor, you want a *new* one
 via `createDescriptor(...)` / `addModifier(...)`.
 
-### 3.4 Animation — always route through Animator.js
+### 3.4 Animation — always route through SwiftUI-shaped APIs
 
 Users author `withAnimation`, `.transition`, `.animation`, and
-`matchedGeometryEffect`. The framework implements those via `Animator.*`.
-**Never import GSAP directly from any file other than `Animator.js`.**
+`matchedGeometryEffect`. Imperative DOM-backed motion uses `Animation.animate()`
+or `animateStyles()`. **Never add a raw package animation engine or hand-code
+CSS transition/rAF loops in product examples.**
 
 ```js
-// ✅ Correct — framework implementation code
-import { Animator } from '../Animation/Animator.js';
+// ✅ Correct — product/framework code stays on the public SwiftUI-style surface
+import { Animation, animateStyles, withAnimation } from '../Animation/Animation.js';
 
-// Simple tween
-Animator.to(el, { opacity: 0, duration: 0.22, ease: 'power2.out' });
-
-// Explicit from→to (matches SwiftUI .transition semantics)
-Animator.fromTo(el, { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.28 });
-
-// Multi-element choreography — ONE shared RAF ticker, no dropped frames
-const tl = Animator.timeline();
-tl.fromTo(backdropEl, { opacity: 0 }, { opacity: 1, duration: 0.18 })
-  .fromTo(cardEl,     { scale: 0.9 }, { scale: 1, duration: 0.26, ease: 'power2.out' }, '<');
-
-// Clean up when an element leaves the DOM
-Animator.killAll(el);
+withAnimation(Animation.easeInOut(0.28), () => {
+  animateStyles(cardEl, {
+    transform: 'translate(-50%, -50%) scale(1)',
+    opacity: '1'
+  });
+});
 ```
 
 ```js
-// ❌ Wrong — import gsap directly
-import gsap from '../internal/gsap/gsap.min.js';  // NEVER
-import { gsap } from 'gsap';                       // NEVER
-```
-
-**Prewarming** — if your feature is interaction-driven (button, hover),
-prewarm GSAP before the first gesture so there's no cold-load stutter:
-
-```js
-if (typeof requestIdleCallback !== 'undefined') {
-  requestIdleCallback(() => Animator.ready());
-} else {
-  setTimeout(() => Animator.ready(), 200);
-}
+// ❌ Wrong — raw animation plumbing in product/sample code
+element.style.transition = 'transform 220ms ease';
+requestAnimationFrame(() => element.style.transform = 'scale(1)');
 ```
 
 ### 3.5 TypeScript / VSCode intellisense (`src/index.d.ts`)
@@ -257,14 +229,9 @@ shader source code can slot in later behind the same `Shader` API.
   frames. Use `visibility:hidden / pointer-events:none` to hide, and
   `visibility:visible / pointer-events:auto` to show — the element stays
   in the layout tree, so the compositor can animate it without a reflow.
-- **One timeline for coordinated animations.** Running N separate
-  `Animator.to()` calls gives the GSAP scheduler N independent tickers
-  and can drop frames at 4× CPU throttle. Collect related tweens into a
-  single `Animator.timeline()` so they share one RAF callback.
-- **Prewarm before interactions.** If an animation fires on a click/hover,
-  call `Animator.ready()` inside `requestIdleCallback` at mount time so
-  GSAP is already loaded when the user acts. Target: click → first frame
-  under 10 ms.
+- **Compositor-friendly animation.** Prefer `transform` and `opacity` in
+  `Animation.animate()` / `animateStyles()` calls so the browser can avoid
+  layout and paint work. Target: click → first frame under 10 ms.
 
 ---
 
@@ -281,7 +248,7 @@ shader source code can slot in later behind the same `Shader` API.
 ## 7. PR checklist (paste into the PR body)
 
 ```
-- [ ] Zero new dependencies (GSAP is the sole permitted exception, already vendored)
+- [ ] Zero new dependencies and no vendored runtime libraries
 - [ ] Public API name + parameter labels match SwiftUI exactly
 - [ ] SwiftUI doc URL referenced for any new API
 - [ ] No invented non-SwiftUI views/modifiers
@@ -290,7 +257,7 @@ shader source code can slot in later behind the same `Shader` API.
 - [ ] src/index.d.ts updated for any new/changed public symbol
 - [ ] Tests added under Tests/<Category>/
 - [ ] Test runner loads the new test file
-- [ ] Animation code routes through Animator.js (no direct gsap import)
+- [ ] Animation code routes through `Animation`, `withAnimation`, or `animateStyles`
 - [ ] Animated show/hide uses visibility:hidden (not display:none)
 ```
 
@@ -309,15 +276,12 @@ shader source code can slot in later behind the same `Shader` API.
 - ❌ Forgetting the named export in `src/index.js` (default-only breaks
   tree-shaking imports).
 - ❌ Writing a new MutationObserver instead of using `LifecycleObserver`.
-- ❌ Importing GSAP directly in any file other than `Animator.js`. Even
-  `import { gsap } from '../internal/gsap/gsap.min.js'` is wrong — route
-  through `Animator.*`.
+- ❌ Adding animation dependencies or using raw CSS transition/rAF plumbing
+  in product/sample code. Route motion through `Animation`, `withAnimation`,
+  or `animateStyles`.
 - ❌ Toggling `display:none / display:block` on elements that animate.
   This forces a layout pass and causes a dropped frame. Use
   `visibility:hidden / pointer-events:none` instead.
-- ❌ Running multiple separate `Animator.to()` calls for a coordinated
-  sequence. Each call is its own ticker. Use `Animator.timeline()` so all
-  tweens share one RAF callback.
 - ❌ Forgetting to update `src/index.d.ts` after adding a public API.
   Without the `.d.ts` entry, VSCode shows no autocomplete for the new symbol.
 - ❌ Using a JavaScript reserved word (`for`, `in`, `class`, `default`) as a
