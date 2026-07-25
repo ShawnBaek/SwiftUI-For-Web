@@ -15,6 +15,8 @@
  * import { VStack, Text, Button, App } from 'swiftui-for-web';
  */
 
+import './runtime.js';
+
 // =============================================================================
 // Core
 // =============================================================================
@@ -253,13 +255,6 @@ import {
 // Version Info
 // =============================================================================
 const VERSION = '1.0.0';
-
-// =============================================================================
-// Extend View with Animation, Gesture, and Environment Methods
-// =============================================================================
-extendViewWithAnimation(View);
-extendViewWithGestures(View);
-extendViewWithEnvironment(View);
 
 // =============================================================================
 // Default Export - Simple unified namespace

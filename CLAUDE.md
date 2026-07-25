@@ -4,7 +4,7 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ## Project Overview
 
-**SwiftUI-For-Web** brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML at the user's edge. Users add no `npm install` and run no build step. Runtime code has no third-party or vendored animation dependency.
+**SwiftUI-For-Web** brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML at the user's edge. Users add no `npm install` and need no build step for development. An optional Node built-ins-only release compiler removes unreachable modules and resources. Runtime code has no third-party or vendored animation dependency.
 
 ### Vision
 
@@ -18,7 +18,7 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ### Core Principles
 
-1. **No build step, no deps**: users add zero npm packages
+1. **No required build step, no deps**: users add zero npm packages; release optimization is optional and built in
 2. **Native animation engine**: animation APIs live in `src/Animation/Animation.js`
 3. **Declarative**: Describe what the UI should look like, not how to build it
 4. **MVVM Architecture**: Clear separation between Model, View, and ViewModel
@@ -425,13 +425,14 @@ App(ContentView).mount('#root')
 
 ### Technology Constraints
 
-**IMPORTANT: No-Build, No-Install Policy**
+**IMPORTANT: No-Required-Build, No-Install Policy**
 
 - ✅ Pure JavaScript (ES6+)
 - ✅ CSS3
 - ✅ HTML5
 - ❌ No npm packages in user apps
-- ❌ No build tools (webpack, vite, etc.)
+- ✅ Optional `scripts/build.js` release optimization using Node built-ins
+- ❌ No third-party build tools (webpack, vite, etc.)
 - ❌ No transpilers (Babel, TypeScript)
 - ❌ No CSS preprocessors (Sass, Less)
 
@@ -1464,7 +1465,7 @@ Update this section as sprints are completed:
 
 ### Getting Started
 
-No build step required:
+No build step is required for development:
 
 ```bash
 # Clone the repository
@@ -1482,7 +1483,8 @@ python -m http.server 8000
 2. **Reference OpenSwiftUI** - Check implementation patterns at [OpenSwiftUI GitHub](https://github.com/OpenSwiftUIProject/OpenSwiftUI)
 3. **Create feature branch** from `main`
 4. **Implement** following zero-dependency constraint
-5. **Test in browser** (no build step needed)
+5. **Test locally and in browser** (`node run-tests.js` and
+   `node scripts/build-tests.js`; no release build required)
 6. **Add example** demonstrating the feature
 7. **Submit pull request**
 
@@ -1585,7 +1587,7 @@ Before implementing any component:
 
 - ❌ Adding any npm dependencies
 - ❌ Using TypeScript or other transpiled languages
-- ❌ Adding build steps or configuration files
+- ❌ Adding required or third-party build steps or configuration files
 - ❌ Deviating from SwiftUI API without good reason
 - ❌ Inventing new modifier names (use SwiftUI's names)
 - ❌ Over-engineering - match SwiftUI's simplicity
