@@ -99,48 +99,54 @@ export class Animation {
   }
 
   /**
-   * Animate an element using the Web Animations API (WAAPI).
-   * Falls back to CSS transitions if WAAPI is not available.
+   * Animate an element using native browser animation APIs.
    *
-   * GPU-optimized: Only animates compositor-friendly properties
-   * (transform, opacity) when possible, avoiding layout/paint.
+   * @param {HTMLElement} element   - Target DOM element
+   * @param {Object}      from      - Starting state: { opacity, transform, scale, x, y, … }
+   * @param {Object}      to        - Ending state (same keys)
+   * @param {Object}      [options] - Extra options: { completion, properties }
+   * @returns {Animation|null} WAAPI Animation object, or null
    *
-   * @param {HTMLElement} element - Target element
-   * @param {Object} from - Starting keyframe styles
-   * @param {Object} to - Ending keyframe styles
-   * @returns {Animation|null} The WAAPI Animation object, or null
+   * @example
+   * // Opens a card from its thumbnail position to full-screen
+   * Animation.easeOut(0.22).animate(
+   *   cardEl,
+   *   { transform: thumbnailTransform, opacity: 0 },
+   *   { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }
+   * );
+   *
+   * // With completion callback
+   * Animation.easeIn(0.18).animate(
+   *   backdropEl,
+   *   { opacity: 1 }, { opacity: 0 },
+   *   { onComplete: () => overlay.style.visibility = 'hidden' }
+   * );
    */
-  animate(element, from, to) {
+  animate(element, from, to, options = {}) {
     if (!element) return null;
+    const properties = options.properties ?? Object.keys({ ...from, ...to });
+    const compositorProperties = properties.filter(property =>
+      property === 'transform' || property === 'opacity'
+    );
 
-    // Promote to GPU layer for transform/opacity animations
-    const hasTransform = 'transform' in to || 'transform' in from;
-    const hasOpacity = 'opacity' in to || 'opacity' in from;
-    if (hasTransform || hasOpacity) {
-      element.style.willChange = hasTransform && hasOpacity
-        ? 'transform, opacity'
-        : hasTransform ? 'transform' : 'opacity';
+    if (compositorProperties.length > 0) {
+      element.style.willChange = compositorProperties.join(', ');
     }
 
-    // Use Web Animations API if available (better performance)
-    if (element.animate && typeof element.animate === 'function') {
+    if (typeof element.animate === 'function') {
       try {
-        const anim = element.animate([from, to], this.toWAAPIOptions());
-
-        // Clean up will-change after animation
-        anim.onfinish = () => {
-          element.style.willChange = '';
-          // Apply final styles
+        const player = element.animate([from, to], this.toWAAPIOptions());
+        player.onfinish = () => {
           Object.assign(element.style, to);
+          element.style.willChange = '';
+          if (typeof options.completion === 'function') options.completion();
         };
-
-        return anim;
-      } catch (e) {
-        // Fall through to CSS fallback
+        return player;
+      } catch {
+        // Fall through to CSS transitions.
       }
     }
 
-    // CSS transition fallback
     Object.assign(element.style, from);
     element.style.transition = this.toCSS();
     requestAnimationFrame(() => {
@@ -567,55 +573,152 @@ export function currentAnimation() {
  *   selectedIndex.value = newIndex;
  * });
  */
+/**
+ * Runs state/style changes with animation.
+ *
+ * The runtime uses native browser animation primitives internally; callers
+ * stay on the SwiftUI-shaped API surface.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/withanimation(_:_:)
+ *
+ * @param {Animation|Function} animationOrBody
+ * @param {Function}           [body]
+ *
+ * @example
+ * withAnimation(Animation.spring(), () => {
+ *   isExpanded.value = true;
+ * });
+ */
 export function withAnimation(animationOrBody, body) {
-  // Handle both withAnimation(body) and withAnimation(animation, body)
+  return animate(animationOrBody, body);
+}
+
+/**
+ * Runs imperative changes inside a SwiftUI-shaped animation transaction.
+ *
+ * This mirrors SwiftUI's closure-oriented animation APIs: callers describe
+ * the end-state change, while the framework owns timing, scheduling, reduced
+ * motion, and transaction cleanup.
+ *
+ * @param {Animation|Function} animationOrBody - Animation config or body function
+ * @param {Function} [body] - Body function containing state changes
+ * @param {Function} [completion] - Called after the animation duration
+ * @returns {Promise<void>}
+ */
+export function animate(animationOrBody, body, completion) {
   let animation = Animation.default;
   let updateFn = animationOrBody;
+  let completionFn = body;
 
   if (animationOrBody instanceof Animation) {
     animation = animationOrBody;
     updateFn = body;
+    completionFn = completion;
   }
 
-  // Check for reduced motion preference
+  if (typeof updateFn !== 'function') {
+    return Promise.resolve();
+  }
+
+  // Respect the system "reduce motion" accessibility setting.
   if (prefersReducedMotion()) {
-    updateFn();
-    return;
+    if (typeof updateFn === 'function') updateFn();
+    if (typeof completionFn === 'function') completionFn();
+    return Promise.resolve();
   }
 
-  // Set global animation state
+  // Set global animation context so .transition() modifiers can read it.
   _isAnimating = true;
   _currentAnimation = animation;
 
-  // Use View Transition API if available (Chrome 111+)
-  if (typeof document !== 'undefined' && document.startViewTransition) {
-    document.documentElement.style.setProperty(
-      '--swiftui-animation-duration',
-      `${animation.duration}s`
-    );
-    document.documentElement.style.setProperty(
-      '--swiftui-animation-timing',
-      animation.timingFunction
-    );
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        updateFn();
 
-    const transition = document.startViewTransition(() => {
-      updateFn();
+        const totalMs = (animation.duration + (animation.delay ?? 0)) * 1000;
+        setTimeout(() => {
+          _isAnimating = false;
+          _currentAnimation = null;
+          if (typeof completionFn === 'function') completionFn();
+          resolve();
+        }, totalMs);
+      });
     });
+  });
+}
 
-    transition.finished.then(() => {
-      _isAnimating = false;
-      _currentAnimation = null;
-    });
-  } else {
-    // Fallback: Apply CSS transitions manually
-    updateFn();
+/**
+ * Applies a SwiftUI Animation to DOM-backed style changes.
+ *
+ * The caller provides the final visual state. This helper owns transition
+ * setup and cleanup so examples do not hand-code CSS transition strings.
+ *
+ * @param {HTMLElement} element - Element to animate
+ * @param {Animation|Object} animationOrStyles - Animation configuration or final style values
+ * @param {Object} [stylesOrOptions] - Final style values or options
+ * @param {Object} [maybeOptions] - Animation options when an animation is provided
+ * @returns {Promise<void>}
+ */
+export function animateStyles(element, animationOrStyles = Animation.default, stylesOrOptions = {}, maybeOptions = {}) {
+  if (!element) return Promise.resolve();
 
-    // Reset after animation duration
-    setTimeout(() => {
-      _isAnimating = false;
-      _currentAnimation = null;
-    }, animation.duration * 1000);
+  const animation = animationOrStyles instanceof Animation
+    ? animationOrStyles
+    : (_currentAnimation ?? Animation.default);
+  const styles = animationOrStyles instanceof Animation
+    ? stylesOrOptions
+    : animationOrStyles;
+  const options = animationOrStyles instanceof Animation
+    ? maybeOptions
+    : stylesOrOptions;
+
+  const properties = Array.isArray(options.properties)
+    ? options.properties
+    : typeof options.properties === 'string'
+      ? [options.properties]
+      : Object.keys(styles);
+
+  const compositorProperties = properties.filter(property =>
+    property === 'transform' || property === 'opacity'
+  );
+
+  if (compositorProperties.length > 0) {
+    element.style.willChange = compositorProperties.join(', ');
   }
+
+  if (typeof element.animate === 'function') {
+    const from = {};
+    const computed = getComputedStyle(element);
+    for (const property of properties) {
+      from[property] = computed[property] || element.style[property] || '';
+    }
+
+    try {
+      const player = element.animate([from, styles], animation.toWAAPIOptions());
+      player.onfinish = () => {
+        Object.assign(element.style, styles);
+        element.style.willChange = '';
+        if (typeof options.completion === 'function') options.completion();
+      };
+      return player.finished.catch(() => {});
+    } catch {
+      // Fall through to CSS transitions.
+    }
+  }
+
+  const transition = properties
+    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation.delay}s`)
+    .join(', ');
+
+  element.style.transition = transition;
+
+  return animate(animation, () => {
+    Object.assign(element.style, styles);
+  }, () => {
+    element.style.willChange = '';
+    if (typeof options.completion === 'function') options.completion();
+  });
 }
 
 // =============================================================================
@@ -897,6 +1000,8 @@ export default {
   Animation,
   AnyTransition,
   Namespace,
+  animate,
+  animateStyles,
   withAnimation,
   isAnimating,
   currentAnimation,

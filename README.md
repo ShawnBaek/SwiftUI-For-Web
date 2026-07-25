@@ -1,6 +1,8 @@
 # SwiftUI-For-Web
 
-**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. Zero dependencies, no build step.**
+**Apple's SwiftUI API, running in the browser. Fine-grained reactive engine. No build step, no `npm install` required.**
+
+> **Animation engine.** The SwiftUI animation surface (`withAnimation`, `animate`, `animateStyles`, `.animation`, `.transition`, `matchedGeometryEffect`, the Netflix demo's modal) is dependency-free. Product code stays on SwiftUI-shaped APIs while the framework uses native browser primitives internally: Web Animations API, CSS transitions, and the View Transitions API.
 
 If you know SwiftUI, you already know this framework. Same component names (`VStack`, `Text`, `Button`, `NavigationStack`, `ForEach`, `ObservableObject`), same modifier chain (`.padding()`, `.foregroundColor()`, `.cornerRadius()`), the same `Chart`/`BarMark`/`LineMark` API from Swift Charts — implemented in plain JavaScript, mounted with a `<script type="module">`.
 
@@ -8,8 +10,9 @@ Under the hood, view bodies run **once at mount**. State changes execute only th
 
 [![Version](https://img.shields.io/badge/version-2.0.0--alpha-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Engine](https://img.shields.io/badge/engine-fine--grained%20reactive-purple.svg)](#architecture)
-[![Bundle](https://img.shields.io/badge/gzipped-~98KB-brightgreen.svg)](#bundle-size)
+[![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
+[![Animation](https://img.shields.io/badge/animation%20engine-native%20browser-2ea44f.svg)](#animation-engine-native-browser-under-the-hood)
+[![Bundle](https://img.shields.io/badge/gzipped-~126KB-brightgreen.svg)](#bundle-size)
 
 > **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
 
@@ -154,9 +157,53 @@ vm.items = [...vm.items, item];         // setter notifies tracked observers
 
 ---
 
+## Animation engine (native browser under the hood)
+
+The framework's animation surface is **pure SwiftUI** at the API level. There are no runtime animation dependencies and no vendored animation libraries. Product code describes animation intent with `Animation`, `withAnimation`, and `animateStyles`; the framework maps that intent to native browser primitives.
+
+```js
+import { withAnimation, animateStyles, State, Animation } from 'swiftui-for-web';
+
+const isExpanded = new State(false);
+
+withAnimation(Animation.spring(), () => {
+  isExpanded.value = !isExpanded.value;
+  animateStyles(cardElement, {
+    transform: isExpanded.value ? 'scale(1)' : 'scale(0.94)',
+    opacity: isExpanded.value ? '1' : '0.8'
+  });
+});
+```
+
+### Why Native
+
+| | Why it matters here |
+|---|---|
+| **Zero install** | Development works with browser ES modules, plain JavaScript, CSS, HTML, Node built-ins, and Python's built-in static server. |
+| **Compositor path** | `Animation.animate()` and `animateStyles()` prefer `Element.animate()` for transform/opacity interpolation, then fall back to CSS transitions. |
+| **SwiftUI surface** | App code uses `withAnimation(Animation.easeInOut(0.3), () => { ... })` instead of raw CSS transition strings, rAF loops, or direct DOM animation calls. |
+| **Deploy optimization** | `node scripts/build.js` produces `dist/`; `node scripts/size.js dist` reports raw and gzip size without installing packages. |
+
+### Architecture (layering)
+
+```
+Your code                  withAnimation, .transition(.scale), .animation(.spring(), value)
+                           no raw animation engine calls
+       │
+       ▼
+Framework API              src/Animation/Animation.js
+                           Animation, withAnimation, animate, animateStyles
+       │
+       ▼
+Native browser             Web Animations API, CSS transitions,
+                           View Transitions API
+```
+
+---
+
 ## Examples
 
-Seven runnable examples in `Examples/`, each a self-contained HTML + module:
+Nine runnable examples in `Examples/`, each a self-contained HTML + module:
 
 | Example | What it shows |
 |---|---|
@@ -167,11 +214,90 @@ Seven runnable examples in `Examples/`, each a self-contained HTML + module:
 | **Charts** | Bar / Line / Area / Point / Pie / Donut / target-line — Swift Charts API |
 | **Airbnb** | Sticky header, modal detail view, responsive grid, image gallery |
 | **TestShowcase** | Every component in one page — integration smoke test |
+| **ShaderEffects** | Static catalogue of `.colorEffect` / `.distortionEffect` / `.layerEffect` presets |
+| **MetalShaderGallery** | Animated shader effects — hue cycles, heat shimmer, holographic, neon text |
 
 ```bash
 python3 serve.py
 # open http://localhost:8000/Examples/Airbnb/
 ```
+
+---
+
+## Shader effects (Metal-style, web-side)
+
+Mirrors Apple's iOS 17+ shader-effect modifiers — `.colorEffect`, `.distortionEffect`, `.layerEffect` — backed by SVG filter graphs. Zero deps, GPU-accelerated in every modern browser, applies to any view (Image, Text, anything).
+
+```js
+import { Image, Text, ShaderLibrary, Color, Font } from 'swiftui-for-web';
+
+const Lib = ShaderLibrary.default;
+
+// Static color/layer/distortion effects on Image
+Image('photo.jpg')
+  .resizable()
+  .frame({ width: 200, height: 150 })
+  .colorEffect(Lib.hueRotate(90))            // per-pixel color
+  .layerEffect(Lib.blur(4));                 // full-layer sampling
+
+// Distortion — turbulence-displaced ripple
+Image('photo.jpg')
+  .resizable()
+  .frame({ width: 200, height: 150 })
+  .distortionEffect(
+    Lib.ripple({ amplitude: 12, frequency: 0.02 }),
+    { maxSampleOffset: { width: 12, height: 12 } }
+  );
+
+// Chained modifiers compose left-to-right: sepia then blur
+Image('photo.jpg')
+  .colorEffect(Lib.sepia(1))
+  .layerEffect(Lib.blur(2));
+
+// Shaders work on Text too — same SVG-filter pipeline
+Text('SHADER')
+  .font(Font.largeTitle)
+  .foregroundColor(Color.white)
+  .layerEffect(Lib.dropShadow({ radius: 6, y: 4, color: 'rgba(255,0,200,0.8)' }));
+```
+
+### Animated presets
+
+Embed SVG `<animate>` inside the filter graph — the GPU drives the animation, no `requestAnimationFrame`, no JS in the hot path:
+
+```js
+// Hue cycles the full 360° wheel every 3 seconds
+Image('photo.jpg').colorEffect(Lib.animatedHueRotate({ duration: 3 }));
+
+// Heat-shimmer: displacement breathes 0 → amplitude → 0, looping
+Image('photo.jpg').distortionEffect(
+  Lib.animatedRipple({ amplitude: 14, duration: 2.5 }),
+  { maxSampleOffset: { width: 14, height: 14 } }
+);
+
+// Pulsing neon glow — drop shadow radius animates in/out
+Text('NEON')
+  .font(Font.largeTitle)
+  .foregroundColor(Color.white)
+  .layerEffect(Lib.animatedGlow({
+    color: 'rgba(0,200,255,0.85)', baseRadius: 2, peakRadius: 16, duration: 1.6
+  }));
+
+// Compose static + animated freely
+Image('portrait.jpg')
+  .colorEffect(Lib.animatedHueRotate({ duration: 4 }))
+  .layerEffect(Lib.animatedGlow({ color: 'rgba(255,80,200,0.7)', duration: 2.4 }));
+```
+
+### `ShaderLibrary.default` catalogue
+
+| Kind | Presets |
+|---|---|
+| `.colorEffect` | `colorize`, `brightness`, `contrast`, `saturation`, `hueRotate`, `grayscale`, `invert`, `sepia`, `animatedHueRotate` |
+| `.layerEffect` | `blur`, `dropShadow`, `animatedGlow` |
+| `.distortionEffect` | `ripple`, `animatedRipple` |
+
+See the live demos: [`Examples/ShaderEffects/`](Examples/ShaderEffects/) (static catalogue) and [`Examples/MetalShaderGallery/`](Examples/MetalShaderGallery/) (animated). Apple references: [`Shader`](https://developer.apple.com/documentation/swiftui/shader), [`.colorEffect`](https://developer.apple.com/documentation/swiftui/view/coloreffect(_:isenabled:)), [`.distortionEffect`](https://developer.apple.com/documentation/swiftui/view/distortioneffect(_:maxsampleoffset:isenabled:)), [`.layerEffect`](https://developer.apple.com/documentation/swiftui/view/layereffect(_:maxsampleoffset:isenabled:)).
 
 ---
 
@@ -189,8 +315,8 @@ python3 serve.py
 | **State** | `State`, `Binding`, `ObservableObject` + `@Published`, `StateObject`, `Observable`, `Environment`, `EnvironmentObject` |
 | **Reactive control flow** | `Show`, `For` *(new — required for conditional/list rendering on the signal engine)* |
 | **Shapes** | `Rectangle`, `RoundedRectangle`, `UnevenRoundedRectangle`, `Circle`, `Ellipse`, `Capsule`, `Path` |
-| **Graphics** | `Color`, `Font`, `LinearGradient`, `RadialGradient`, `AngularGradient` |
-| **Animation** | `withAnimation`, `Animation` (spring/easing), `AnyTransition`, `matchedGeometryEffect` |
+| **Graphics** | `Color`, `Font`, `LinearGradient`, `RadialGradient`, `AngularGradient`, `Shader` / `ShaderLibrary` (+ `.colorEffect` / `.distortionEffect` / `.layerEffect`) |
+| **Animation** | `withAnimation`, `animate`, `animateStyles`, `Animation` (spring/easing), `AnyTransition`, `matchedGeometryEffect` *(driven by native browser APIs internally)* |
 | **Gestures** | `TapGesture`, `LongPressGesture`, `DragGesture`, `MagnificationGesture`, `RotationGesture` |
 | **App** | `App`, `WindowGroup`, `Scene`, `Settings`, `DocumentGroup` |
 
@@ -225,7 +351,10 @@ src/
 ├── Layout/                VStack, HStack, ZStack, Lazy*, Grid,
 │                          GeometryReader, ViewThatFits
 ├── Modifier/              padding, frame, font, color, background, etc.
-├── Shape/, Graphic/, Animation/, Gesture/, App/, Charts/
+├── Shape/, Graphic/, Gesture/, App/, Charts/
+├── Animation/
+│   └── Animation.js       SwiftUI Animation type, withAnimation,
+│                          animate, animateStyles, transition helpers
 └── styles/                reset.css, base.css
 ```
 
@@ -327,22 +456,22 @@ Honest take: **competitive with React 19 on real workloads** (within 1.4–1.6×
 
 ## Bundle size
 
-| Build | Gzipped |
-|---|---:|
-| Core (no charts) | ~98 KB |
-| Core + charts | ~109 KB |
+| Build | Gzipped | What's in it |
+|---|---:|---|
+| Core (no charts) | ~98 KB | views, layout, state, reactivity, modifiers, gestures, basic animation |
+| Core + charts | ~109 KB | + Swift Charts surface (~11 KB) |
+| Core + charts + animation | ~109 KB | everything, still dependency-free |
 
 For honest perspective:
 
-| Framework | Gzipped runtime |
-|---|---:|
-| Solid 1.x (`solid-js` + `solid-js/web`) | ~10 KB |
-| Vue 3 (`vue` runtime + compiler) | ~34 KB |
-| React 18 + ReactDOM (production) | ~44 KB |
-| **SwiftUI-For-Web (core)** | **98 KB** |
-| **SwiftUI-For-Web (core + charts)** | **109 KB** |
+| Framework | Gzipped runtime | + comparable animation lib |
+|---|---:|---|
+| Solid 1.x | ~10 KB | + Solid Spring (~6 KB) → 16 KB |
+| Vue 3 | ~34 KB | + GSAP (~28 KB) or Motion One (~4 KB) → 38–62 KB |
+| React 18 + ReactDOM | ~44 KB | + Framer Motion (~52 KB gzipped) → ~96 KB |
+| **SwiftUI-For-Web** | **~109 KB** | native animation APIs, no animation dependency |
 
-We are **larger** than React+ReactDOM at the runtime level. The trade-off is API surface: 84 components covering layout, controls, lists, navigation, shapes, animation, gestures, charts, and the SwiftUI state primitives all in the box. To match the surface area with React you'd add React Router, Recharts, Framer Motion, react-hook-form, and a chunk of Material UI / Radix; the resulting bundle ends up substantially larger. If you only need React's runtime, React is smaller. Pick what fits.
+We are **larger** than the bare-runtime competition. The trade-off is API surface: 84 components covering layout, controls, lists, navigation, shapes, animation, gestures, charts, and the SwiftUI state primitives. To match the surface area with React you'd add React Router, Recharts, Framer Motion, react-hook-form, and a chunk of Material UI / Radix; the resulting bundle ends up substantially larger. If you only need React's runtime, React is smaller. Pick what fits.
 
 A real bundler with tree-shaking will cut this further if you only import a subset.
 

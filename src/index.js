@@ -146,6 +146,7 @@ import {
 import { Color, ColorValue } from './Graphic/Color.js';
 import { Font, FontValue } from './Graphic/Font.js';
 import { LinearGradient, RadialGradient, AngularGradient, GradientDirection, UnitPoint } from './Graphic/Gradient.js';
+import { Shader, ShaderLibrary, ShaderKind } from './Graphic/Shader.js';
 
 // =============================================================================
 // Animation
@@ -154,6 +155,8 @@ import {
   Animation,
   AnyTransition,
   Namespace,
+  animate,
+  animateStyles,
   withAnimation,
   isAnimating,
   currentAnimation,
@@ -363,9 +366,11 @@ const SwiftUI = {
   Font, FontValue,
   LinearGradient, RadialGradient, AngularGradient,
   GradientDirection, UnitPoint,
+  Shader, ShaderLibrary, ShaderKind,
 
   // Animation
   Animation, AnyTransition, Namespace,
+  animate, animateStyles,
   withAnimation, isAnimating, currentAnimation,
   isViewTransitionSupported, prefersReducedMotion,
 
@@ -515,9 +520,11 @@ export {
   Font, FontValue,
   LinearGradient, RadialGradient, AngularGradient,
   GradientDirection, UnitPoint,
+  Shader, ShaderLibrary, ShaderKind,
 
   // Animation
   Animation, AnyTransition, Namespace,
+  animate, animateStyles,
   withAnimation, isAnimating, currentAnimation,
   extendViewWithAnimation,
   isViewTransitionSupported, prefersReducedMotion,

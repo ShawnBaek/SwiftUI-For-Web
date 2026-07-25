@@ -9,8 +9,13 @@ the rules that, if violated, will get a PR rejected.
 
 ## 1. Non-negotiable constraints
 
-1. **Zero dependencies.** No npm packages, no build step, no TS, no Sass.
-   Pure ES modules + CSS3 + HTML5. If you reach for a bundler, stop.
+1. **No `npm install` for users; no build step.** Pure ES modules +
+   CSS3 + HTML5 at the user's edge. The framework imports its own source
+   directly; users add zero npm packages and run no bundler.
+   - **No vendored runtime exceptions.** Do not add third-party JS,
+     package dependencies, bundlers, or transpilers. Animation code routes
+     through SwiftUI-shaped APIs in [`src/Animation/Animation.js`](src/Animation/Animation.js)
+     and uses native browser primitives internally.
 2. **SwiftUI API parity is law.** Every public symbol must already exist in
    Apple SwiftUI with the same name, same parameter labels, same semantics.
    - ✅ `.foregroundColor(Color.blue)`, `.padding(20)`, `.accessibilityHeading(.h1)`
@@ -34,6 +39,8 @@ Immutable view descriptor   { type, props, children, modifiers, key }
 DOM element (acquireElement from ElementPool)
    ▼  SignalRenderer.bindReactive
 Reactive bindings via createEffect (signals → textContent / styles)
+   ▼  withAnimation / .transition / .animation
+Animation.js ──►  Web Animations API / CSS transitions / View Transitions API
 ```
 
 Key files (read these before adding anything non-trivial):
@@ -43,11 +50,16 @@ Key files (read these before adding anything non-trivial):
 - [src/Core/SignalRenderer.js](src/Core/SignalRenderer.js) — mount + reactive binding walk
 - [src/Core/ElementPool.js](src/Core/ElementPool.js) — DOM recycling
 - [src/Data/Signal.js](src/Data/Signal.js) — `createEffect`, `createRoot`, `untrack`
+- [src/Animation/Animation.js](src/Animation/Animation.js) — `Animation`, `withAnimation`, `animate`, `animateStyles`, `AnyTransition`, `Namespace`
+- [src/Graphic/Shader.js](src/Graphic/Shader.js) — `Shader`, `ShaderLibrary`, `ShaderKind` for `.colorEffect` / `.distortionEffect` / `.layerEffect`
 - [src/index.js](src/index.js) — public exports (default + named, both required)
+- [src/index.d.ts](src/index.d.ts) — TypeScript / VSCode intellisense definitions; **update this whenever you add or change a public API**
 
 **Mental model:** descriptors are immutable. Modifiers return *new* frozen
 descriptors. The body runs **once** at mount; updates happen via signal
 effects that mutate specific DOM properties — there is no VDOM diff.
+Animations run through `Animation.js`, which exposes SwiftUI-shaped APIs and
+keeps native browser animation details invisible to the user's code.
 
 ---
 
@@ -100,6 +112,46 @@ load-bearing — it prevents mutation and lets the runtime trust descriptors.
 If you find yourself wanting to mutate a descriptor, you want a *new* one
 via `createDescriptor(...)` / `addModifier(...)`.
 
+### 3.4 Animation — always route through SwiftUI-shaped APIs
+
+Users author `withAnimation`, `.transition`, `.animation`, and
+`matchedGeometryEffect`. Imperative DOM-backed motion uses `Animation.animate()`
+or `animateStyles()`. **Never add a raw package animation engine or hand-code
+CSS transition/rAF loops in product examples.**
+
+```js
+// ✅ Correct — product/framework code stays on the public SwiftUI-style surface
+import { Animation, animateStyles, withAnimation } from '../Animation/Animation.js';
+
+withAnimation(Animation.easeInOut(0.28), () => {
+  animateStyles(cardEl, {
+    transform: 'translate(-50%, -50%) scale(1)',
+    opacity: '1'
+  });
+});
+```
+
+```js
+// ❌ Wrong — raw animation plumbing in product/sample code
+element.style.transition = 'transform 220ms ease';
+requestAnimationFrame(() => element.style.transform = 'scale(1)');
+```
+
+### 3.5 TypeScript / VSCode intellisense (`src/index.d.ts`)
+
+Every public symbol exported from `src/index.js` needs a matching definition
+in [`src/index.d.ts`](src/index.d.ts). The `.d.ts` file is the only thing
+that gives users autocomplete in VSCode without a build step.
+
+Rules:
+- Add the type when you add the export — don't defer it.
+- Mirror SwiftUI's exact parameter labels (avoid JS reserved words like `for`
+  — rename to e.g. `forType` with a `@see` comment pointing to the Apple doc).
+- Chainable modifiers return the same interface type, e.g.
+  `foregroundColor(color: Color): this`.
+- Enums (like `AccessibilityHeadingLevel`, `ShaderKind`) are typed as
+  `const` objects with a string/number union value type.
+
 ---
 
 ## 4. SEO & accessibility
@@ -113,6 +165,7 @@ over inventing web-only escape hatches.
 | `alt=` on images         | `Image(...).accessibilityLabel('…')`         |
 | `aria-label` on controls | `Button(...).accessibilityLabel('…')` *(when added)* |
 | Landmark role / heading  | `.accessibilityAddTraits(.isHeader)` *(when added)*  |
+| Shader-style effects     | `.colorEffect(ShaderLibrary.default.<fn>())` / `.distortionEffect()` / `.layerEffect()` — see "Shader effects" below |
 
 `AccessibilityHeadingLevel` exposes `.h1` … `.h6` and `.unspecified`. The
 renderer swaps `<span>` → `<h1..h6>` and resets user-agent heading styling
@@ -130,6 +183,34 @@ If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
 
 ---
 
+## 4b. Shader effects (`.colorEffect`, `.distortionEffect`, `.layerEffect`)
+
+Apple's Metal-shader modifiers (iOS 17+) are backed on the web by **SVG
+filter graphs** in [src/Graphic/Shader.js](src/Graphic/Shader.js), mounted
+into a single shared `<svg><defs>` in `document.head` by the renderer.
+Every modern browser GPU-accelerates these.
+
+Use the curated `ShaderLibrary.default` catalogue:
+
+```js
+Image('cat.jpg')
+  .colorEffect(ShaderLibrary.default.hueRotate(90))
+  .layerEffect(ShaderLibrary.default.blur(4));
+```
+
+To add a new preset shader: add a factory to `ShaderLibrary.default` in
+[src/Graphic/Shader.js](src/Graphic/Shader.js) that returns
+`new Shader(kind, name, args, (filterEl, args) => { appendPrimitive(...) })`.
+The `kind` (`color` | `distortion` | `layer`) gates which modifier accepts
+it, and the `(name, args)` pair gives the resulting `<filter>` a stable id
+so reused shaders share a single DOM definition.
+
+**Do not** add an `.h1Effect()` / `.cssFilter()` / arbitrary-GLSL escape
+hatch as a new public API yet — the SwiftUI surface is `colorEffect` /
+`distortionEffect` / `layerEffect` and the only thing that changes between
+them is what shader they accept. A WebGL2 / WGSL backend for user-supplied
+shader source code can slot in later behind the same `Shader` API.
+
 ## 5. Performance rules that aren't optional
 
 - **Pool elements.** Use `acquireElement(tag)`; release via the runtime —
@@ -143,6 +224,14 @@ If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
   props use the `xxxThunk` pattern + `createEffect` in `bindReactive`.
 - **Don't add MutationObservers.** A shared `LifecycleObserver` already
   handles `onAppear` / `onDisappear`.
+- **`visibility` over `display` for animated elements.** Toggling
+  `display:none → block` triggers a full layout pass and causes dropped
+  frames. Use `visibility:hidden / pointer-events:none` to hide, and
+  `visibility:visible / pointer-events:auto` to show — the element stays
+  in the layout tree, so the compositor can animate it without a reflow.
+- **Compositor-friendly animation.** Prefer `transform` and `opacity` in
+  `Animation.animate()` / `animateStyles()` calls so the browser can avoid
+  layout and paint work. Target: click → first frame under 10 ms.
 
 ---
 
@@ -159,14 +248,17 @@ If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
 ## 7. PR checklist (paste into the PR body)
 
 ```
-- [ ] Zero new dependencies
+- [ ] Zero new dependencies and no vendored runtime libraries
 - [ ] Public API name + parameter labels match SwiftUI exactly
 - [ ] SwiftUI doc URL referenced for any new API
 - [ ] No invented non-SwiftUI views/modifiers
 - [ ] Renderer uses acquireElement (not document.createElement)
 - [ ] Exported from src/index.js (default namespace + named)
+- [ ] src/index.d.ts updated for any new/changed public symbol
 - [ ] Tests added under Tests/<Category>/
 - [ ] Test runner loads the new test file
+- [ ] Animation code routes through `Animation`, `withAnimation`, or `animateStyles`
+- [ ] Animated show/hide uses visibility:hidden (not display:none)
 ```
 
 ---
@@ -184,6 +276,17 @@ If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
 - ❌ Forgetting the named export in `src/index.js` (default-only breaks
   tree-shaking imports).
 - ❌ Writing a new MutationObserver instead of using `LifecycleObserver`.
+- ❌ Adding animation dependencies or using raw CSS transition/rAF plumbing
+  in product/sample code. Route motion through `Animation`, `withAnimation`,
+  or `animateStyles`.
+- ❌ Toggling `display:none / display:block` on elements that animate.
+  This forces a layout pass and causes a dropped frame. Use
+  `visibility:hidden / pointer-events:none` instead.
+- ❌ Forgetting to update `src/index.d.ts` after adding a public API.
+  Without the `.d.ts` entry, VSCode shows no autocomplete for the new symbol.
+- ❌ Using a JavaScript reserved word (`for`, `in`, `class`, `default`) as a
+  TypeScript parameter label in `.d.ts`. Rename to e.g. `forType` and add a
+  `@see` comment pointing to the Apple doc.
 
 When in doubt: read the nearest already-shipped view in `src/View/` and
 mirror its shape exactly.

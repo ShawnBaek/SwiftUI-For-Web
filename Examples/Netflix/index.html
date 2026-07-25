@@ -30,41 +30,14 @@
       display: none;
     }
 
-    /* View Transition styles */
-    ::view-transition-old(root),
-    ::view-transition-new(root) {
-      animation-duration: 0.4s;
-      animation-timing-function: ease-in-out;
-    }
-
-    /* Card hover effects */
-    .movie-card {
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .movie-card:hover {
-      transform: scale(1.08);
-      z-index: 10;
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
-    }
-
-    /* Carousel peek effect */
-    .carousel-container {
-      mask-image: linear-gradient(
-        to right,
-        transparent,
-        black 2%,
-        black 98%,
-        transparent
-      );
-      -webkit-mask-image: linear-gradient(
-        to right,
-        transparent,
-        black 2%,
-        black 98%,
-        transparent
-      );
-    }
+    /*
+     * Card hover + carousel-mask CSS used to live here but were dead —
+     * the JS path drives transforms directly via mouseenter/leave handlers
+     * and the carousel mask class was never applied to any element. The
+     * mask in particular forces a composited layer that the browser has to
+     * re-paint on every frame of a transform animation underneath, so
+     * keeping it as dead-but-applied would have been a hidden tax.
+     */
   </style>
 </head>
 <body>

@@ -4,12 +4,13 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ## Project Overview
 
-**SwiftUI-For-Web** is a zero-dependency UI framework that brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML.
+**SwiftUI-For-Web** brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML at the user's edge. Users add no `npm install` and run no build step. Runtime code has no third-party or vendored animation dependency.
 
 ### Vision
 
-- Build a SwiftUI-like framework using **only vanilla JavaScript, CSS, and HTML**
-- **No external dependencies** - the framework is entirely self-contained
+- Build a SwiftUI-like framework using **vanilla JavaScript, CSS, and HTML**
+- **No dependencies**: users author against the SwiftUI API and the framework imports its own source directly
+- **Native animation engine**: `withAnimation` / `.animation` / `.transition` / `matchedGeometryEffect` route through SwiftUI-shaped APIs backed by Web Animations API, CSS transitions, and View Transitions API.
 - Implement **declarative UI** patterns matching SwiftUI's component model
 - Follow **MVVM (Model-View-ViewModel)** architecture
 - Provide familiar APIs for iOS/macOS developers transitioning to web
@@ -17,10 +18,11 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ### Core Principles
 
-1. **Zero Dependencies**: No npm packages, no build tools required
-2. **Declarative**: Describe what the UI should look like, not how to build it
-3. **MVVM Architecture**: Clear separation between Model, View, and ViewModel
-4. **SwiftUI Parity**: Match SwiftUI component names, behaviors, and API signatures exactly
+1. **No build step, no deps**: users add zero npm packages
+2. **Native animation engine**: animation APIs live in `src/Animation/Animation.js`
+3. **Declarative**: Describe what the UI should look like, not how to build it
+4. **MVVM Architecture**: Clear separation between Model, View, and ViewModel
+5. **SwiftUI Parity**: Match SwiftUI component names, behaviors, and API signatures exactly
 
 ### Current State
 
@@ -423,15 +425,28 @@ App(ContentView).mount('#root')
 
 ### Technology Constraints
 
-**IMPORTANT: Zero Dependencies Policy**
+**IMPORTANT: No-Build, No-Install Policy**
 
 - ✅ Pure JavaScript (ES6+)
 - ✅ CSS3
 - ✅ HTML5
-- ❌ No npm packages
+- ❌ No npm packages in user apps
 - ❌ No build tools (webpack, vite, etc.)
 - ❌ No transpilers (Babel, TypeScript)
 - ❌ No CSS preprocessors (Sass, Less)
+
+**No vendored animation engine** — the SwiftUI animation API
+(`withAnimation`, `animate`, `animateStyles`, `.animation`, `.transition`,
+`matchedGeometryEffect`) is backed by native browser primitives only.
+
+**Rules around animation:**
+
+- Do not add runtime dependencies, package animation engines, or vendored
+  third-party JavaScript.
+- Product and sample code should express motion through SwiftUI-shaped APIs:
+  `Animation`, `withAnimation`, `animate`, and `animateStyles`.
+- Keep raw Web Animations API, CSS transition, and View Transitions details
+  inside the framework implementation.
 
 ### SwiftUI API Parity Guidelines
 

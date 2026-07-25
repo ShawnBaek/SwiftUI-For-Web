@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 package-lock.json
+dist/
 
 # IDE
 .idea/
@@ -20,3 +21,8 @@ test-results/
 *.log
 .claude/
 Tests/Benchmark/animation-results-*Z.json
+metal-shader-gallery.png
+netflix-perf-profile.mjs
+hover-sweep.mjs
+test-results/
+playwright-report/
