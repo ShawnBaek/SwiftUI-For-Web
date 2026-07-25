@@ -9,9 +9,11 @@ the rules that, if violated, will get a PR rejected.
 
 ## 1. Non-negotiable constraints
 
-1. **No `npm install` for users; no build step.** Pure ES modules +
-   CSS3 + HTML5 at the user's edge. The framework imports its own source
-   directly; users add zero npm packages and run no bundler.
+1. **No `npm install` or build step required for development.** Pure ES
+   modules + CSS3 + HTML5 at the user's edge. The framework imports its own
+   source directly; users add zero npm packages and run no bundler.
+   `node scripts/build.js --entry <index.html>` is an optional, built-in
+   release optimization path and must stay dependency-free.
    - **No vendored runtime exceptions.** Do not add third-party JS,
      package dependencies, bundlers, or transpilers. Animation code routes
      through SwiftUI-shaped APIs in [`src/Animation/Animation.js`](src/Animation/Animation.js)
@@ -241,7 +243,9 @@ shader source code can slot in later behind the same `Shader` API.
 - For every new public method or renderer change, add a test in the matching
   `Tests/<Category>/<Name>Tests.js` and import it from the runner.
 - Tests use `describe / it / expect` from [Tests/TestUtils.js](Tests/TestUtils.js).
-- `npm test` (Playwright) runs the runner headlessly — keep it green.
+- Run `node run-tests.js` and `node scripts/build-tests.js` locally.
+- Playwright specs are optional external browser validation; they must not
+  become required for development, production builds, or CI.
 
 ---
 

@@ -15,6 +15,8 @@
  * import { Chart, BarMark, value } from 'swiftui-for-web/charts';
  */
 
+import './runtime.js';
+
 // =============================================================================
 // Core
 // =============================================================================
@@ -185,13 +187,6 @@ import {
 // Version Info
 // =============================================================================
 const VERSION = '1.1.0';
-
-// =============================================================================
-// Extend View with Animation, Gesture, and Environment Methods
-// =============================================================================
-extendViewWithAnimation(View);
-extendViewWithGestures(View);
-extendViewWithEnvironment(View);
 
 // =============================================================================
 // Default Export - Core SwiftUI (without Charts)

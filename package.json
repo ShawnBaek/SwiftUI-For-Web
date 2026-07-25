@@ -2,7 +2,7 @@
   "name": "swiftui-for-web",
   "version": "1.1.0",
   "type": "module",
-  "description": "A declarative UI framework that brings Apple's SwiftUI paradigm to web development. Zero dependencies, ~52KB gzipped.",
+  "description": "A zero-dependency declarative UI framework that brings Apple's SwiftUI paradigm to web development.",
   "main": "src/index.js",
   "module": "src/index.js",
   "types": "src/index.d.ts",
@@ -30,7 +30,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node run-tests.js",
+    "test": "node run-tests.js && node scripts/build-tests.js",
+    "test:build": "node scripts/build-tests.js",
     "build": "node scripts/build.js",
     "size": "node scripts/size.js dist",
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
@@ -69,7 +70,9 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/runtime.js"
+  ],
   "directories": {
     "doc": "docs"
   }

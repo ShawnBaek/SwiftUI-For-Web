@@ -58,37 +58,39 @@ No `npm install`, no bundler, no JSX. Save as `index.html` + `main.js`, serve wi
 
 ---
 
-## Install
+## Start without installing packages
 
 ```bash
-# Option A — npm
-npm install swiftui-for-web
-
-# Option B — direct from GitHub
-npm install github:ShawnBaek/SwiftUI-For-Web
-
-# Option C — clone and copy src/ into your project
 git clone https://github.com/ShawnBaek/SwiftUI-For-Web
+cd SwiftUI-For-Web
+python3 serve.py 8000
 ```
 
-Subpath imports if you want a smaller bundle:
+Open `http://localhost:8000/Examples/Counter/`. Development uses the checked-in
+browser modules directly: no package installation, bundler, transpiler, or IDE.
+
+Use named imports so an optional production build can retain only the framework
+modules your app references:
 
 ```javascript
-import { App, VStack, Text } from 'swiftui-for-web';          // everything
-import { signalMount } from 'swiftui-for-web/core';            // engine + Renderer
-import { Chart, BarMark, LineMark } from 'swiftui-for-web/charts';
+import { App, VStack, Text } from './src/index.js';
 ```
 
-Run any example locally:
+### Optional production build
 
 ```bash
-python3 serve.py 8000        # multi-threaded server (recommended; serves
-                              # 70+ ES modules in parallel)
-# or:
-npm run serve                 # single-threaded fallback
+node scripts/build.js \
+  --entry Examples/HelloWorld/index.html \
+  --out-dir dist/hello-world \
+  --configuration release
 ```
 
-Then open `http://localhost:8000/Examples/Counter/`.
+The release builder follows static HTML, JavaScript, and CSS references, routes
+named framework imports to their defining modules, removes unreachable modules
+and local resources, minifies emitted JavaScript/CSS, and writes
+`build-report.json` with retained files, removed files, external references,
+and raw/gzip totals. Default namespace imports stay compatible and conservatively
+retain the full framework.
 
 ---
 
@@ -182,7 +184,7 @@ withAnimation(Animation.spring(), () => {
 | **Zero install** | Development works with browser ES modules, plain JavaScript, CSS, HTML, Node built-ins, and Python's built-in static server. |
 | **Compositor path** | `Animation.animate()` and `animateStyles()` prefer `Element.animate()` for transform/opacity interpolation, then fall back to CSS transitions. |
 | **SwiftUI surface** | App code uses `withAnimation(Animation.easeInOut(0.3), () => { ... })` instead of raw CSS transition strings, rAF loops, or direct DOM animation calls. |
-| **Deploy optimization** | `node scripts/build.js` produces `dist/`; `node scripts/size.js dist` reports raw and gzip size without installing packages. |
+| **Deploy optimization** | `node scripts/build.js --entry <index.html>` emits only the statically reachable app graph; `node scripts/size.js dist` reports raw and gzip size without installing packages. |
 
 ### Architecture (layering)
 
@@ -456,37 +458,34 @@ Honest take: **competitive with React 19 on real workloads** (within 1.4–1.6×
 
 ## Bundle size
 
-| Build | Gzipped | What's in it |
+Measured with the built-in release compiler, where gzip is the sum of emitted
+files compressed independently:
+
+| Build | Gzipped | Retained graph |
 |---|---:|---|
-| Core (no charts) | ~98 KB | views, layout, state, reactivity, modifiers, gestures, basic animation |
-| Core + charts | ~109 KB | + Swift Charts surface (~11 KB) |
-| Core + charts + animation | ~109 KB | everything, still dependency-free |
+| HelloWorld release | 28.7 KB | 28 retained, 68 removed |
+| Netflix release | 39.7 KB | 34 retained, 62 removed |
+| Full library source graph | 85.7 KB | every JavaScript/CSS module |
 
-For honest perspective:
-
-| Framework | Gzipped runtime | + comparable animation lib |
-|---|---:|---|
-| Solid 1.x | ~10 KB | + Solid Spring (~6 KB) → 16 KB |
-| Vue 3 | ~34 KB | + GSAP (~28 KB) or Motion One (~4 KB) → 38–62 KB |
-| React 18 + ReactDOM | ~44 KB | + Framer Motion (~52 KB gzipped) → ~96 KB |
-| **SwiftUI-For-Web** | **~109 KB** | native animation APIs, no animation dependency |
-
-We are **larger** than the bare-runtime competition. The trade-off is API surface: 84 components covering layout, controls, lists, navigation, shapes, animation, gestures, charts, and the SwiftUI state primitives. To match the surface area with React you'd add React Router, Recharts, Framer Motion, react-hook-form, and a chunk of Material UI / Radix; the resulting bundle ends up substantially larger. If you only need React's runtime, React is smaller. Pick what fits.
-
-A real bundler with tree-shaking will cut this further if you only import a subset.
+This is conservative module-level tree shaking. Named imports are routed to
+their defining modules, while each retained module stays intact. The builder
+does not perform unsafe statement deletion or identifier mangling.
 
 ---
 
 ## Testing
 
-Three layers, all driven by Playwright:
+The required local and CI loop uses Node built-ins only:
 
 ```bash
-npm test              # unit tests (Signal core, State/Binding, components)
-npm run test:e2e      # end-to-end behaviour over real DOM
-npm run test:visual   # pixel-perfect baselines, maxDiffPixels: 0
-                       # — 8 baselines × 7 examples
+node run-tests.js
+node scripts/build-tests.js
+node scripts/build.js
+node scripts/size.js dist
 ```
+
+The Playwright e2e, visual, and benchmark specs remain optional external
+validation. They are not required to clone, edit, serve, build, or deploy.
 
 The visual harness uses seeded RNG, frozen `Date`, normalized fonts, and blocks external image hosts so screenshots are byte-identical across machines. It is the load-bearing safety net for engine changes.
 

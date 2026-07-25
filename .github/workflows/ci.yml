@@ -40,6 +40,9 @@ jobs:
       - name: Unit tests (node run-tests.js)
         run: node run-tests.js
 
+      - name: Production builder tests
+        run: node scripts/build-tests.js
+
       - name: Production build
         run: node scripts/build.js
 
