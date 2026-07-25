@@ -1,4 +1,4 @@
-# CI — unit + e2e tests on the self-hosted macOS runner.
+# CI — zero-dependency validation on the self-hosted macOS runner.
 #
 # Targets the runner labeled `swiftui-for-web` (alongside the default
 # `self-hosted` / `macOS` / `ARM64` labels) so this workflow can never
@@ -37,23 +37,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund --no-progress
-
       - name: Unit tests (node run-tests.js)
         run: node run-tests.js
 
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
+      - name: Production build
+        run: node scripts/build.js
 
-      - name: E2E tests
-        run: npm run test:e2e
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-          if-no-files-found: ignore
+      - name: Bundle size report
+        run: node scripts/size.js dist

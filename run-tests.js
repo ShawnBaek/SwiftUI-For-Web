@@ -263,6 +263,7 @@ async function runTests() {
     // Import and test core modules
     const { State } = await import('./src/Data/State.js');
     const { Binding } = await import('./src/Data/Binding.js');
+    const Scheduler = await import('./src/Core/Scheduler.js');
 
     // Test State
     describe('State', () => {
@@ -282,6 +283,7 @@ async function runTests() {
         let received = null;
         state.subscribe(v => received = v);
         state.value = 5;
+        Scheduler.flushSync();
         expect(received).toBe(5);
       });
 
@@ -323,7 +325,6 @@ async function runTests() {
 
     // Test Signal core (Phase 1 — internal reactive primitives)
     const Signal = await import('./src/Data/Signal.js');
-    const Scheduler = await import('./src/Core/Scheduler.js');
     describe('Signal', () => {
       it('createSignal returns [read, write]', () => {
         const [read, write] = Signal.createSignal(0);
@@ -603,6 +604,7 @@ async function runTests() {
         let notified = false;
         observable.subscribe(() => { notified = true; });
         observable.count = 1;
+        Scheduler.flushSync();
 
         expect(notified).toBe(true);
       });
@@ -633,6 +635,7 @@ async function runTests() {
           observable.a = 1;
           observable.b = 2;
         });
+        Scheduler.flushSync();
 
         expect(notifications).toBe(1);
       });
@@ -845,7 +848,7 @@ async function runTests() {
     });
 
     // Test ForEach
-    const { ForEach, ForEachView, Range } = await import('./src/View/List/ForEach.js');
+    const { ForEach, Range } = await import('./src/View/List/ForEach.js');
     const { Text, AccessibilityHeadingLevel } = await import('./src/View/Text.js');
     const { render: renderText } = await import('./src/Core/Renderer.js');
 
@@ -900,9 +903,10 @@ async function runTests() {
     });
 
     describe('ForEach', () => {
-      it('should create a ForEachView instance', () => {
+      it('should create an immutable ForEach descriptor', () => {
         const forEach = ForEach(['a', 'b'], item => Text(item));
-        expect(forEach).toBeInstanceOf(ForEachView);
+        expect(forEach.type).toBe('ForEach');
+        expect(Object.isFrozen(forEach)).toBe(true);
       });
 
       it('should iterate over array', () => {
@@ -920,8 +924,8 @@ async function runTests() {
         const items = [{ id: 'a', name: 'Apple' }, { id: 'b', name: 'Banana' }];
         const forEach = ForEach(items, { id: 'id' }, item => Text(item.name));
         const children = forEach.children;
-        expect(children[0]._forEachKey).toBe('a');
-        expect(children[1]._forEachKey).toBe('b');
+        expect(children[0].key).toBe('a');
+        expect(children[1].key).toBe('b');
       });
 
       it('should support Range object', () => {
@@ -932,14 +936,14 @@ async function runTests() {
 
       it('should render container with data-view', () => {
         const forEach = ForEach(['a', 'b'], item => Text(item));
-        const element = forEach._render();
+        const element = renderText(forEach);
         expect(element.tagName).toBe('DIV');
         expect(element.dataset.view).toBe('ForEach');
       });
 
       it('should render children elements', () => {
         const forEach = ForEach(['a', 'b', 'c'], item => Text(item));
-        const element = forEach._render();
+        const element = renderText(forEach);
         expect(element.children.length).toBe(3);
       });
     });
