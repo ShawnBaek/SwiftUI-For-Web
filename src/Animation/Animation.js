@@ -7,12 +7,6 @@
  * 3. Transitions - .transition() for view insertion/removal
  * 4. matchedGeometryEffect - ID-based hero animations
  *
- * INTERNAL ENGINE: All tween / fromTo / timeline calls go through
- * Animator.js, which is the only file that touches GSAP directly.
- * Nothing outside Animation.js and Animator.js should import GSAP or
- * reference Animator — all user-facing code uses the SwiftUI surface
- * (withAnimation, Animation, AnyTransition, etc.).
- *
  * @see https://developer.apple.com/documentation/swiftui/animations
  * @see https://fatbobman.com/en/snippet/swiftui-implicit-vs-explicit-animations/
  *
@@ -26,10 +20,6 @@
  *   isExpanded.value = true;
  * });
  */
-
-// Internal animation engine — NEVER import Animator from user code.
-// Route all tween calls through Animation.animate() / withAnimation().
-import { Animator } from './Animator.js';
 
 // =============================================================================
 // Animation Class - Matches SwiftUI's Animation type
@@ -109,18 +99,13 @@ export class Animation {
   }
 
   /**
-   * Animate an element from one state to another.
-   *
-   * Internally routes through Animator.js (GSAP when loaded, WAAPI
-   * fallback otherwise). Callers never import GSAP directly — they use
-   * this method or withAnimation().
+   * Animate an element using native browser animation APIs.
    *
    * @param {HTMLElement} element   - Target DOM element
    * @param {Object}      from      - Starting state: { opacity, transform, scale, x, y, … }
    * @param {Object}      to        - Ending state (same keys)
-   * @param {Object}      [options] - Extra options forwarded to GSAP/WAAPI:
-   *                                  { onComplete, overwrite, stagger, … }
-   * @returns {object|null} GSAP Tween / WAAPI Animation / null
+   * @param {Object}      [options] - Extra options: { completion, properties }
+   * @returns {Animation|null} WAAPI Animation object, or null
    *
    * @example
    * // Opens a card from its thumbnail position to full-screen
@@ -139,14 +124,38 @@ export class Animation {
    */
   animate(element, from, to, options = {}) {
     if (!element) return null;
-    // Delegate entirely to Animator — it handles the GSAP/WAAPI choice.
-    return Animator.fromTo(element, from, {
-      ...to,
-      duration: this._duration,
-      ease:     this._timingFunction,
-      delay:    this._delay,
-      ...options,
+    const properties = options.properties ?? Object.keys({ ...from, ...to });
+    const compositorProperties = properties.filter(property =>
+      property === 'transform' || property === 'opacity'
+    );
+
+    if (compositorProperties.length > 0) {
+      element.style.willChange = compositorProperties.join(', ');
+    }
+
+    if (typeof element.animate === 'function') {
+      try {
+        const player = element.animate([from, to], this.toWAAPIOptions());
+        player.onfinish = () => {
+          Object.assign(element.style, to);
+          element.style.willChange = '';
+          if (typeof options.completion === 'function') options.completion();
+        };
+        return player;
+      } catch {
+        // Fall through to CSS transitions.
+      }
+    }
+
+    Object.assign(element.style, from);
+    element.style.transition = this.toCSS();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        Object.assign(element.style, to);
+      });
     });
+
+    return null;
   }
 
   // ===========================================================================
@@ -567,10 +576,8 @@ export function currentAnimation() {
 /**
  * Runs state/style changes with animation.
  *
- * The internal engine (GSAP via Animator.js) is prewarmed the moment
- * `withAnimation` is first imported, so by the time the user interacts
- * GSAP is almost certainly already loaded. Falls back to WAAPI when GSAP
- * hasn't finished loading yet — the UI never breaks.
+ * The runtime uses native browser animation primitives internally; callers
+ * stay on the SwiftUI-shaped API surface.
  *
  * @see https://developer.apple.com/documentation/swiftui/withanimation(_:_:)
  *
@@ -583,42 +590,135 @@ export function currentAnimation() {
  * });
  */
 export function withAnimation(animationOrBody, body) {
-  // Handle both withAnimation(body) and withAnimation(animation, body)
+  return animate(animationOrBody, body);
+}
+
+/**
+ * Runs imperative changes inside a SwiftUI-shaped animation transaction.
+ *
+ * This mirrors SwiftUI's closure-oriented animation APIs: callers describe
+ * the end-state change, while the framework owns timing, scheduling, reduced
+ * motion, and transaction cleanup.
+ *
+ * @param {Animation|Function} animationOrBody - Animation config or body function
+ * @param {Function} [body] - Body function containing state changes
+ * @param {Function} [completion] - Called after the animation duration
+ * @returns {Promise<void>}
+ */
+export function animate(animationOrBody, body, completion) {
   let animation = Animation.default;
   let updateFn = animationOrBody;
+  let completionFn = body;
 
   if (animationOrBody instanceof Animation) {
     animation = animationOrBody;
     updateFn = body;
+    completionFn = completion;
+  }
+
+  if (typeof updateFn !== 'function') {
+    return Promise.resolve();
   }
 
   // Respect the system "reduce motion" accessibility setting.
   if (prefersReducedMotion()) {
     if (typeof updateFn === 'function') updateFn();
-    return;
+    if (typeof completionFn === 'function') completionFn();
+    return Promise.resolve();
   }
-
-  // Prewarm the internal GSAP engine.  Animator.js self-prewarms on
-  // module import (the moment Animation.js loads), so this is usually a
-  // no-op.  Calling it again here is a safety net for the first-frame
-  // race and costs nothing when GSAP is already loaded.
-  Animator.ready().catch(() => { /* WAAPI fallback handles this */ });
 
   // Set global animation context so .transition() modifiers can read it.
   _isAnimating = true;
   _currentAnimation = animation;
 
-  // Execute the state / style changes.  Reactive signals pick up the new
-  // values; .animation() modifiers on descriptors apply CSS transitions;
-  // explicit Animation.animate() calls inside the body use Animator.fromTo.
-  if (typeof updateFn === 'function') updateFn();
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        updateFn();
 
-  // Clear the animation context after the longest possible duration.
-  const totalMs = (animation.duration + (animation.delay ?? 0)) * 1000 + 100;
-  setTimeout(() => {
-    _isAnimating = false;
-    _currentAnimation = null;
-  }, totalMs);
+        const totalMs = (animation.duration + (animation.delay ?? 0)) * 1000;
+        setTimeout(() => {
+          _isAnimating = false;
+          _currentAnimation = null;
+          if (typeof completionFn === 'function') completionFn();
+          resolve();
+        }, totalMs);
+      });
+    });
+  });
+}
+
+/**
+ * Applies a SwiftUI Animation to DOM-backed style changes.
+ *
+ * The caller provides the final visual state. This helper owns transition
+ * setup and cleanup so examples do not hand-code CSS transition strings.
+ *
+ * @param {HTMLElement} element - Element to animate
+ * @param {Animation|Object} animationOrStyles - Animation configuration or final style values
+ * @param {Object} [stylesOrOptions] - Final style values or options
+ * @param {Object} [maybeOptions] - Animation options when an animation is provided
+ * @returns {Promise<void>}
+ */
+export function animateStyles(element, animationOrStyles = Animation.default, stylesOrOptions = {}, maybeOptions = {}) {
+  if (!element) return Promise.resolve();
+
+  const animation = animationOrStyles instanceof Animation
+    ? animationOrStyles
+    : (_currentAnimation ?? Animation.default);
+  const styles = animationOrStyles instanceof Animation
+    ? stylesOrOptions
+    : animationOrStyles;
+  const options = animationOrStyles instanceof Animation
+    ? maybeOptions
+    : stylesOrOptions;
+
+  const properties = Array.isArray(options.properties)
+    ? options.properties
+    : typeof options.properties === 'string'
+      ? [options.properties]
+      : Object.keys(styles);
+
+  const compositorProperties = properties.filter(property =>
+    property === 'transform' || property === 'opacity'
+  );
+
+  if (compositorProperties.length > 0) {
+    element.style.willChange = compositorProperties.join(', ');
+  }
+
+  if (typeof element.animate === 'function') {
+    const from = {};
+    const computed = getComputedStyle(element);
+    for (const property of properties) {
+      from[property] = computed[property] || element.style[property] || '';
+    }
+
+    try {
+      const player = element.animate([from, styles], animation.toWAAPIOptions());
+      player.onfinish = () => {
+        Object.assign(element.style, styles);
+        element.style.willChange = '';
+        if (typeof options.completion === 'function') options.completion();
+      };
+      return player.finished.catch(() => {});
+    } catch {
+      // Fall through to CSS transitions.
+    }
+  }
+
+  const transition = properties
+    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation.delay}s`)
+    .join(', ');
+
+  element.style.transition = transition;
+
+  return animate(animation, () => {
+    Object.assign(element.style, styles);
+  }, () => {
+    element.style.willChange = '';
+    if (typeof options.completion === 'function') options.completion();
+  });
 }
 
 // =============================================================================
@@ -900,6 +1000,8 @@ export default {
   Animation,
   AnyTransition,
   Namespace,
+  animate,
+  animateStyles,
   withAnimation,
   isAnimating,
   currentAnimation,

@@ -4,13 +4,13 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ## Project Overview
 
-**SwiftUI-For-Web** brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML at the user's edge. Users add no `npm install` and run no build step. One library — GSAP — is vendored internally as the animation engine and is never exposed to user code.
+**SwiftUI-For-Web** brings Apple's SwiftUI declarative paradigm to web development using pure JavaScript, CSS, and HTML at the user's edge. Users add no `npm install` and run no build step. Runtime code has no third-party or vendored animation dependency.
 
 ### Vision
 
 - Build a SwiftUI-like framework using **vanilla JavaScript, CSS, and HTML**
-- **No user-facing dependencies**: users author against the SwiftUI API and the framework imports its own source directly
-- **One internal exception**: [GSAP 3.13](https://gsap.com/) lives at `src/internal/gsap/` as the system layer behind `withAnimation` / `.animation` / `.transition` / `matchedGeometryEffect`. Touched by exactly one file (`src/Animation/Animator.js`). Users never import or type `gsap` themselves.
+- **No dependencies**: users author against the SwiftUI API and the framework imports its own source directly
+- **Native animation engine**: `withAnimation` / `.animation` / `.transition` / `matchedGeometryEffect` route through SwiftUI-shaped APIs backed by Web Animations API, CSS transitions, and View Transitions API.
 - Implement **declarative UI** patterns matching SwiftUI's component model
 - Follow **MVVM (Model-View-ViewModel)** architecture
 - Provide familiar APIs for iOS/macOS developers transitioning to web
@@ -18,8 +18,8 @@ This document provides guidance for AI assistants working on the SwiftUI-For-Web
 
 ### Core Principles
 
-1. **No build step, no user-facing deps**: users add zero npm packages
-2. **One internal animation engine**: GSAP, vendored at `src/internal/gsap/`, accessed only via `src/Animation/Animator.js`
+1. **No build step, no deps**: users add zero npm packages
+2. **Native animation engine**: animation APIs live in `src/Animation/Animation.js`
 3. **Declarative**: Describe what the UI should look like, not how to build it
 4. **MVVM Architecture**: Clear separation between Model, View, and ViewModel
 5. **SwiftUI Parity**: Match SwiftUI component names, behaviors, and API signatures exactly
@@ -435,20 +435,18 @@ App(ContentView).mount('#root')
 - ❌ No transpilers (Babel, TypeScript)
 - ❌ No CSS preprocessors (Sass, Less)
 
-**One vendored animation engine** — [GSAP 3.13](https://gsap.com/) lives at
-`src/internal/gsap/gsap.min.js` (under GreenSock's free no-charge license).
-It's the *internal system layer* that drives the SwiftUI animation API
-(`withAnimation`, `.animation`, `.transition`, `matchedGeometryEffect`).
+**No vendored animation engine** — the SwiftUI animation API
+(`withAnimation`, `animate`, `animateStyles`, `.animation`, `.transition`,
+`matchedGeometryEffect`) is backed by native browser primitives only.
 
-**Rules around the GSAP exception:**
+**Rules around animation:**
 
-- Only `src/Animation/Animator.js` imports / references GSAP. Every other
-  file in the framework uses `Animator.{to, fromTo, timeline, killAll}`.
-- Never export GSAP through `src/index.js`. Users author against the
-  SwiftUI animation surface; `gsap` should never appear in user code.
-- Don't add new third-party libraries. GSAP is the single exception.
-- If you bump the GSAP version, replace the vendored file by re-pulling
-  from the official CDN — see `src/internal/gsap/NOTICE.md`.
+- Do not add runtime dependencies, package animation engines, or vendored
+  third-party JavaScript.
+- Product and sample code should express motion through SwiftUI-shaped APIs:
+  `Animation`, `withAnimation`, `animate`, and `animateStyles`.
+- Keep raw Web Animations API, CSS transition, and View Transitions details
+  inside the framework implementation.
 
 ### SwiftUI API Parity Guidelines
 
