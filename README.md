@@ -26,7 +26,7 @@ AppleSampleCode.com uses SwiftUI-For-Web to present a searchable, source-cited
 study of Apple sample-code architecture, design patterns, and best practices as
 a production web experience.
 
-[Watch the AppleSampleCode.com showcase](docs/videos/apple-sample-code-showcase.mp4)
+[![AppleSampleCode.com built with SwiftUI-For-Web](docs/images/apple-sample-code-showcase.gif)](https://applesamplecode.com)
 
 ---
 
