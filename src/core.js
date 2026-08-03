@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web/core
- * @version 1.1.0
+ * @version 2.0.0-alpha.1
  *
  * @example
  * // Import core only (smaller bundle, no Charts)
@@ -62,6 +62,7 @@ import {
 import { Text, TextView } from './View/Text.js';
 import { Image, ImageView, ContentMode } from './View/Image.js';
 import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
+import { SearchFieldPlacement } from './View/Search.js';
 
 // Controls
 import { Button, ButtonView } from './View/Control/Button.js';
@@ -186,7 +187,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '1.1.0';
+const VERSION = '2.0.0-alpha.1';
 
 // =============================================================================
 // Default Export - Core SwiftUI (without Charts)
@@ -219,6 +220,7 @@ const SwiftUICore = {
   Text, TextView,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
+  SearchFieldPlacement,
 
   // Controls
   Button, ButtonView,
@@ -339,6 +341,7 @@ export {
   Text, TextView,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
+  SearchFieldPlacement,
 
   // Controls
   Button, ButtonView,

@@ -33,6 +33,11 @@ class MockDocument {
   querySelector(selector) {
     return this.elements.get(selector) || null;
   }
+
+  contains(element) {
+    const visit = (node) => node === element || node.children?.some(visit);
+    return visit(this.body) || visit(this.head);
+  }
 }
 
 class MockDocumentFragment {
@@ -50,18 +55,22 @@ class MockEvent {
   constructor(type, options = {}) {
     this.type = type;
     this.target = options.target || null;
-    this.preventDefault = () => {};
-    this.stopPropagation = () => {};
+    this.defaultPrevented = false;
+    this.cancelBubble = false;
+    this.preventDefault = () => { this.defaultPrevented = true; };
+    this.stopPropagation = () => { this.cancelBubble = true; };
   }
 }
 
 class MockElement {
   constructor(tagName) {
     this.tagName = tagName.toUpperCase();
+    this.nodeType = 1;
     this.children = [];
+    this.parentNode = null;
     this.style = {};
     this.dataset = {};
-    this.textContent = '';
+    this._textContent = '';
     this.innerHTML = '';
     this.disabled = false;
     // Input-specific properties
@@ -82,7 +91,40 @@ class MockElement {
   }
 
   setAttribute(name, value) {
-    this._attributes[name] = value;
+    this._attributes[name] = String(value);
+    if (name === 'open') this.open = true;
+  }
+
+  removeAttribute(name) {
+    delete this._attributes[name];
+    if (name.startsWith('data-')) {
+      const key = name
+        .slice(5)
+        .replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      delete this.dataset[key];
+    }
+    if (name === 'open') this.open = false;
+  }
+
+  get attributes() {
+    const entries = { ...this._attributes };
+    for (const [key, value] of Object.entries(this.dataset)) {
+      const name = `data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+      entries[name] = value;
+    }
+    return Object.entries(entries).map(([name, value]) => ({ name, value }));
+  }
+
+  get textContent() {
+    return this._textContent;
+  }
+
+  set textContent(value) {
+    this._textContent = String(value);
+    if (value === '') {
+      for (const child of this.children) child.parentNode = null;
+      this.children = [];
+    }
   }
 
   getAttribute(name) {
@@ -93,12 +135,45 @@ class MockElement {
     // Handle DocumentFragment - append all children
     if (child instanceof MockDocumentFragment) {
       for (const fragmentChild of child.children) {
+        fragmentChild.parentNode = this;
         this.children.push(fragmentChild);
       }
       return child;
     }
+    child.parentNode = this;
     this.children.push(child);
     return child;
+  }
+
+  insertBefore(child, reference) {
+    child.parentNode = this;
+    const index = reference ? this.children.indexOf(reference) : -1;
+    if (index < 0) this.children.push(child);
+    else this.children.splice(index, 0, child);
+    return child;
+  }
+
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    child.parentNode = null;
+    return child;
+  }
+
+  remove() {
+    this.parentNode?.removeChild(this);
+  }
+
+  get firstChild() {
+    return this.children[0] || null;
+  }
+
+  get parentElement() {
+    return this.parentNode instanceof MockElement ? this.parentNode : null;
+  }
+
+  get isConnected() {
+    return global.document?.contains(this) || false;
   }
 
   addEventListener(event, handler) {
@@ -106,17 +181,30 @@ class MockElement {
     this._eventListeners[event].push(handler);
   }
 
+  removeEventListener(event, handler) {
+    const listeners = this._eventListeners[event];
+    if (!listeners) return;
+    this._eventListeners[event] = listeners.filter((candidate) => candidate !== handler);
+  }
+
+  focus() {
+    global.document.activeElement = this;
+  }
+
   click() {
-    if (this._eventListeners.click) {
-      this._eventListeners.click.forEach(h => h({ preventDefault: () => {} }));
-    }
+    this.dispatchEvent(new MockEvent('click'));
   }
 
   dispatchEvent(event) {
-    event.target = this;
+    if (!event.target) event.target = this;
+    event.currentTarget = this;
     if (this._eventListeners[event.type]) {
       this._eventListeners[event.type].forEach(h => h(event));
     }
+    if (!event.cancelBubble && this.parentNode?.dispatchEvent) {
+      this.parentNode.dispatchEvent(event);
+    }
+    return !event.defaultPrevented;
   }
 
   querySelector(selector) {
@@ -264,6 +352,11 @@ async function runTests() {
     const { State } = await import('./src/Data/State.js');
     const { Binding } = await import('./src/Data/Binding.js');
     const Scheduler = await import('./src/Core/Scheduler.js');
+    const { App } = await import('./src/App/App.js');
+    const { Text: ModifierText } = await import('./src/View/Text.js');
+    const { VStack } = await import('./src/Layout/Stack/VStack.js');
+    const { Button } = await import('./src/View/Control/Button.js');
+    const { render } = await import('./src/Core/Renderer.js');
 
     // Test State
     describe('State', () => {
@@ -320,6 +413,95 @@ async function runTests() {
         const state = new State(5);
         const doubled = state.binding.transform(x => x * 2);
         expect(doubled.value).toBe(10);
+      });
+    });
+
+    describe('SwiftUI-style modifiers', () => {
+      it('maps accessibility modifiers to semantic attributes', () => {
+        const element = render(
+          ModifierText('Status')
+            .accessibilityLabel('Build status')
+            .accessibilityValue('Passing')
+            .accessibilityHint('Opens the build details')
+            .accessibilityIdentifier('build-status')
+        );
+        expect(element.getAttribute('aria-label')).toBe('Build status');
+        expect(element.getAttribute('aria-valuetext')).toBe('Passing');
+        expect(element.getAttribute('aria-description')).toBe('Opens the build details');
+        expect(element.getAttribute('data-accessibility-identifier')).toBe('build-status');
+      });
+
+      it('runs onChange for actual changes and supports initial', () => {
+        const count = new State(2);
+        const changes = [];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() =>
+          ModifierText('Counter').onChange(
+            () => count.value,
+            { initial: true },
+            (oldValue, newValue) => changes.push([oldValue, newValue])
+          )
+        ).mount(root);
+
+        expect(changes).toEqual([[2, 2]]);
+        count.value = 3;
+        Scheduler.flushSync();
+        expect(changes).toEqual([[2, 2], [2, 3]]);
+        count.value = 3;
+        Scheduler.flushSync();
+        expect(changes).toHaveLength(2);
+        app.unmount();
+        root.remove();
+      });
+
+      it('keeps searchable text synchronized through a Binding', () => {
+        const query = new State('');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() =>
+          VStack(ModifierText('Results')).searchable(query.binding, { prompt: 'Find samples' })
+        ).mount(root);
+        const input = root.querySelector('[data-view="SearchFieldInput"]');
+
+        expect(input).toBeDefined();
+        expect(input.placeholder).toBe('Find samples');
+        input.value = 'Shazam';
+        input.dispatchEvent(new Event('input'));
+        expect(query.value).toBe('Shazam');
+        query.value = 'Audio';
+        Scheduler.flushSync();
+        expect(input.value).toBe('Audio');
+        app.unmount();
+        root.remove();
+      });
+
+      it('presents and dismisses sheet content from a Binding', () => {
+        const isPresented = new State(false);
+        let dismissCount = 0;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() =>
+          Button('Details', () => { isPresented.value = true; })
+            .sheet(isPresented.binding, {
+              onDismiss: () => { dismissCount++; },
+              content: () => VStack(
+                ModifierText('Sheet details'),
+                Button('Dismiss', () => { isPresented.value = false; })
+              )
+            })
+        ).mount(root);
+
+        root.querySelector('[data-view="Button"]').click();
+        expect(document.body.querySelector('[data-view="Sheet"]')).toBeDefined();
+        document.body
+          .querySelector('[data-view="Sheet"]')
+          .querySelector('[data-view="Button"]')
+          .click();
+        expect(document.body.querySelector('[data-view="Sheet"]')).toBeNull();
+        expect(dismissCount).toBe(1);
+        app.unmount();
+        root.remove();
       });
     });
 

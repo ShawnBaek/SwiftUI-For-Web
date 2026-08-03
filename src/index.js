@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 1.0.0
+ * @version 2.0.0-alpha.1
  *
  * @example
  * // Simple import (recommended)
@@ -62,6 +62,7 @@ import {
 import { Text, AccessibilityHeadingLevel } from './View/Text.js';
 import { Image, ImageView, ContentMode } from './View/Image.js';
 import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
+import { SearchFieldPlacement } from './View/Search.js';
 
 // Controls
 import { Button } from './View/Control/Button.js';
@@ -254,7 +255,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '1.0.0';
+const VERSION = '2.0.0-alpha.1';
 
 // =============================================================================
 // Default Export - Simple unified namespace
@@ -292,6 +293,7 @@ const SwiftUI = {
   AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
+  SearchFieldPlacement,
 
   // Controls
   Button,
@@ -445,6 +447,7 @@ export {
   AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
+  SearchFieldPlacement,
 
   // Controls
   Button,

@@ -26,6 +26,8 @@
 import { ChangeTracker } from './ChangeTracker.js';
 import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { createModifier, ModifierType } from './ViewDescriptor.js';
+import { installReactiveModifier } from './SignalRenderer.js';
 
 /** @type {number} Global view counter for generating unique IDs */
 let _viewIdCounter = 0;
@@ -481,6 +483,65 @@ export class View {
       apply(element) {
         lifecycleOnDisappear(element, handler);
       }
+    });
+  }
+
+  /**
+   * Run an action when an observed value changes.
+   * Matches SwiftUI's `.onChange(of:initial:_:)` semantics.
+   *
+   * @param {*|Function} of - Value, State/Binding, or tracked getter to observe
+   * @param {Object|Function} optionsOrAction - `{ initial }` or the action
+   * @param {Function} [action] - Receives `(oldValue, newValue)`
+   * @returns {View}
+   */
+  onChange(of, optionsOrAction, action) {
+    const modifier = createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /**
+   * Add a search field bound to text state.
+   * Matches SwiftUI's `.searchable(text:placement:prompt:)` vocabulary.
+   *
+   * @param {Object} text - Binding<String>
+   * @param {Object} [options]
+   * @returns {View}
+   */
+  searchable(text, options = {}) {
+    const modifier = createModifier(ModifierType.SEARCHABLE, { text, options });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /**
+   * Present content while a Boolean binding is true.
+   * Matches SwiftUI's `.sheet(isPresented:onDismiss:content:)` ownership.
+   *
+   * @param {Object} isPresented - Binding<Boolean>
+   * @param {Object|Function} optionsOrContent - Options or content builder
+   * @param {Function} [content] - Content builder
+   * @returns {View}
+   */
+  sheet(isPresented, optionsOrContent, content) {
+    const modifier = createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  accessibilityLabel(label) {
+    return this.modifier({ apply: (element) => element.setAttribute('aria-label', String(label ?? '')) });
+  }
+
+  accessibilityValue(value) {
+    return this.modifier({ apply: (element) => element.setAttribute('aria-valuetext', String(value ?? '')) });
+  }
+
+  accessibilityHint(hint) {
+    return this.modifier({ apply: (element) => element.setAttribute('aria-description', String(hint ?? '')) });
+  }
+
+  accessibilityIdentifier(identifier) {
+    return this.modifier({
+      apply: (element) => element.setAttribute('data-accessibility-identifier', String(identifier ?? ''))
     });
   }
 
