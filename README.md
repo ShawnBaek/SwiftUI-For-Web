@@ -8,7 +8,7 @@ If you know SwiftUI, you already know this framework. Same component names (`VSt
 
 Under the hood, view bodies run **once at mount**. State changes execute only the small effect closures bound to the affected DOM nodes — no virtual DOM, no diff, no patches. Closer in spirit to Solid than to React.
 
-[![Version](https://img.shields.io/badge/version-2.0.0--alpha-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![Version](https://img.shields.io/badge/version-2.0.0--alpha.1-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
 [![Animation](https://img.shields.io/badge/animation%20engine-native%20browser-2ea44f.svg)](#animation-engine-native-browser-under-the-hood)
@@ -57,6 +57,37 @@ App(() =>
 Mount once, mutate freely. The `Text(() => …)` thunk subscribes to whatever signals it reads. When `count.value++` runs, the framework re-executes only that one closure and updates that one text node — nothing else in the tree re-runs.
 
 No `npm install`, no bundler, no JSX. Save as `index.html` + `main.js`, serve with any static server, done.
+
+### New in 2.0.0-alpha.1
+
+The first 2.0 alpha moves common interaction and accessibility work behind
+SwiftUI-shaped modifiers:
+
+```javascript
+const query = new State('');
+const isPresented = new State(false);
+
+VStack(
+  Text('Samples').accessibilityHeading(AccessibilityHeadingLevel.h1),
+  Button('Show help', () => { isPresented.value = true; })
+)
+  .searchable(query.binding, {
+    placement: SearchFieldPlacement.automatic,
+    prompt: 'Search samples'
+  })
+  .onChange(() => query.value, { initial: true }, (oldValue, newValue) => {
+    console.log({ oldValue, newValue });
+  })
+  .sheet(isPresented.binding, {
+    onDismiss: () => console.log('Dismissed'),
+    content: () => Text('Search help').accessibilityLabel('Search help')
+  });
+```
+
+`.searchable` owns no search state: the supplied `Binding` remains the source
+of truth. `.sheet` follows the same rule for presentation. The browser input,
+dialog, keyboard dismissal, focus restoration, and ARIA mapping stay internal
+to the framework.
 
 ---
 

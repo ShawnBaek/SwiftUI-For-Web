@@ -1,6 +1,6 @@
 {
   "name": "swiftui-for-web",
-  "version": "1.1.0",
+  "version": "2.0.0-alpha.1",
   "type": "module",
   "description": "A zero-dependency declarative UI framework that brings Apple's SwiftUI paradigm to web development.",
   "main": "src/index.js",
@@ -27,6 +27,7 @@
   "files": [
     "src",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

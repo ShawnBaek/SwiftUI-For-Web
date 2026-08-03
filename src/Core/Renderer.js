@@ -206,6 +206,30 @@ function applyModifier(element, modifier) {
       onDisappear(element, value);
       break;
 
+    case ModifierType.ACCESSIBILITY_LABEL:
+      element.setAttribute('aria-label', accessibilityText(value));
+      break;
+
+    case ModifierType.ACCESSIBILITY_VALUE:
+      element.setAttribute('aria-valuetext', accessibilityText(value));
+      break;
+
+    case ModifierType.ACCESSIBILITY_HINT:
+      element.setAttribute('aria-description', accessibilityText(value));
+      break;
+
+    case ModifierType.ACCESSIBILITY_IDENTIFIER:
+      element.setAttribute('data-accessibility-identifier', accessibilityText(value));
+      break;
+
+    // Reactive modifiers are installed by SignalRenderer after the element is
+    // attached to the current signal owner. Keeping that work out of this
+    // synchronous style pass gives it deterministic cleanup on unmount.
+    case ModifierType.ON_CHANGE:
+    case ModifierType.SEARCHABLE:
+    case ModifierType.SHEET:
+      break;
+
     case ModifierType.CLIP_SHAPE:
       applyClipShape(element, value);
       break;
@@ -230,6 +254,16 @@ function applyModifier(element, modifier) {
         modifier.apply(element);
       }
   }
+}
+
+function accessibilityText(value) {
+  if (value && value.props) {
+    if (value.props.content != null) return String(value.props.content);
+    if (typeof value.props.contentThunk === 'function') {
+      return String(untrack(value.props.contentThunk) ?? '');
+    }
+  }
+  return String(value ?? '');
 }
 
 /**

@@ -101,3 +101,46 @@ body {
 #root {
   min-height: 100vh;
 }
+/* SwiftUI interaction modifiers */
+.swiftui-searchable {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.swiftui-searchable-input {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  color: inherit;
+  font: inherit;
+  background: Canvas;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 8px;
+}
+
+.swiftui-searchable-input:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+.swiftui-sheet {
+  box-sizing: border-box;
+  width: min(42rem, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  color: CanvasText;
+  background: Canvas;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+}
+
+.swiftui-sheet::backdrop {
+  background: rgb(0 0 0 / 48%);
+}
+
+.swiftui-sheet-content {
+  box-sizing: border-box;
+  max-height: calc(100vh - 34px);
+  overflow: auto;
+}

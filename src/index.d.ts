@@ -3,7 +3,7 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 1.1.0
+ * @version 2.0.0-alpha.1
  */
 
 // =============================================================================
@@ -50,6 +50,22 @@ export class View {
   onAppear(action: () => void): this;
   /** Called when view disappears */
   onDisappear(action: () => void): this;
+  /** Run when the observed value changes */
+  onChange<T>(of: T | Binding<T> | (() => T), action: (oldValue: T, newValue: T) => void): this;
+  /** Run when the observed value changes, optionally including the initial value */
+  onChange<T>(of: T | Binding<T> | (() => T), options: OnChangeOptions, action: (oldValue: T, newValue: T) => void): this;
+  /** Add a search field bound to text state */
+  searchable(text: Binding<string>, options?: SearchableOptions): this;
+  /** Present content while a Boolean binding is true */
+  sheet(isPresented: Binding<boolean>, content: () => View): this;
+  /** Present content while a Boolean binding is true and handle dismissal */
+  sheet(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+
+  // Accessibility Modifiers
+  accessibilityLabel(label: string | number | View): this;
+  accessibilityValue(value: string | number | View): this;
+  accessibilityHint(hint: string | number | View): this;
+  accessibilityIdentifier(identifier: string): this;
 
   // Gesture Modifiers
   /** Add a gesture recognizer */
@@ -123,6 +139,35 @@ export interface ShadowOptions {
   radius?: number;
   x?: number;
   y?: number;
+}
+
+export interface OnChangeOptions {
+  initial?: boolean;
+}
+
+export type SearchFieldPlacementValue =
+  | 'automatic'
+  | 'navigationBarDrawer'
+  | 'sidebar'
+  | 'toolbar';
+
+export const SearchFieldPlacement: {
+  automatic: 'automatic';
+  navigationBarDrawer: 'navigationBarDrawer';
+  sidebar: 'sidebar';
+  toolbar: 'toolbar';
+};
+
+export interface SearchableOptions {
+  placement?: SearchFieldPlacementValue;
+  prompt?: string;
+  accessibilityLabel?: string;
+  autocomplete?: string;
+}
+
+export interface SheetOptions {
+  onDismiss?: () => void;
+  content?: () => View;
 }
 
 // =============================================================================
@@ -1234,6 +1279,7 @@ declare const SwiftUI: {
   App: typeof App;
   WindowGroup: typeof WindowGroup;
   Settings: typeof Settings;
+  SearchFieldPlacement: typeof SearchFieldPlacement;
   // Style constants
   Alignment: typeof Alignment;
   HorizontalAlignment: typeof HorizontalAlignment;

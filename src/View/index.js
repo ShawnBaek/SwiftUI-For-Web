@@ -4,6 +4,7 @@
  */
 
 export { Text, TextView } from './Text.js';
+export { SearchFieldPlacement } from './Search.js';
 
 // Controls
 export { Button, ButtonView } from './Control/Button.js';
