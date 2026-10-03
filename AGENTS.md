@@ -1,87 +1,120 @@
-# AGENTS.md — Guide for AI Agents writing SwiftUI-For-Web code
+# AGENTS.md: How to work on SwiftUI-For-Web
 
-This file is the contract any agent (Claude Code, Codex, Cursor, Aider, etc.)
-should read before writing code in this repo. The long-form reference lives
-in [CLAUDE.md](./CLAUDE.md); this file is the **short, enforceable subset** —
-the rules that, if violated, will get a PR rejected.
+This is the contract for every contributor, human or agent (Claude Code, Codex,
+Cursor, …). It is short on purpose. The detail lives in `docs/`:
 
----
+| Read | When |
+|---|---|
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Before choosing work: goals, current strengths and weaknesses, phased plan |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Before touching `src/`: layers, invariants, documented SwiftUI exceptions |
+| [docs/TESTING.md](docs/TESTING.md) | Before writing or changing tests |
+| Tracking issue [#43](https://github.com/ShawnBaek/SwiftUI-For-Web/issues/43) | For the live checklist and issue order |
 
-## 1. Non-negotiable constraints
-
-1. **No `npm install` or build step required for development.** Pure ES
-   modules + CSS3 + HTML5 at the user's edge. The framework imports its own
-   source directly; users add zero npm packages and run no bundler.
-   `node scripts/build.js --entry <index.html>` is an optional, built-in
-   release optimization path and must stay dependency-free.
-   - **No vendored runtime exceptions.** Do not add third-party JS,
-     package dependencies, bundlers, or transpilers. Animation code routes
-     through SwiftUI-shaped APIs in [`src/Animation/Animation.js`](src/Animation/Animation.js)
-     and uses native browser primitives internally.
-2. **SwiftUI API parity is law.** Every public symbol must already exist in
-   Apple SwiftUI with the same name, same parameter labels, same semantics.
-   - ✅ `.foregroundColor(Color.blue)`, `.padding(20)`, `.accessibilityHeading(.h1)`
-   - ❌ `.color('blue')`, `.gap(20)`, `.h1()`
-3. **No invented components.** Don't add `H1`, `Hero`, `Container`, `Card`,
-   `Heading`, etc. If SwiftUI doesn't ship it, express it as a `Text` /
-   `VStack` / `HStack` / `Group` composition with modifiers.
-4. **One canonical Apple reference per change.** When implementing or
-   modifying a public API, cite the SwiftUI doc URL in the PR description
-   (or as a `@see` comment) so reviewers can verify the signature.
+`CLAUDE.md` only points here. If anything disagrees with this file or `docs/`,
+these files win; fix the other one.
 
 ---
 
-## 2. The architecture, in 60 seconds
+## 1. Principles (non-negotiable)
 
-```
+1. **Zero setup while developing.** Apps are plain HTML, CSS, and native ES
+   modules. No `npm install`, bundler, transpiler, or compile step to write,
+   run, test, or deploy. Don't add runtime dependencies, dev dependencies, or
+   vendored third-party code.
+2. **Optional optimized release build.** `node scripts/build.js --entry
+   <index.html>` makes a smaller release (tree-shaken and minified, with
+   bundling and hashing planned). It uses only Node built-ins, and its output
+   must behave exactly like the unbuilt source.
+3. **SwiftUI is the reference design.** Public names, parameter labels,
+   ownership, and update timing match Apple SwiftUI. A difference is allowed
+   only if it's listed in
+   [ARCHITECTURE.md § 5](docs/ARCHITECTURE.md#5-documented-exceptions-to-swiftui).
+   Don't invent components such as `H1`, `Card`, or `Container`; compose
+   `Text`, stacks, and modifiers instead.
+4. **Correctness before features.** Follow the phase order in the roadmap. Don't
+   add public API on top of a known core bug.
+5. **Evidence, not vibes.** Every change states which goal or invariant it
+   serves, cites the SwiftUI documentation for any API, and includes a test
+   that would fail without the change.
+
+---
+
+## 2. How to work
+
+1. **Pick an issue** from the current roadmap phase. If the work has no issue,
+   open one first that states the goal or invariant it serves.
+2. **Plan in the issue or PR description.** List the files you'll touch, the
+   invariants involved, and the smallest compatible slice.
+3. **For any public API, answer the review checklist** before writing code:
+   - Does SwiftUI already have this concept, and what's its exact name and
+     call shape?
+   - Who owns the state, and how does it flow (`Binding`, environment)?
+   - When does it update, appear, disappear, or cancel work?
+   - What are the accessibility and keyboard semantics?
+   - What can't the web reproduce, and does that difference stay internal or
+     need a documented exception?
+   - Does existing code keep working?
+4. **Write the failing test first** (see [TESTING.md](docs/TESTING.md)), then
+   implement.
+5. **Update the documents your change affects:** `src/index.d.ts`, the
+   exports, `docs/ARCHITECTURE.md` (an invariant's status or a new exception),
+   `docs/ROADMAP.md` (when an issue closes), and the README if user-visible
+   behavior changed.
+6. **Keep the PR small.** One issue per PR. Paste the checklist from § 7 into
+   the PR body.
+
+---
+
+## 3. The architecture, in 60 seconds
+
+```text
 Author code (Text, VStack, …)
    ▼  factory function
 Immutable view descriptor   { type, props, children, modifiers, key }
-   ▼  Renderer.js (registerRenderer per type)
+   ▼  Renderer.render → registerRenderer(type, fn)
 DOM element (acquireElement from ElementPool)
-   ▼  SignalRenderer.bindReactive
-Reactive bindings via createEffect (signals → textContent / styles)
-   ▼  withAnimation / .transition / .animation
-Animation.js ──►  Web Animations API / CSS transitions / View Transitions API
+   ▼  effects created under the current owner (Signal.js createEffect/createRoot)
+Fine-grained updates (signals → textContent / attributes / styles)
 ```
 
-Key files (read these before adding anything non-trivial):
+- **The body runs once.** Updates come from effects that read signals, through
+  thunks such as `Text(() => …)` and reactive modifiers. There's no virtual DOM.
+- **Descriptors are immutable.** Modifiers return new frozen descriptors.
+- **Every resource has an owner.** Effects, listeners, lifecycle callbacks, and
+  pooled elements are released when their owner is disposed.
+- The full invariants (I1–I10), their current status, and the source map are in
+  [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- [src/Core/ViewDescriptor.js](src/Core/ViewDescriptor.js) — descriptor shape + `addModifier`, `setKey`, `ModifierType`
-- [src/Core/Renderer.js](src/Core/Renderer.js) — per-type renderers (`registerRenderer('Text', …)`)
-- [src/Core/SignalRenderer.js](src/Core/SignalRenderer.js) — mount + reactive binding walk
-- [src/Core/ElementPool.js](src/Core/ElementPool.js) — DOM recycling
-- [src/Data/Signal.js](src/Data/Signal.js) — `createEffect`, `createRoot`, `untrack`
-- [src/Animation/Animation.js](src/Animation/Animation.js) — `Animation`, `withAnimation`, `animate`, `animateStyles`, `AnyTransition`, `Namespace`
-- [src/Graphic/Shader.js](src/Graphic/Shader.js) — `Shader`, `ShaderLibrary`, `ShaderKind` for `.colorEffect` / `.distortionEffect` / `.layerEffect`
-- [src/index.js](src/index.js) — public exports (default + named, both required)
-- [src/index.d.ts](src/index.d.ts) — TypeScript / VSCode intellisense definitions; **update this whenever you add or change a public API**
+**Transitional state (read before editing):**
 
-**Mental model:** descriptors are immutable. Modifiers return *new* frozen
-descriptors. The body runs **once** at mount; updates happen via signal
-effects that mutate specific DOM properties — there is no VDOM diff.
-Animations run through `Animation.js`, which exposes SwiftUI-shaped APIs and
-keeps native browser animation details invisible to the user's code.
+- The core still has two view systems: descriptors, and legacy `View`
+  subclasses such as `Toggle`, `TextField`, `List`, and `NavigationStack`.
+  Write all new views as descriptors. The migration is tracked in #48.
+- `SignalRenderer.bindReactive` (a DOM walk at mount) is being removed (#44).
+  Don't add new reactive wiring there. Create effects inside the renderer, at
+  the point where the element is built.
+- `src/Core/Chainable.js`, `src/Core/ViewFactory.js`, and `src/Core/index.js`
+  are dead code. Don't edit or import them.
 
 ---
 
-## 3. The patterns to copy
+## 4. Patterns to copy
 
-### 3.1 Adding a new modifier to an existing view
+### 4.1 Adding a modifier
 
-If the modifier is generic (works on any View), add it to the shared
-chainable in [src/Core/ViewFactory.js](src/Core/ViewFactory.js) and add a
-matching `ModifierType` + handler in
-[src/Core/ViewDescriptor.js](src/Core/ViewDescriptor.js) and Renderer's
-`applyModifiers`.
-
-If the modifier is view-specific (changes the descriptor's own props, like
-`Text.bold()` or `Image.resizable()`), add it to that view's local
-`chainable()` and have the renderer read the new prop. See
-[src/View/Text.js](src/View/Text.js) for the canonical pattern.
+- **Generic modifiers** (any view): add a `ModifierType` and its handler in
+  `src/Core/ViewDescriptor.js` and `Renderer.applyModifiers`. Until #48
+  introduces one shared modifier table, also add the chain method to every
+  descriptor view's `chainable()`: `Text`, `Button`, `VStack`, `HStack`,
+  `ZStack`, `Spacer`, `Divider`, and `ForEach`. Add a test that the modifier
+  works on at least one view from each family.
+- **View-specific modifiers** (change the view's own props, such as
+  `Text.bold()`): add them to that view's `chainable()` and have its renderer
+  read the new prop. [src/View/Text.js](src/View/Text.js) is the canonical
+  example:
 
 ```js
-// src/View/Text.js — view-specific modifier (new immutable descriptor)
+// src/View/Text.js — view-specific modifier returning a new immutable descriptor
 chain.accessibilityHeading = (level) => {
   const tag = HEADING_TAGS.has(level) ? level : null;
   const newProps = { ...descriptor.props, headingLevel: tag };
@@ -91,206 +124,123 @@ chain.accessibilityHeading = (level) => {
 };
 ```
 
-### 3.2 Adding a new SwiftUI view
+### 4.2 Adding a SwiftUI view
 
-1. Create `src/View/<Category>/<Name>.js` exporting a factory function that
-   returns a frozen chainable descriptor.
-2. Register a renderer in [src/Core/Renderer.js](src/Core/Renderer.js):
-   `registerRenderer('Name', (props, children) => { … return element; });`
-3. Use `acquireElement(tagName)` — never `document.createElement` directly.
-   This keeps pooling working.
-4. Wire reactive props through `props.xxxThunk` patterns + `createEffect`
-   in `SignalRenderer.bindReactive` (only if the prop needs to update after
-   mount).
-5. Export from [src/index.js](src/index.js) in **both** the default
-   `SwiftUI` namespace object AND the named `export { … }` list.
-6. Add tests at `Tests/View/<Name>Tests.js` and load them from
+1. Create `src/View/<Category>/<Name>.js` exporting a factory that returns a
+   frozen descriptor. Don't create new `View` subclasses.
+2. Register a renderer in [src/Core/Renderer.js](src/Core/Renderer.js) with
+   `registerRenderer('Name', (props, children) => …)`.
+3. Create elements with `acquireElement(tagName)`, not `document.createElement`.
+4. Bind reactive props inside the renderer with `createEffect`, under the
+   current owner, and clean up through the owner.
+5. Export the view from `src/index.js`, in both the default namespace and the
+   named exports, and add it to `src/index.d.ts`.
+6. Add behavior tests in `Tests/View/<Name>Tests.js` and import them in
    [Tests/TestRunner.html](Tests/TestRunner.html).
 
-### 3.3 The chainable freeze pattern (don't break it)
+### 4.3 Chainable freeze
 
-Every chainable wrapper ends with `return Object.freeze(chain);`. This is
-load-bearing — it prevents mutation and lets the runtime trust descriptors.
-If you find yourself wanting to mutate a descriptor, you want a *new* one
-via `createDescriptor(...)` / `addModifier(...)`.
+Every chainable ends with `return Object.freeze(chain);`. Never mutate a
+descriptor. Create a new one with `createDescriptor` or `addModifier`.
 
-### 3.4 Animation — always route through SwiftUI-shaped APIs
+### 4.4 Animation goes through SwiftUI-shaped APIs
 
-Users author `withAnimation`, `.transition`, `.animation`, and
-`matchedGeometryEffect`. Imperative DOM-backed motion uses `Animation.animate()`
-or `animateStyles()`. **Never add a raw package animation engine or hand-code
-CSS transition/rAF loops in product examples.**
+Authors use `withAnimation`, `.transition`, `.animation`, and
+`matchedGeometryEffect`. Imperative motion uses `Animation.animate()` or
+`animateStyles()`, which wrap native browser primitives. Don't add animation
+packages, and don't write raw CSS-transition or `requestAnimationFrame` loops in
+product or example code.
 
 ```js
-// ✅ Correct — product/framework code stays on the public SwiftUI-style surface
-import { Animation, animateStyles, withAnimation } from '../Animation/Animation.js';
-
+// ✅
 withAnimation(Animation.easeInOut(0.28), () => {
-  animateStyles(cardEl, {
-    transform: 'translate(-50%, -50%) scale(1)',
-    opacity: '1'
-  });
+  animateStyles(cardEl, { transform: 'scale(1)', opacity: '1' });
 });
-```
-
-```js
-// ❌ Wrong — raw animation plumbing in product/sample code
+// ❌
 element.style.transition = 'transform 220ms ease';
-requestAnimationFrame(() => element.style.transform = 'scale(1)');
+requestAnimationFrame(() => (element.style.transform = 'scale(1)'));
 ```
 
-### 3.5 TypeScript / VSCode intellisense (`src/index.d.ts`)
+### 4.5 Types (`src/index.d.ts`)
 
-Every public symbol exported from `src/index.js` needs a matching definition
-in [`src/index.d.ts`](src/index.d.ts). The `.d.ts` file is the only thing
-that gives users autocomplete in VSCode without a build step.
+The `.d.ts` file is the only source of editor autocomplete without a build step.
 
-Rules:
-- Add the type when you add the export — don't defer it.
-- Mirror SwiftUI's exact parameter labels (avoid JS reserved words like `for`
-  — rename to e.g. `forType` with a `@see` comment pointing to the Apple doc).
-- Chainable modifiers return the same interface type, e.g.
-  `foregroundColor(color: Color): this`.
-- Enums (like `AccessibilityHeadingLevel`, `ShaderKind`) are typed as
-  `const` objects with a string/number union value type.
+- Update it in the same PR as the export.
+- Use SwiftUI's exact labels. When a label is a JavaScript reserved word, rename
+  it (for example `forType`) and add a `@see` link to Apple's documentation.
+- Chainable modifiers return `this`.
+- Enums are `const` objects.
+
+Until #47 adds an automatic check, verify the `.d.ts` by hand against the real
+signature.
 
 ---
 
-## 4. SEO & accessibility
+## 5. Accessibility, SEO, and shaders
 
-SwiftUI's accessibility modifiers do double duty on the web. Prefer them
-over inventing web-only escape hatches.
+| Need on the web | Use |
+|---|---|
+| `<h1>`–`<h6>` | `Text(…).accessibilityHeading(AccessibilityHeadingLevel.h1)` |
+| `alt` text | `Image(…).accessibilityLabel('…')` |
+| A label on a control | `.accessibilityLabel('…')` |
+| Effects | `.colorEffect` / `.distortionEffect` / `.layerEffect` with `ShaderLibrary.default` (SVG filters in [src/Graphic/Shader.js](src/Graphic/Shader.js)) |
 
-| Need on web              | SwiftUI modifier (use this)                  |
-| ------------------------ | -------------------------------------------- |
-| `<h1>`–`<h6>` for SEO    | `Text(...).accessibilityHeading(.h1)`        |
-| `alt=` on images         | `Image(...).accessibilityLabel('…')`         |
-| `aria-label` on controls | `Button(...).accessibilityLabel('…')` *(when added)* |
-| Landmark role / heading  | `.accessibilityAddTraits(.isHeader)` *(when added)*  |
-| Shader-style effects     | `.colorEffect(ShaderLibrary.default.<fn>())` / `.distortionEffect()` / `.layerEffect()` — see "Shader effects" below |
-
-`AccessibilityHeadingLevel` exposes `.h1` … `.h6` and `.unspecified`. The
-renderer swaps `<span>` → `<h1..h6>` and resets user-agent heading styling
-so visuals stay driven by `.font()` / `.fontWeight()` modifiers — same
-visual output as a plain `Text`, but real semantic markup.
-
-```js
-Text('Pricing').accessibilityHeading(AccessibilityHeadingLevel.h1)
-  .font(Font.largeTitle)
-  .foregroundColor(Color.primary)
-```
-
-If a future SEO/a11y need doesn't match an existing SwiftUI modifier:
-**find Apple's modifier first**, then mirror it. Don't ship a web-only API.
+- Controls must use native elements, or the WAI-ARIA pattern with keyboard
+  support (invariant I9, #51).
+- When a need has no SwiftUI modifier, find Apple's closest modifier first.
+  Don't ship a web-only API.
+- Don't add a `.cssFilter()` or arbitrary-GLSL escape hatch.
 
 ---
 
-## 4b. Shader effects (`.colorEffect`, `.distortionEffect`, `.layerEffect`)
+## 6. Performance rules
 
-Apple's Metal-shader modifiers (iOS 17+) are backed on the web by **SVG
-filter graphs** in [src/Graphic/Shader.js](src/Graphic/Shader.js), mounted
-into a single shared `<svg><defs>` in `document.head` by the renderer.
-Every modern browser GPU-accelerates these.
-
-Use the curated `ShaderLibrary.default` catalogue:
-
-```js
-Image('cat.jpg')
-  .colorEffect(ShaderLibrary.default.hueRotate(90))
-  .layerEffect(ShaderLibrary.default.blur(4));
-```
-
-To add a new preset shader: add a factory to `ShaderLibrary.default` in
-[src/Graphic/Shader.js](src/Graphic/Shader.js) that returns
-`new Shader(kind, name, args, (filterEl, args) => { appendPrimitive(...) })`.
-The `kind` (`color` | `distortion` | `layer`) gates which modifier accepts
-it, and the `(name, args)` pair gives the resulting `<filter>` a stable id
-so reused shaders share a single DOM definition.
-
-**Do not** add an `.h1Effect()` / `.cssFilter()` / arbitrary-GLSL escape
-hatch as a new public API yet — the SwiftUI surface is `colorEffect` /
-`distortionEffect` / `layerEffect` and the only thing that changes between
-them is what shader they accept. A WebGL2 / WGSL backend for user-supplied
-shader source code can slot in later behind the same `Shader` API.
-
-## 5. Performance rules that aren't optional
-
-- **Pool elements.** Use `acquireElement(tag)`; release via the runtime —
-  don't create raw DOM.
-- **No `innerHTML`.** Set `textContent` or build with `appendChild`.
-  `innerHTML` defeats pooling and opens XSS holes.
-- **No layout thrash.** Batch style writes inside the renderer; never read
-  layout (`offsetWidth`, `getBoundingClientRect`) and then write in the
-  same pass.
-- **Reactivity is opt-in.** Eager values are set once at mount. Reactive
-  props use the `xxxThunk` pattern + `createEffect` in `bindReactive`.
-- **Don't add MutationObservers.** A shared `LifecycleObserver` already
-  handles `onAppear` / `onDisappear`.
-- **`visibility` over `display` for animated elements.** Toggling
-  `display:none → block` triggers a full layout pass and causes dropped
-  frames. Use `visibility:hidden / pointer-events:none` to hide, and
-  `visibility:visible / pointer-events:auto` to show — the element stays
-  in the layout tree, so the compositor can animate it without a reflow.
-- **Compositor-friendly animation.** Prefer `transform` and `opacity` in
-  `Animation.animate()` / `animateStyles()` calls so the browser can avoid
-  layout and paint work. Target: click → first frame under 10 ms.
-
----
-
-## 6. Tests
-
-- Browser-based runner: [Tests/TestRunner.html](Tests/TestRunner.html).
-- For every new public method or renderer change, add a test in the matching
-  `Tests/<Category>/<Name>Tests.js` and import it from the runner.
-- Tests use `describe / it / expect` from [Tests/TestUtils.js](Tests/TestUtils.js).
-- Run `node run-tests.js` and `node scripts/build-tests.js` locally.
-- Playwright specs are optional external browser validation; they must not
-  become required for development, production builds, or CI.
+- Create elements with `acquireElement`. Pool release must clear handlers and
+  lifecycle callbacks (#46).
+- Don't assign untrusted strings with `innerHTML`; use `textContent` or
+  `appendChild`.
+- Don't read layout (`getBoundingClientRect`, `offsetWidth`) and then write
+  styles in the same pass.
+- Reactivity is opt-in: an eager value is set once, and a reactive value is a
+  thunk plus an effect.
+- Don't add MutationObservers; use the shared `LifecycleObserver`.
+- Animate `transform` and `opacity`. Hide animated elements with
+  `visibility: hidden` and `pointer-events: none`, not `display: none`.
+- Benchmarks must measure in-place updates, not full remounts. Report size from
+  `node scripts/size.js` after a release build.
 
 ---
 
 ## 7. PR checklist (paste into the PR body)
 
 ```
-- [ ] Zero new dependencies and no vendored runtime libraries
-- [ ] Public API name + parameter labels match SwiftUI exactly
-- [ ] SwiftUI doc URL referenced for any new API
-- [ ] No invented non-SwiftUI views/modifiers
-- [ ] Renderer uses acquireElement (not document.createElement)
-- [ ] Exported from src/index.js (default namespace + named)
-- [ ] src/index.d.ts updated for any new/changed public symbol
-- [ ] Tests added under Tests/<Category>/
-- [ ] Test runner loads the new test file
-- [ ] Animation code routes through `Animation`, `withAnimation`, or `animateStyles`
-- [ ] Animated show/hide uses visibility:hidden (not display:none)
+- [ ] Serves issue #___ (roadmap phase ___) / invariant I___
+- [ ] Zero new dependencies; still runs with no install or build
+- [ ] Public API name and labels match SwiftUI (doc URL: ___), or the change is listed in ARCHITECTURE.md § 5
+- [ ] Failing test written first; tests assert behavior on the live path
+- [ ] Browser runner and `node run-tests.js` pass; `node scripts/build-tests.js` passes
+- [ ] New views are descriptors with `acquireElement`; reactive props bound in the renderer under an owner
+- [ ] Exported from src/index.js (default + named) and typed in src/index.d.ts
+- [ ] Docs updated: ARCHITECTURE invariant status / ROADMAP / README as needed
 ```
 
 ---
 
-## 8. Things agents commonly get wrong here
+## 8. Common mistakes
 
-- ❌ Reaching for `<h1>` / `<h2>` as separate components. Use
-  `Text(...).accessibilityHeading(.h1)`.
-- ❌ Mutating a returned descriptor (it's `Object.freeze`d — silent fail in
-  non-strict, throw in strict).
-- ❌ Adding ad-hoc CSS classes. Styles flow through modifiers → renderer
-  inline styles. The only CSS in `src/styles/` is reset/base.
-- ❌ Inventing factory signatures. Check the SwiftUI doc and the existing
-  factory siblings before adding a new one.
-- ❌ Forgetting the named export in `src/index.js` (default-only breaks
-  tree-shaking imports).
-- ❌ Writing a new MutationObserver instead of using `LifecycleObserver`.
-- ❌ Adding animation dependencies or using raw CSS transition/rAF plumbing
-  in product/sample code. Route motion through `Animation`, `withAnimation`,
-  or `animateStyles`.
-- ❌ Toggling `display:none / display:block` on elements that animate.
-  This forces a layout pass and causes a dropped frame. Use
-  `visibility:hidden / pointer-events:none` instead.
-- ❌ Forgetting to update `src/index.d.ts` after adding a public API.
-  Without the `.d.ts` entry, VSCode shows no autocomplete for the new symbol.
-- ❌ Using a JavaScript reserved word (`for`, `in`, `class`, `default`) as a
-  TypeScript parameter label in `.d.ts`. Rename to e.g. `forType` and add a
-  `@see` comment pointing to the Apple doc.
+- ❌ Adding a `View` subclass, or editing `Chainable.js` or `ViewFactory.js`.
+- ❌ Wiring reactivity in `bindReactive`. It only runs at mount, so it breaks
+  inside `Show` and `For`.
+- ❌ Tests that assert `.type`, `Object.isFrozen`, or "returns this", or that
+  compare a literal CSS string the browser normalizes.
+- ❌ Adding `H1`, `Card`, or similar views, or ad-hoc CSS classes. Styles flow
+  through modifiers into the renderer, and `src/styles/` holds only reset and
+  base CSS.
+- ❌ Forgetting the named export, or the `.d.ts` entry.
+- ❌ Using `document.createElement` in a renderer, or adding a MutationObserver.
+- ❌ Adding animation dependencies, or raw transition/`requestAnimationFrame` code.
+- ❌ Toggling `display` on animated elements.
+- ❌ Making Playwright, jsdom, or any npm package a requirement.
 
-When in doubt: read the nearest already-shipped view in `src/View/` and
-mirror its shape exactly.
+When in doubt, copy the nearest descriptor-based view in `src/View/` and check
+the invariants in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
