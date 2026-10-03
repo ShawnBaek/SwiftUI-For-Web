@@ -554,11 +554,13 @@ Uses the View Transitions API for animations where available, with a graceful fa
 
 ## Contributing
 
-Issues and PRs welcome. Before opening a PR:
+Issues and PRs welcome. Read [AGENTS.md](AGENTS.md) first: it covers the principles, workflow, and PR checklist. Then read [docs/ROADMAP.md](docs/ROADMAP.md) for the current plan, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants, and [docs/TESTING.md](docs/TESTING.md) for test rules.
 
-1. `npm run test:visual` — all 8 baselines should match with `maxDiffPixels: 0`.
-2. If you touched any rendered output, regenerate baselines (`test:visual:update`) only when the change is intentional.
-3. If you touched the reactive engine, add a test in `run-tests.js` Signal section.
+Before opening a PR, run these with nothing to install:
+
+1. `node run-tests.js` and `node scripts/build-tests.js`.
+2. Serve the repo (`python3 -m http.server 8000`) and open `http://localhost:8000/Tests/TestRunner.html`.
+3. Optionally, the Playwright specs in `Tests/e2e` and `Tests/visual`. They are never required.
 
 ---
 
