@@ -248,9 +248,8 @@ function applyModifier(element, modifier) {
       element.setAttribute('data-accessibility-identifier', accessibilityText(value));
       break;
 
-    // Reactive modifiers are installed by SignalRenderer after the element is
-    // attached to the current signal owner. Keeping that work out of this
-    // synchronous style pass gives it deterministic cleanup on unmount.
+    // Reactive modifiers are not styles. bindReactive() installs them in
+    // render(), under the current owner, so they are disposed with it.
     case ModifierType.ON_CHANGE:
     case ModifierType.SEARCHABLE:
     case ModifierType.SHEET:

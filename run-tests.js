@@ -359,6 +359,8 @@ async function runTests() {
     const { render } = await import('./src/Core/Renderer.js');
     const { Show } = await import('./src/View/ControlFlow/Show.js');
     const { For } = await import('./src/View/ControlFlow/For.js');
+    const { TabView } = await import('./src/View/Navigation/TabView.js');
+    const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
 
     // Test State
     describe('State', () => {
@@ -541,20 +543,43 @@ async function runTests() {
         teardown();
       });
 
-      it('stops effects of the branch Show removed', () => {
+      it('stops thunk effects of the removed branch, in both directions and after unmount', () => {
         const on = new State(false);
         const n = new State(1);
+        let aRuns = 0;
+        let bRuns = 0;
         const { wrapper, teardown } = mountInRoot(() =>
-          VStack(Show(() => on.value, ModifierText(() => 'A' + n.value), ModifierText(() => 'B' + n.value)))
+          VStack(Show(
+            () => on.value,
+            ModifierText(() => { aRuns++; return 'A' + n.value; }),
+            ModifierText(() => { bRuns++; return 'B' + n.value; })
+          ))
         );
-        const removedNode = wrapper().children[0];
 
+        // else → then: the else branch's thunk must not run again.
         on.value = true;
         Scheduler.flushSync();
+        const bAfterSwitch = bRuns;
         n.value = 2;
         Scheduler.flushSync();
-        expect(removedNode.textContent).not.toBe('B2');
+        expect(bRuns).toBe(bAfterSwitch);
+
+        // then → else: the then branch's thunk must not run again.
+        on.value = false;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('B2');
+        const aAfterSwitch = aRuns;
+        n.value = 3;
+        Scheduler.flushSync();
+        expect(aRuns).toBe(aAfterSwitch);
+        expect(wrapper().children[0].textContent).toBe('B3');
+
+        // After unmount, no thunk runs at all.
         teardown();
+        const totalRuns = aRuns + bRuns;
+        n.value = 4;
+        Scheduler.flushSync();
+        expect(aRuns + bRuns).toBe(totalRuns);
       });
 
       it('installs reactive modifiers in a Show branch and disposes them with it', () => {
@@ -593,6 +618,61 @@ async function runTests() {
         const texts = wrapper().children.map((row) => row.textContent);
         expect(texts).toEqual(['a2', 'b2']);
         teardown();
+      });
+
+      it('disposes the previous tab\'s effects when TabView switches tabs and on unmount', () => {
+        const selection = new State(0);
+        const n = new State(0);
+        const actions = [];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(
+          selection,
+          VStack(ModifierText(() => 'T0:' + n.value).onChange(() => n.value, (_, value) => actions.push(value))),
+          VStack(ModifierText('tab1'))
+        )).mount(root);
+        const tabBar = root.children[0].children.find((child) => child.dataset.tabviewPart === 'tabbar');
+
+        for (const index of [1, 0, 1, 0]) tabBar.children[index].click();
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+
+        app.unmount();
+        root.remove();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+      });
+
+      it('keeps GeometryReader content reactive and disposes it on unmount', () => {
+        // Queue frames and run them after mount, like a browser does: the
+        // content is then rendered outside any current owner.
+        const previousRAF = globalThis.requestAnimationFrame;
+        const frames = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        try {
+          const n = new State(0);
+          let runs = 0;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => GeometryReader(() => ModifierText(() => { runs++; return 'g' + n.value; }))).mount(root);
+          frames.splice(0).forEach((callback) => callback());
+          const reader = root.children[0];
+
+          n.value = 1;
+          Scheduler.flushSync();
+          expect(reader.children[0].textContent).toBe('g1');
+
+          app.unmount();
+          root.remove();
+          const runsAtUnmount = runs;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(runs).toBe(runsAtUnmount);
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+        }
       });
     });
 

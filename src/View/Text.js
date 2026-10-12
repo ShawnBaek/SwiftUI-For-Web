@@ -164,8 +164,8 @@ function chainable(descriptor) {
  *   .foregroundColor(Color.blue)
  */
 export function Text(content) {
-  // Reactive content: a thunk is bound to the DOM via createEffect by the
-  // SignalRenderer. Eager content is set once at mount.
+  // Reactive content: Renderer.render binds the thunk to textContent with
+  // createEffect under the current owner. Eager content is set once.
   if (typeof content === 'function') {
     return chainable(createDescriptor('Text', { contentThunk: content }));
   }

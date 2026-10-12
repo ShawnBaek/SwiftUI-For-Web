@@ -23,6 +23,7 @@ import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 
 /**
  * Helper to check if something is a descriptor
@@ -146,6 +147,10 @@ export class TabViewView extends View {
    * @private
    */
   _renderTabBar() {
+    // Tab content is replaced later from click handlers, where there is no
+    // current owner. The slot keeps each tab's effects owned and disposes them
+    // on every switch and when the app unmounts.
+    const contentSlot = createOwnedSlot();
     const container = document.createElement('div');
     container.dataset.view = 'tabview';
     container.style.display = 'flex';
@@ -215,16 +220,18 @@ export class TabViewView extends View {
 
       tabButton.addEventListener('click', () => {
         this._setSelection(tag);
-        this._updateTabView(container, contentArea, tabBar, tag);
+        this._updateTabView(contentSlot, contentArea, tabBar, tag);
       });
 
       tabBar.appendChild(tabButton);
 
       // Show content for selected tab
       if (isSelected) {
-        const rendered = renderTab(tab);
-        rendered.style.height = '100%';
-        contentArea.appendChild(rendered);
+        const rendered = contentSlot.render(() => renderTab(tab));
+        if (rendered) {
+          rendered.style.height = '100%';
+          contentArea.appendChild(rendered);
+        }
       }
     });
 
@@ -238,14 +245,21 @@ export class TabViewView extends View {
    * Update tab view when selection changes
    * @private
    */
-  _updateTabView(container, contentArea, tabBar, newSelection) {
-    // Update content
+  _updateTabView(contentSlot, contentArea, tabBar, newSelection) {
+    if (contentSlot.isDisposed()) return;
+
+    // Update content. Rendering through the slot disposes the previous tab's
+    // effects before the new tab is built.
     contentArea.innerHTML = '';
     const selectedTab = this._tabs.find((tab, index) => getTag(tab, index) === newSelection);
     if (selectedTab) {
-      const rendered = renderTab(selectedTab);
-      rendered.style.height = '100%';
-      contentArea.appendChild(rendered);
+      const rendered = contentSlot.render(() => renderTab(selectedTab));
+      if (rendered) {
+        rendered.style.height = '100%';
+        contentArea.appendChild(rendered);
+      }
+    } else {
+      contentSlot.render(() => null);
     }
 
     // Update tab bar colors

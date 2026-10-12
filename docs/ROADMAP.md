@@ -48,7 +48,7 @@ whenever a phase completes or a goal changes.
 
 | Area | Problem | Issue |
 |---|---|---|
-| Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed. | #44 (closed) |
+| Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed by the #44 PR. | #44 |
 | Robustness | A throwing effect drops the rest of the scheduler batch. Pooled elements keep stale handlers and lifecycle callbacks. | #45, #46 |
 | Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
