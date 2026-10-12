@@ -48,7 +48,7 @@ whenever a phase completes or a goal changes.
 
 | Area | Problem | Issue |
 |---|---|---|
-| Reactivity | Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes. | #44 |
+| Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed. | #44 (closed) |
 | Robustness | A throwing effect drops the rest of the scheduler batch. Pooled elements keep stale handlers and lifecycle callbacks. | #45, #46 |
 | Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
@@ -67,7 +67,7 @@ merged.
 
 Small, high-leverage fixes, each with a failing test written first.
 
-- #44 Bind reactive thunks and modifiers during render, under the current owner.
+- [x] #44 Bind reactive thunks and modifiers during render, under the current owner.
 - #45 Isolate effects in the scheduler.
 - #46 Release delegated handlers and lifecycle callbacks when pooled elements are reused.
 - #47 Fix the entries and exports, and add a `.d.ts`-versus-runtime check.
@@ -101,8 +101,8 @@ in the reactive core, and every package entry loads.
 | Measure | Today | Target |
 |---|---|---|
 | Tests running in CI | 96 | Every test in `Tests/**` plus the node suites |
-| Known core correctness bugs | 4 (#44–#47) | 0 |
-| Invariants with a test | 0 / 10 | 10 / 10 |
+| Known core correctness bugs | 3 (#45–#47) | 0 |
+| Invariants with a test | 1 / 10 (I2) | 10 / 10 |
 | `.d.ts` agrees with the runtime | No | Checked in CI |
 | Release build size budget | Reported only | Enforced in CI |
 | Accessibility of controls | Partial | Every control passes keyboard and role checks |

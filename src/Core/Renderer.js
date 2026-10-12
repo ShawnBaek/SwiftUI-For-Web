@@ -22,6 +22,7 @@ import { acquireElement, releaseTree } from './ElementPool.js';
 import { onAppear, onDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, onCleanup, untrack } from '../Data/Signal.js';
+import { installReactiveModifier } from './SignalRenderer.js';
 
 /**
  * Registry of view type renderers
@@ -84,6 +85,8 @@ export function render(descriptor) {
     applyModifiers(element, descriptor.modifiers);
   }
 
+  bindReactive(element, descriptor);
+
   // Tag with descriptor type for e2e selectors and devtools inspection.
   // Per-type renderers may override (e.g. TextField sets 'TextField' on
   // the inner <input>) — we don't clobber a more specific value.
@@ -95,6 +98,29 @@ export function render(descriptor) {
   element._descriptor = descriptor;
 
   return element;
+}
+
+/**
+ * Create the reactive bindings a descriptor declares, at the moment its
+ * element is built. The effects belong to the current owner (the mount root,
+ * a Show branch, or a For row), so they are disposed together with that
+ * owner. Binding later by walking the mounted DOM would miss content that
+ * Show and For render after mount (invariant I2, #44).
+ *
+ * @param {HTMLElement} element - Element rendered for the descriptor
+ * @param {Object} descriptor - View descriptor
+ */
+function bindReactive(element, descriptor) {
+  const thunk = descriptor.props && descriptor.props.contentThunk;
+  if (descriptor.type === 'Text' && typeof thunk === 'function') {
+    createEffect(() => {
+      element.textContent = String(thunk() ?? '');
+    });
+  }
+
+  for (let i = 0; i < descriptor.modifiers.length; i++) {
+    installReactiveModifier(element, descriptor.modifiers[i]);
+  }
 }
 
 /**

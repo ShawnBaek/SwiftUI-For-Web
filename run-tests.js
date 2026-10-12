@@ -357,6 +357,8 @@ async function runTests() {
     const { VStack } = await import('./src/Layout/Stack/VStack.js');
     const { Button } = await import('./src/View/Control/Button.js');
     const { render } = await import('./src/Core/Renderer.js');
+    const { Show } = await import('./src/View/ControlFlow/Show.js');
+    const { For } = await import('./src/View/ControlFlow/For.js');
 
     // Test State
     describe('State', () => {
@@ -502,6 +504,95 @@ async function runTests() {
         expect(dismissCount).toBe(1);
         app.unmount();
         root.remove();
+      });
+    });
+
+    // Invariant I2 (#44): reactive bindings are created when their element is
+    // rendered, under the current owner. Content that Show/For render after
+    // mount must be as reactive as content rendered at mount.
+    describe('Reactive bindings inside Show and For (#44)', () => {
+      const mountInRoot = (viewFactory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(viewFactory).mount(root);
+        return {
+          root,
+          // App root → VStack → control-flow wrapper
+          wrapper: () => root.children[0].children[0],
+          teardown: () => { app.unmount(); root.remove(); },
+        };
+      };
+
+      it('binds a Text thunk in the branch Show switches to after mount', () => {
+        const on = new State(false);
+        const n = new State(1);
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(Show(() => on.value, ModifierText(() => 'A' + n.value), ModifierText(() => 'B' + n.value)))
+        );
+        expect(wrapper().children[0].textContent).toBe('B1');
+
+        on.value = true;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('A1');
+
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('A2');
+        teardown();
+      });
+
+      it('stops effects of the branch Show removed', () => {
+        const on = new State(false);
+        const n = new State(1);
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(Show(() => on.value, ModifierText(() => 'A' + n.value), ModifierText(() => 'B' + n.value)))
+        );
+        const removedNode = wrapper().children[0];
+
+        on.value = true;
+        Scheduler.flushSync();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(removedNode.textContent).not.toBe('B2');
+        teardown();
+      });
+
+      it('installs reactive modifiers in a Show branch and disposes them with it', () => {
+        const on = new State(false);
+        const n = new State(0);
+        const seen = [];
+        const { teardown } = mountInRoot(() =>
+          VStack(Show(() => on.value, ModifierText('watcher').onChange(() => n.value, (_, value) => seen.push(value))))
+        );
+
+        on.value = true;
+        Scheduler.flushSync();
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(seen).toEqual([1]);
+
+        on.value = false;
+        Scheduler.flushSync();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(seen).toEqual([1]);
+        teardown();
+      });
+
+      it('binds Text thunks in For rows added after mount', () => {
+        const items = new State([{ id: 'a' }]);
+        const suffix = new State('1');
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(For(() => items.value, (item) => ModifierText(() => item.id + suffix.value), (item) => item.id))
+        );
+
+        items.value = [{ id: 'a' }, { id: 'b' }];
+        Scheduler.flushSync();
+        suffix.value = '2';
+        Scheduler.flushSync();
+        const texts = wrapper().children.map((row) => row.textContent);
+        expect(texts).toEqual(['a2', 'b2']);
+        teardown();
       });
     });
 

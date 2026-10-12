@@ -50,7 +50,7 @@ one, the gap is linked to the issue that fixes it.
 | # | Invariant | Status |
 |---|---|---|
 | I1 | Views are immutable descriptors. Modifiers return new descriptors, and there is one view model with one shared modifier table. | Partial. About 30 legacy `View` subclasses remain, and generic modifiers are copied into 8 per-view `chainable()`s (#48). |
-| I2 | Reactive bindings are created when their element is rendered, under the current owner. Nothing is bound later by walking the DOM. | Violated. `bindReactive()` runs only at mount, so `Show`/`For` content isn't bound (#44). |
+| I2 | Reactive bindings are created when their element is rendered, under the current owner. Nothing is bound later by walking the DOM. | Holds. `Renderer.render` binds Text thunks and reactive modifiers as each element is built (#44). Tests: "Reactive bindings inside Show and For" in `run-tests.js`. |
 | I3 | Every effect, listener, lifecycle callback, and pooled element belongs to an owner and is released when that owner is disposed. | Violated. Pool reuse keeps delegated handlers and lifecycle callbacks (#46). |
 | I4 | The scheduler isolates each effect. An error is reported with context, and other work still runs. | Violated. A throwing effect drops the rest of the batch (#45). |
 | I5 | Environment values flow down the owner tree, and there is no global mutable app state. | Violated. `.environment()` does nothing, and `environmentObject` is global (#49). |
@@ -66,7 +66,7 @@ one, the gap is linked to the issue that fixes it.
 |---|---|---|
 | Descriptors | `src/Core/ViewDescriptor.js`, `src/View/Text.js`, `src/View/Control/Button.js`, `src/Layout/Stack/*`, `src/Layout/Spacer.js`, `src/Layout/Divider.js`, `src/View/List/ForEach.js` | The live model. |
 | Legacy views | `src/Core/View.js` and subclasses (`Toggle`, `TextField`, `Image`, `List`, `Picker`, `NavigationStack`, `TabView`, `WindowGroup`, …) | Mutable, `_render()`. Migrating them to descriptors is tracked in #48. |
-| Rendering | `src/Core/Renderer.js`, `src/Core/SignalRenderer.js` | `SignalRenderer.mount` is the entry point. `bindReactive` is slated for removal (#44). |
+| Rendering | `src/Core/Renderer.js`, `src/Core/SignalRenderer.js` | `SignalRenderer.mount` is the entry point. `Renderer.render` creates reactive bindings during render. |
 | Reactivity | `src/Data/Signal.js`, `State.js`, `Binding.js`, `ObservableObject.js`, `StateObject.js`, `src/Core/Scheduler.js` | `State` and `ObservableObject` still keep a legacy `subscribe` channel next to the signals. |
 | Platform | `src/Core/EventDelegate.js`, `ElementPool.js`, `LifecycleObserver.js`, `src/Data/Environment.js` | Root-level event delegation; one shared MutationObserver. |
 | Dead code | `src/Core/Chainable.js`, `src/Core/ViewFactory.js`, `src/Core/index.js`, descriptor hashing and `memo` in `ViewDescriptor.js` | Nothing imports these. Delete them in #48. |
