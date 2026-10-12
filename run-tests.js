@@ -254,6 +254,20 @@ function it(name, fn) {
   }
 }
 
+// Async variant for behavior that only happens after a microtask or timer.
+// Call it with `await` directly inside runTests (not inside describe).
+async function itAsync(name, fn) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (error) {
+    failed++;
+    console.log(`  ✗ ${name}`);
+    console.log(`    Error: ${error.message}`);
+  }
+}
+
 function expect(actual) {
   return {
     toBe(expected) {
@@ -772,6 +786,32 @@ async function runTests() {
         }
       };
 
+      // Stub requestAnimationFrame / requestIdleCallback with manual queues.
+      // `finally` always drains them so a failing test cannot leave the
+      // scheduler's rAF/idle flags stuck for the tests that follow.
+      const withLaneStubs = (fn) => {
+        const previousRAF = globalThis.requestAnimationFrame;
+        const previousIdle = globalThis.requestIdleCallback;
+        const frames = [];
+        const idles = [];
+        const plenty = { timeRemaining: () => 50, didTimeout: false };
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        globalThis.requestIdleCallback = (callback) => { idles.push(callback); return idles.length; };
+        const previousError = console.error;
+        try {
+          fn({ frames, idles, plenty });
+        } finally {
+          console.error = () => {};
+          for (let i = 0; i < 100 && (frames.length > 0 || idles.length > 0); i++) {
+            try { if (frames.length > 0) frames.shift()(); } catch (_) { /* draining only */ }
+            try { if (idles.length > 0) idles.shift()(plenty); } catch (_) { /* draining only */ }
+          }
+          console.error = previousError;
+          globalThis.requestAnimationFrame = previousRAF;
+          globalThis.requestIdleCallback = previousIdle;
+        }
+      };
+
       it('runs the rest of a flush when one callback throws', () => {
         withConsoleErrorSpy((errors) => {
           let ran = false;
@@ -783,14 +823,95 @@ async function runTests() {
         });
       });
 
-      it('keeps later flushes working after a callback throws', () => {
+      it('is not left mid-flush after a callback throws', () => {
         withConsoleErrorSpy(() => {
           Scheduler.scheduleWork(() => { throw new Error('first'); });
           Scheduler.flushSync();
+          expect(Scheduler.isFlushing()).toBe(false);
           let ran = false;
           Scheduler.scheduleWork(() => { ran = true; });
           Scheduler.flushSync();
           expect(ran).toBe(true);
+        });
+      });
+
+      it('isolates errors in Sync lane work, inside and outside a batch', () => {
+        withConsoleErrorSpy((errors) => {
+          const ran = [];
+          Scheduler.batch(() => {
+            Scheduler.scheduleWork(() => { throw new Error('sync in batch'); }, Scheduler.SyncLane);
+            Scheduler.scheduleWork(() => ran.push('batched'), Scheduler.SyncLane);
+          });
+          Scheduler.scheduleWork(() => { throw new Error('sync immediate'); }, Scheduler.SyncLane);
+          Scheduler.scheduleWork(() => ran.push('immediate'), Scheduler.SyncLane);
+          expect(ran).toEqual(['batched', 'immediate']);
+          expect(errors).toHaveLength(2);
+          expect(String(errors[0][0])).toContain('sync');
+        });
+      });
+
+      it('isolates errors in Idle lane work', () => {
+        withLaneStubs(({ frames, idles, plenty }) => {
+          withConsoleErrorSpy((errors) => {
+            const ran = [];
+            Scheduler.scheduleWork(() => { throw new Error('idle failed'); }, Scheduler.IdleLane);
+            Scheduler.scheduleWork(() => ran.push('after'), Scheduler.IdleLane);
+            for (let i = 0; i < 5 && idles.length > 0; i++) idles.shift()(plenty);
+            expect(ran).toEqual(['after']);
+            expect(errors).toHaveLength(1);
+          });
+        });
+      });
+
+      it('isolates errors in queued DOM writes', () => {
+        withLaneStubs(({ frames, idles, plenty }) => {
+          withConsoleErrorSpy((errors) => {
+            let ran = false;
+            Scheduler.enqueueDOMWrite(() => { throw new Error('write failed'); });
+            Scheduler.enqueueDOMWrite(() => { ran = true; });
+            for (let i = 0; i < 5 && frames.length > 0; i++) frames.shift()();
+            expect(ran).toBe(true);
+            expect(errors).toHaveLength(1);
+          });
+        });
+      });
+
+      it('does not starve re-queued Transition work behind work rescheduled every frame', () => {
+        withLaneStubs(({ frames, idles, plenty }) => {
+          const ran = [];
+          let slowRuns = 0;
+          const slow = () => {
+            const start = performance.now();
+            while (performance.now() - start < 10) { /* exceed the 8 ms budget */ }
+            ran.push('slow');
+            if (++slowRuns < 5) Scheduler.scheduleWork(slow, Scheduler.TransitionLane);
+          };
+          Scheduler.scheduleWork(slow, Scheduler.TransitionLane);
+          Scheduler.scheduleWork(() => ran.push('cheap'), Scheduler.TransitionLane);
+
+          // Two frames are enough for the cheap callback when the queue is FIFO.
+          for (let i = 0; i < 2 && frames.length > 0; i++) frames.shift()();
+          expect(ran.includes('cheap')).toBe(true);
+          while (frames.length > 0) frames.shift()();
+        });
+      });
+
+      it('moves re-queued work back to its lane if it was rescheduled at lower priority', () => {
+        withLaneStubs(({ frames, idles, plenty }) => {
+          const ran = [];
+          const later = () => ran.push('later');
+          Scheduler.scheduleWork(() => {
+            Scheduler.scheduleWork(later, Scheduler.IdleLane);
+            const start = performance.now();
+            while (performance.now() - start < 10) { /* exceed the 8 ms budget */ }
+          }, Scheduler.TransitionLane);
+          Scheduler.scheduleWork(later, Scheduler.TransitionLane);
+
+          // Run animation frames only: `later` must not wait for an idle period.
+          for (let i = 0; i < 3 && frames.length > 0; i++) frames.shift()();
+          expect(ran).toEqual(['later']);
+          while (idles.length > 0) idles.shift()(plenty);
+          expect(ran).toEqual(['later']);
         });
       });
 
@@ -822,10 +943,7 @@ async function runTests() {
       });
 
       it('re-queues Transition lane work that exceeds the frame budget', () => {
-        const previousRAF = globalThis.requestAnimationFrame;
-        const frames = [];
-        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
-        try {
+        withLaneStubs(({ frames, idles, plenty }) => {
           const ran = [];
           Scheduler.scheduleWork(() => {
             const start = performance.now();
@@ -836,16 +954,11 @@ async function runTests() {
 
           for (let i = 0; i < 5 && frames.length > 0; i++) frames.shift()();
           expect(ran).toEqual(['slow', 'next']);
-        } finally {
-          globalThis.requestAnimationFrame = previousRAF;
-        }
+        });
       });
 
       it('re-queues Idle lane work that exceeds the idle deadline', () => {
-        const previousIdle = globalThis.requestIdleCallback;
-        const idles = [];
-        globalThis.requestIdleCallback = (callback) => { idles.push(callback); return idles.length; };
-        try {
+        withLaneStubs(({ frames, idles, plenty }) => {
           const ran = [];
           Scheduler.scheduleWork(() => ran.push('first'), Scheduler.IdleLane);
           Scheduler.scheduleWork(() => ran.push('second'), Scheduler.IdleLane);
@@ -853,16 +966,11 @@ async function runTests() {
           const exhausted = { timeRemaining: () => 0, didTimeout: false };
           for (let i = 0; i < 5 && idles.length > 0; i++) idles.shift()(exhausted);
           expect(ran).toEqual(['first', 'second']);
-        } finally {
-          globalThis.requestIdleCallback = previousIdle;
-        }
+        });
       });
 
       it('isolates errors in Transition lane work', () => {
-        const previousRAF = globalThis.requestAnimationFrame;
-        const frames = [];
-        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
-        try {
+        withLaneStubs(({ frames, idles, plenty }) => {
           withConsoleErrorSpy((errors) => {
             let ran = false;
             Scheduler.scheduleWork(() => { throw new Error('transition failed'); }, Scheduler.TransitionLane);
@@ -871,10 +979,30 @@ async function runTests() {
             expect(ran).toBe(true);
             expect(errors).toHaveLength(1);
           });
-        } finally {
-          globalThis.requestAnimationFrame = previousRAF;
-        }
+        });
       });
+    });
+
+    console.log('\n📦 Scheduler microtask flush (#45)');
+    await itAsync('isolates errors in Discrete lane work flushed by the microtask', async () => {
+      const uncaught = [];
+      const onUncaught = (error) => uncaught.push(error);
+      process.on('uncaughtException', onUncaught);
+      const previousError = console.error;
+      const errors = [];
+      console.error = (...args) => errors.push(args);
+      try {
+        const ran = [];
+        Scheduler.scheduleWork(() => { throw new Error('discrete failed'); }, Scheduler.DiscreteLane);
+        Scheduler.scheduleWork(() => ran.push('after'), Scheduler.DiscreteLane);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(uncaught).toHaveLength(0);
+        expect(ran).toEqual(['after']);
+        expect(errors).toHaveLength(1);
+      } finally {
+        console.error = previousError;
+        process.off('uncaughtException', onUncaught);
+      }
     });
 
     describe('Signal', () => {

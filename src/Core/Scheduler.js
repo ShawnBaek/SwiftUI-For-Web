@@ -34,6 +34,9 @@ export const TransitionLane = 3;
 /** Idle lane - background work (requestIdleCallback) */
 export const IdleLane = 4;
 
+/** Lane names used in error reports */
+const LANE_NAMES = ['sync', 'discrete', 'default', 'transition', 'idle'];
+
 // ---------------------------------------------------------------------------
 // Scheduler State
 // ---------------------------------------------------------------------------
@@ -180,18 +183,25 @@ export function batch(fn) {
  * stop the callbacks queued after it (invariant I4, #45).
  *
  * @param {Function} callback
+ * @param {string} source - Lane or queue name, included in the error report
  */
-function runCallback(callback) {
+function runCallback(callback, source) {
   try {
     callback();
   } catch (error) {
-    console.error('[SwiftUI-For-Web] A scheduled update threw; other updates continue.', error);
+    console.error(
+      `[SwiftUI-For-Web] A scheduled update (${source}) threw; other updates continue.`,
+      error
+    );
   }
 }
 
 /**
- * Put callbacks that a lane could not run within its time budget back on
- * that lane, unless they were already re-scheduled while the lane was running.
+ * Put callbacks that a lane could not run within its time budget back at
+ * the front of that lane, ahead of work scheduled while the lane was running,
+ * so repeatedly rescheduled work cannot starve them. A callback that was
+ * re-scheduled at a higher priority meanwhile stays there; one that was
+ * re-scheduled at a lower priority moves back to this lane.
  *
  * @param {Function[]} callbacks
  * @param {number} from - Index of the first callback that did not run
@@ -199,11 +209,22 @@ function runCallback(callback) {
  */
 function requeue(callbacks, from, lane) {
   const work = _pendingWork.get(lane);
+  const scheduledDuringRun = Array.from(work);
+  work.clear();
+
   for (let i = from; i < callbacks.length; i++) {
     const callback = callbacks[i];
-    if (_callbackLanes.has(callback)) continue;
+    const existingLane = _callbackLanes.get(callback);
+    if (existingLane !== undefined && existingLane < lane) continue;
+    if (existingLane !== undefined && existingLane > lane) {
+      _pendingWork.get(existingLane).delete(callback);
+    }
     work.add(callback);
     _callbackLanes.set(callback, lane);
+  }
+
+  for (const callback of scheduledDuringRun) {
+    work.add(callback);
   }
 }
 
@@ -250,7 +271,7 @@ export function flushSync() {
         }
 
         for (const callback of callbacks) {
-          runCallback(callback);
+          runCallback(callback, LANE_NAMES[lane]);
         }
       }
       if (!didWork) break;
@@ -268,7 +289,7 @@ export function flushSync() {
       const postCallbacks = Array.from(_postFlushCallbacks);
       _postFlushCallbacks.clear();
       for (const cb of postCallbacks) {
-        runCallback(cb);
+        runCallback(cb, 'post-flush');
       }
     }
   } finally {
@@ -338,7 +359,7 @@ function flushTransitionWork() {
   }
 
   for (let i = 0; i < callbacks.length; i++) {
-    runCallback(callbacks[i]);
+    runCallback(callbacks[i], LANE_NAMES[TransitionLane]);
     // Yield if we've exceeded the frame budget; the rest runs next frame.
     if (performance.now() - start > FRAME_BUDGET_MS && i < callbacks.length - 1) {
       requeue(callbacks, i + 1, TransitionLane);
@@ -368,7 +389,7 @@ function flushIdleWork(deadline) {
   const start = performance.now();
 
   for (let i = 0; i < callbacks.length; i++) {
-    runCallback(callbacks[i]);
+    runCallback(callbacks[i], LANE_NAMES[IdleLane]);
     const outOfTime = hasDeadline
       ? deadline.timeRemaining() <= 0
       : performance.now() - start > IDLE_FALLBACK_BUDGET_MS;
@@ -413,7 +434,7 @@ function flushDOMWrites() {
   _domWriteScheduled = false;
   const writes = _domWriteQueue.splice(0);
   for (const write of writes) {
-    runCallback(write);
+    runCallback(write, 'DOM write');
   }
 }
 
