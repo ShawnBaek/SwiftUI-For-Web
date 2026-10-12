@@ -702,6 +702,40 @@ async function runTests() {
         expect(actions).toEqual([1]);
       });
 
+      it('does not leak when a slot-based container is itself rendered outside an owner', () => {
+        const n = new State(0);
+        const actions = [];
+        const reactive = (tag) => VStack(
+          ModifierText(() => tag + n.value).onChange(() => n.value, (_, value) => actions.push(tag + value))
+        );
+        const previousWarn = console.warn;
+        console.warn = () => {};
+        try {
+          // Rendered from a callback with no owner (as NavigationSplitView does
+          // for its detail): content stays static, no effects are created.
+          TabView(new State(0), reactive('B'), VStack(ModifierText('y')))._render();
+          n.value = 1;
+          Scheduler.flushSync();
+          expect(actions).toEqual([]);
+
+          // View.rerender() of a mounted NavigationStack (as NavigationPath
+          // does): nothing keeps firing after the app unmounts.
+          let stack;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => (stack = NavigationStack(new GroupView(reactive('C'))))).mount(root);
+          stack.rerender();
+          app.unmount();
+          root.remove();
+          actions.length = 0;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(actions).toEqual([]);
+        } finally {
+          console.warn = previousWarn;
+        }
+      });
+
       it('leaves reactive content static, instead of leaking effects, when rendered outside an owner', () => {
         const n = new State(1);
         let runs = 0;

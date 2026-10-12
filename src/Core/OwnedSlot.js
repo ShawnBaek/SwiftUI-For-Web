@@ -46,6 +46,11 @@ export function createOwnedSlot() {
     render(build) {
       if (disposed) return null;
       disposeCurrent();
+      // Created outside any owner (e.g. View.rerender() or a container
+      // rendered from a callback): nothing would ever dispose a root made
+      // here, so build without one and let Renderer's unowned-render safety
+      // net keep the content static instead of leaking effects.
+      if (!owner) return build();
       // createRoot always makes an unparented root; disposal is wired through
       // the onCleanup registered on the captured owner above.
       return createRoot((d) => {
