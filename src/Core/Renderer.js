@@ -21,7 +21,8 @@ import {
 import { acquireElement, releaseTree } from './ElementPool.js';
 import { onAppear, onDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
-import { createRoot, createEffect, onCleanup, untrack } from '../Data/Signal.js';
+import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
+import { installReactiveModifier } from './SignalRenderer.js';
 
 /**
  * Registry of view type renderers
@@ -84,6 +85,8 @@ export function render(descriptor) {
     applyModifiers(element, descriptor.modifiers);
   }
 
+  bindReactive(element, descriptor);
+
   // Tag with descriptor type for e2e selectors and devtools inspection.
   // Per-type renderers may override (e.g. TextField sets 'TextField' on
   // the inner <input>) — we don't clobber a more specific value.
@@ -95,6 +98,62 @@ export function render(descriptor) {
   element._descriptor = descriptor;
 
   return element;
+}
+
+/**
+ * Create the reactive bindings a descriptor declares, at the moment its
+ * element is built. The effects belong to the current owner (the mount root,
+ * a Show branch, or a For row), so they are disposed together with that
+ * owner. Binding later by walking the mounted DOM would miss content that
+ * Show and For render after mount (invariant I2, #44).
+ *
+ * Without a current owner (for example, a legacy container re-rendering from
+ * an event or observer callback), effects could never be disposed. In that
+ * case the content stays static and a one-time warning is logged; render the
+ * region through createOwnedSlot (src/Core/OwnedSlot.js) to make it reactive.
+ *
+ * @param {HTMLElement} element - Element rendered for the descriptor
+ * @param {Object} descriptor - View descriptor
+ */
+function bindReactive(element, descriptor) {
+  const thunk = descriptor.props && descriptor.props.contentThunk;
+  const hasThunk = descriptor.type === 'Text' && typeof thunk === 'function';
+  const hasReactiveModifier = descriptor.modifiers.some(isReactiveModifier);
+  if (!hasThunk && !hasReactiveModifier) return;
+
+  if (!getOwner()) {
+    if (hasThunk) element.textContent = String(untrack(thunk) ?? '');
+    warnUnownedRender(descriptor.type);
+    return;
+  }
+
+  if (hasThunk) {
+    createEffect(() => {
+      element.textContent = String(thunk() ?? '');
+    });
+  }
+
+  for (let i = 0; i < descriptor.modifiers.length; i++) {
+    installReactiveModifier(element, descriptor.modifiers[i]);
+  }
+}
+
+function isReactiveModifier(modifier) {
+  return modifier.type === ModifierType.ON_CHANGE
+    || modifier.type === ModifierType.SEARCHABLE
+    || modifier.type === ModifierType.SHEET;
+}
+
+let warnedUnownedRender = false;
+
+function warnUnownedRender(type) {
+  if (warnedUnownedRender) return;
+  warnedUnownedRender = true;
+  console.warn(
+    `SwiftUI-For-Web: ${type} with reactive content was rendered outside a ` +
+    'reactive owner, so it will not update. Render it during mount, or ' +
+    'through createOwnedSlot when re-rendering later.'
+  );
 }
 
 /**
@@ -222,9 +281,8 @@ function applyModifier(element, modifier) {
       element.setAttribute('data-accessibility-identifier', accessibilityText(value));
       break;
 
-    // Reactive modifiers are installed by SignalRenderer after the element is
-    // attached to the current signal owner. Keeping that work out of this
-    // synchronous style pass gives it deterministic cleanup on unmount.
+    // Reactive modifiers are not styles. bindReactive() installs them in
+    // render(), under the current owner, so they are disposed with it.
     case ModifierType.ON_CHANGE:
     case ModifierType.SEARCHABLE:
     case ModifierType.SHEET:

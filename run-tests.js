@@ -357,6 +357,12 @@ async function runTests() {
     const { VStack } = await import('./src/Layout/Stack/VStack.js');
     const { Button } = await import('./src/View/Control/Button.js');
     const { render } = await import('./src/Core/Renderer.js');
+    const { Show } = await import('./src/View/ControlFlow/Show.js');
+    const { For } = await import('./src/View/ControlFlow/For.js');
+    const { TabView } = await import('./src/View/Navigation/TabView.js');
+    const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
+    const { GroupView } = await import('./src/View/Container/Group.js');
+    const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
 
     // Test State
     describe('State', () => {
@@ -502,6 +508,250 @@ async function runTests() {
         expect(dismissCount).toBe(1);
         app.unmount();
         root.remove();
+      });
+    });
+
+    // Invariant I2 (#44): reactive bindings are created when their element is
+    // rendered, under the current owner. Content that Show/For render after
+    // mount must be as reactive as content rendered at mount.
+    describe('Reactive bindings inside Show and For (#44)', () => {
+      const mountInRoot = (viewFactory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(viewFactory).mount(root);
+        return {
+          root,
+          // App root → VStack → control-flow wrapper
+          wrapper: () => root.children[0].children[0],
+          teardown: () => { app.unmount(); root.remove(); },
+        };
+      };
+
+      it('binds a Text thunk in the branch Show switches to after mount', () => {
+        const on = new State(false);
+        const n = new State(1);
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(Show(() => on.value, ModifierText(() => 'A' + n.value), ModifierText(() => 'B' + n.value)))
+        );
+        expect(wrapper().children[0].textContent).toBe('B1');
+
+        on.value = true;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('A1');
+
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('A2');
+        teardown();
+      });
+
+      it('stops thunk effects of the removed branch, in both directions and after unmount', () => {
+        const on = new State(false);
+        const n = new State(1);
+        let aRuns = 0;
+        let bRuns = 0;
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(Show(
+            () => on.value,
+            ModifierText(() => { aRuns++; return 'A' + n.value; }),
+            ModifierText(() => { bRuns++; return 'B' + n.value; })
+          ))
+        );
+
+        // else → then: the else branch's thunk must not run again.
+        on.value = true;
+        Scheduler.flushSync();
+        const bAfterSwitch = bRuns;
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(bRuns).toBe(bAfterSwitch);
+
+        // then → else: the then branch's thunk must not run again.
+        on.value = false;
+        Scheduler.flushSync();
+        expect(wrapper().children[0].textContent).toBe('B2');
+        const aAfterSwitch = aRuns;
+        n.value = 3;
+        Scheduler.flushSync();
+        expect(aRuns).toBe(aAfterSwitch);
+        expect(wrapper().children[0].textContent).toBe('B3');
+
+        // After unmount, no thunk runs at all.
+        teardown();
+        const totalRuns = aRuns + bRuns;
+        n.value = 4;
+        Scheduler.flushSync();
+        expect(aRuns + bRuns).toBe(totalRuns);
+      });
+
+      it('installs reactive modifiers in a Show branch and disposes them with it', () => {
+        const on = new State(false);
+        const n = new State(0);
+        const seen = [];
+        const { teardown } = mountInRoot(() =>
+          VStack(Show(() => on.value, ModifierText('watcher').onChange(() => n.value, (_, value) => seen.push(value))))
+        );
+
+        on.value = true;
+        Scheduler.flushSync();
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(seen).toEqual([1]);
+
+        on.value = false;
+        Scheduler.flushSync();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(seen).toEqual([1]);
+        teardown();
+      });
+
+      it('binds Text thunks in For rows added after mount', () => {
+        const items = new State([{ id: 'a' }]);
+        const suffix = new State('1');
+        const { wrapper, teardown } = mountInRoot(() =>
+          VStack(For(() => items.value, (item) => ModifierText(() => item.id + suffix.value), (item) => item.id))
+        );
+
+        items.value = [{ id: 'a' }, { id: 'b' }];
+        Scheduler.flushSync();
+        suffix.value = '2';
+        Scheduler.flushSync();
+        const texts = wrapper().children.map((row) => row.textContent);
+        expect(texts).toEqual(['a2', 'b2']);
+        teardown();
+      });
+
+      it('disposes the previous tab\'s effects when TabView switches tabs and on unmount', () => {
+        const selection = new State(0);
+        const n = new State(0);
+        const actions = [];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(
+          selection,
+          VStack(ModifierText(() => 'T0:' + n.value).onChange(() => n.value, (_, value) => actions.push(value))),
+          VStack(ModifierText('tab1'))
+        )).mount(root);
+        const tabBar = root.children[0].children.find((child) => child.dataset.tabviewPart === 'tabbar');
+
+        for (const index of [1, 0, 1, 0]) tabBar.children[index].click();
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+
+        app.unmount();
+        root.remove();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+      });
+
+      it('keeps GeometryReader content reactive and disposes it on unmount', () => {
+        // Queue frames and run them after mount, like a browser does: the
+        // content is then rendered outside any current owner.
+        const previousRAF = globalThis.requestAnimationFrame;
+        const frames = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        try {
+          const n = new State(0);
+          let runs = 0;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => GeometryReader(() => ModifierText(() => { runs++; return 'g' + n.value; }))).mount(root);
+          frames.splice(0).forEach((callback) => callback());
+          const reader = root.children[0];
+
+          n.value = 1;
+          Scheduler.flushSync();
+          expect(reader.children[0].textContent).toBe('g1');
+
+          app.unmount();
+          root.remove();
+          const runsAtUnmount = runs;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(runs).toBe(runsAtUnmount);
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+        }
+      });
+
+      it('owns the effects of screens NavigationStack pushes and pops', () => {
+        const n = new State(0);
+        const actions = [];
+        const detail = () => new GroupView(
+          ModifierText(() => 'd' + n.value).onChange(() => n.value, (_, value) => actions.push(value))
+        );
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+
+        stack.push(detail(), '', false);
+        stack.pop(false);
+        stack.push(detail(), '', false);
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+
+        app.unmount();
+        root.remove();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+      });
+
+      it('does not leak when a slot-based container is itself rendered outside an owner', () => {
+        const n = new State(0);
+        const actions = [];
+        const reactive = (tag) => VStack(
+          ModifierText(() => tag + n.value).onChange(() => n.value, (_, value) => actions.push(tag + value))
+        );
+        const previousWarn = console.warn;
+        console.warn = () => {};
+        try {
+          // Rendered from a callback with no owner (as NavigationSplitView does
+          // for its detail): content stays static, no effects are created.
+          TabView(new State(0), reactive('B'), VStack(ModifierText('y')))._render();
+          n.value = 1;
+          Scheduler.flushSync();
+          expect(actions).toEqual([]);
+
+          // View.rerender() of a mounted NavigationStack (as NavigationPath
+          // does): nothing keeps firing after the app unmounts.
+          let stack;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => (stack = NavigationStack(new GroupView(reactive('C'))))).mount(root);
+          stack.rerender();
+          app.unmount();
+          root.remove();
+          actions.length = 0;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(actions).toEqual([]);
+        } finally {
+          console.warn = previousWarn;
+        }
+      });
+
+      it('leaves reactive content static, instead of leaking effects, when rendered outside an owner', () => {
+        const n = new State(1);
+        let runs = 0;
+        const previousWarn = console.warn;
+        console.warn = () => {};
+        try {
+          const element = render(ModifierText(() => { runs++; return 'v' + n.value; }));
+          expect(element.textContent).toBe('v1');
+          const runsAfterRender = runs;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(runs).toBe(runsAfterRender);
+          expect(element.textContent).toBe('v1');
+        } finally {
+          console.warn = previousWarn;
+        }
       });
     });
 

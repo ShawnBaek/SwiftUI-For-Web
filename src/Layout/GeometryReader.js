@@ -19,6 +19,7 @@
 import { View } from '../Core/View.js';
 import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../Core/Renderer.js';
+import { createOwnedSlot } from '../Core/OwnedSlot.js';
 
 /**
  * GeometryProxy - Provides size and coordinate space information
@@ -130,9 +131,20 @@ export class GeometryReaderView extends View {
     // Create geometry proxy
     this._geometry = new GeometryProxy(container);
 
+    // Content is rendered later from requestAnimationFrame and ResizeObserver
+    // callbacks, where there is no current owner. The slot keeps its effects
+    // owned, disposes them on each re-render, and stops rendering once the
+    // owner (for example, the app) is disposed.
+    const contentSlot = createOwnedSlot();
+
     // We need to render content after the container is in the DOM
     // so we can measure its size
     const renderContent = () => {
+      if (contentSlot.isDisposed()) {
+        this.destroy();
+        return;
+      }
+
       // Clear existing content
       container.innerHTML = '';
 
@@ -140,14 +152,18 @@ export class GeometryReaderView extends View {
       this._geometry._invalidate();
 
       // Build content with geometry
-      if (typeof this._builder === 'function') {
+      const node = contentSlot.render(() => {
+        if (typeof this._builder !== 'function') return null;
         const content = this._builder(this._geometry);
         if (content instanceof View) {
-          container.appendChild(content._render());
-        } else if (content && content.$$typeof === VIEW_DESCRIPTOR) {
-          container.appendChild(renderDescriptor(content));
+          return content._render();
         }
-      }
+        if (content && content.$$typeof === VIEW_DESCRIPTOR) {
+          return renderDescriptor(content);
+        }
+        return null;
+      });
+      if (node) container.appendChild(node);
     };
 
     // Initial render with requestAnimationFrame to ensure container is in DOM

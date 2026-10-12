@@ -10,8 +10,10 @@
  * nested inside any container's children. SignalRenderer wraps the whole
  * mount in createRoot — those handlers run their effects under that root.
  *
- * This module's remaining job is the post-render walk that wires
- * Text(() => ...) thunks to their textContent updates.
+ * Text(() => ...) thunks and reactive modifiers are bound by Renderer.render
+ * while each element is built, under the current owner. This module mounts
+ * the tree and implements the reactive modifiers (onChange, searchable,
+ * sheet) that the renderer and legacy View subclasses install.
  */
 
 import { render } from './Renderer.js';
@@ -35,7 +37,6 @@ export function mount(viewFactory, container) {
 
     const view = typeof viewFactory === 'function' ? viewFactory() : viewFactory;
     const element = render(view);
-    bindReactive(element);
 
     const oldChild = container.firstChild;
     if (oldChild) releaseTree(oldChild);
@@ -51,36 +52,6 @@ export function mount(viewFactory, container) {
   });
 
   return dispose;
-}
-
-/**
- * Walk the rendered DOM tree and install reactive bindings for any
- * descriptor that carries one. Currently handles Text(() => ...).
- * Show/For are handled by their own Renderer handlers.
- *
- * @param {Node} element
- */
-function bindReactive(element) {
-  if (!element || element.nodeType !== 1) return;
-
-  const desc = element._descriptor;
-  if (desc) {
-    if (desc.type === 'Text' && desc.props && typeof desc.props.contentThunk === 'function') {
-      const thunk = desc.props.contentThunk;
-      createEffect(() => {
-        element.textContent = String(thunk() ?? '');
-      });
-    }
-
-    for (const modifier of desc.modifiers || []) {
-      installReactiveModifier(element, modifier);
-    }
-  }
-
-  const kids = element.children;
-  for (let i = 0; i < kids.length; i++) {
-    bindReactive(kids[i]);
-  }
 }
 
 /**

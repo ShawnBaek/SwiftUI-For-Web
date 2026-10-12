@@ -71,7 +71,7 @@ Write these first, as browser-runner tests. Each one should fail on today's
 code where a bug is noted.
 
 1. **Counter:** mount, click `+` through delegation, `flushSync`, and the text reads "1".
-2. **I2 / #44:** `Show(cond, Text(() => s.value), …)`. Toggling and updating `s` updates the visible branch, and the hidden branch stops writing.
+2. ~~**I2 / #44:** `Show(cond, Text(() => s.value), …)`. Toggling and updating `s` updates the visible branch, and the hidden branch stops writing.~~ Done in `run-tests.js` ("Reactive bindings inside Show and For"), including `For` rows and reactive modifiers.
 3. **Keyed `For`:** insert, reorder, and remove keep each row's DOM node, and row thunks still update.
 4. **I4 / #45:** an effect that throws doesn't block other effects in the same or later flushes.
 5. **I3 / #46:** after unmounting, a reused pooled element doesn't fire the old action or `onAppear`. After unmounting, a state write doesn't touch detached nodes.

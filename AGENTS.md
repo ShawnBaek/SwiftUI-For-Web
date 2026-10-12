@@ -90,9 +90,9 @@ Fine-grained updates (signals → textContent / attributes / styles)
 - The core still has two view systems: descriptors, and legacy `View`
   subclasses such as `Toggle`, `TextField`, `List`, and `NavigationStack`.
   Write all new views as descriptors. The migration is tracked in #48.
-- `SignalRenderer.bindReactive` (a DOM walk at mount) is being removed (#44).
-  Don't add new reactive wiring there. Create effects inside the renderer, at
-  the point where the element is built.
+- Reactive wiring happens in `Renderer.render`, while each element is built
+  (`bindReactive` in `src/Core/Renderer.js`, #44). Never bind by walking the
+  mounted DOM afterwards.
 - `src/Core/Chainable.js`, `src/Core/ViewFactory.js`, and `src/Core/index.js`
   are dead code. Don't edit or import them.
 
@@ -229,8 +229,8 @@ signature.
 ## 8. Common mistakes
 
 - ❌ Adding a `View` subclass, or editing `Chainable.js` or `ViewFactory.js`.
-- ❌ Wiring reactivity in `bindReactive`. It only runs at mount, so it breaks
-  inside `Show` and `For`.
+- ❌ Binding reactivity by walking the DOM after mount. Content that `Show` and
+  `For` render later is missed; bind in the renderer instead.
 - ❌ Tests that assert `.type`, `Object.isFrozen`, or "returns this", or that
   compare a literal CSS string the browser normalizes.
 - ❌ Adding `H1`, `Card`, or similar views, or ad-hoc CSS classes. Styles flow
