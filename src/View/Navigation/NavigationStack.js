@@ -17,6 +17,7 @@
 
 import { View } from '../../Core/View.js';
 import { State } from '../../Data/State.js';
+import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 
 /**
  * Global navigation context for nested NavigationLinks
@@ -30,6 +31,22 @@ let _currentNavigationStack = null;
  */
 export function getCurrentNavigationStack() {
   return _currentNavigationStack;
+}
+
+/**
+ * Render a stack entry: a View instance or a function returning one.
+ * Preserves the existing behavior of rendering only legacy View results.
+ *
+ * @param {View|Function} entry
+ * @returns {HTMLElement|null}
+ */
+function renderStackView(entry) {
+  if (entry instanceof View) return entry._render();
+  if (typeof entry === 'function') {
+    const result = entry();
+    if (result instanceof View) return result._render();
+  }
+  return null;
 }
 
 /**
@@ -142,19 +159,17 @@ class NavigationStackView extends View {
     newContent.style.width = '100%';
     newContent.style.height = '100%';
 
+    if (!this._contentSlot || this._contentSlot.isDisposed()) return;
+
     // Set navigation context for NavigationLinks
     const previousStack = _currentNavigationStack;
     _currentNavigationStack = this;
 
-    // Render the view
-    if (currentView instanceof View) {
-      newContent.appendChild(currentView._render());
-    } else if (typeof currentView === 'function') {
-      const result = currentView();
-      if (result instanceof View) {
-        newContent.appendChild(result._render());
-      }
-    }
+    // Render the view. Push and pop run from event handlers, outside any
+    // owner; the slot disposes the previous screen's effects and keeps the
+    // new screen's effects owned until the next transition or unmount.
+    const rendered = this._contentSlot.render(() => renderStackView(currentView));
+    if (rendered) newContent.appendChild(rendered);
 
     // Restore previous context
     _currentNavigationStack = previousStack;
@@ -247,19 +262,17 @@ class NavigationStackView extends View {
     this._container.style.width = '100%';
     this._container.style.height = '100%';
 
+    // One slot owns whichever screen is visible: the root now, and each
+    // pushed or popped screen later (see _animateTransition).
+    this._contentSlot = createOwnedSlot();
+
     // Set navigation context
     const previousStack = _currentNavigationStack;
     _currentNavigationStack = this;
 
     // Render root view
-    if (this._rootView instanceof View) {
-      this._container.appendChild(this._rootView._render());
-    } else if (typeof this._rootView === 'function') {
-      const result = this._rootView();
-      if (result instanceof View) {
-        this._container.appendChild(result._render());
-      }
-    }
+    const rendered = this._contentSlot.render(() => renderStackView(this._rootView));
+    if (rendered) this._container.appendChild(rendered);
 
     // Restore previous context
     _currentNavigationStack = previousStack;

@@ -46,10 +46,12 @@ export function createOwnedSlot() {
     render(build) {
       if (disposed) return null;
       disposeCurrent();
-      return runWithOwner(owner, () => createRoot((d) => {
+      // createRoot always makes an unparented root; disposal is wired through
+      // the onCleanup registered on the captured owner above.
+      return createRoot((d) => {
         disposeContent = d;
         return build();
-      }));
+      });
     },
     dispose,
     isDisposed: () => disposed,

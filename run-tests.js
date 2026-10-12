@@ -361,6 +361,8 @@ async function runTests() {
     const { For } = await import('./src/View/ControlFlow/For.js');
     const { TabView } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
+    const { GroupView } = await import('./src/View/Container/Group.js');
+    const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
 
     // Test State
     describe('State', () => {
@@ -672,6 +674,49 @@ async function runTests() {
           expect(runs).toBe(runsAtUnmount);
         } finally {
           globalThis.requestAnimationFrame = previousRAF;
+        }
+      });
+
+      it('owns the effects of screens NavigationStack pushes and pops', () => {
+        const n = new State(0);
+        const actions = [];
+        const detail = () => new GroupView(
+          ModifierText(() => 'd' + n.value).onChange(() => n.value, (_, value) => actions.push(value))
+        );
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+
+        stack.push(detail(), '', false);
+        stack.pop(false);
+        stack.push(detail(), '', false);
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+
+        app.unmount();
+        root.remove();
+        n.value = 2;
+        Scheduler.flushSync();
+        expect(actions).toEqual([1]);
+      });
+
+      it('leaves reactive content static, instead of leaking effects, when rendered outside an owner', () => {
+        const n = new State(1);
+        let runs = 0;
+        const previousWarn = console.warn;
+        console.warn = () => {};
+        try {
+          const element = render(ModifierText(() => { runs++; return 'v' + n.value; }));
+          expect(element.textContent).toBe('v1');
+          const runsAfterRender = runs;
+          n.value = 2;
+          Scheduler.flushSync();
+          expect(runs).toBe(runsAfterRender);
+          expect(element.textContent).toBe('v1');
+        } finally {
+          console.warn = previousWarn;
         }
       });
     });
