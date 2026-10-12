@@ -757,6 +757,126 @@ async function runTests() {
 
     // Test Signal core (Phase 1 — internal reactive primitives)
     const Signal = await import('./src/Data/Signal.js');
+
+    // Invariant I4 (#45): the scheduler isolates each callback. An error is
+    // reported, and every other queued callback still runs; no lane drops work.
+    describe('Scheduler error isolation and lanes (#45)', () => {
+      const withConsoleErrorSpy = (fn) => {
+        const previous = console.error;
+        const errors = [];
+        console.error = (...args) => errors.push(args);
+        try {
+          fn(errors);
+        } finally {
+          console.error = previous;
+        }
+      };
+
+      it('runs the rest of a flush when one callback throws', () => {
+        withConsoleErrorSpy((errors) => {
+          let ran = false;
+          Scheduler.scheduleWork(() => { throw new Error('boom'); });
+          Scheduler.scheduleWork(() => { ran = true; });
+          Scheduler.flushSync();
+          expect(ran).toBe(true);
+          expect(errors).toHaveLength(1);
+        });
+      });
+
+      it('keeps later flushes working after a callback throws', () => {
+        withConsoleErrorSpy(() => {
+          Scheduler.scheduleWork(() => { throw new Error('first'); });
+          Scheduler.flushSync();
+          let ran = false;
+          Scheduler.scheduleWork(() => { ran = true; });
+          Scheduler.flushSync();
+          expect(ran).toBe(true);
+        });
+      });
+
+      it('updates other effects when one effect throws on a signal write', () => {
+        withConsoleErrorSpy((errors) => {
+          const [count, setCount] = Signal.createSignal(0);
+          let seen = null;
+          const disposeThrowing = Signal.createEffect(() => {
+            if (count() > 0) throw new Error('effect failed');
+          });
+          const disposeObserver = Signal.createEffect(() => { seen = count(); });
+          setCount(1);
+          Scheduler.flushSync();
+          expect(seen).toBe(1);
+          expect(errors).toHaveLength(1);
+          disposeThrowing();
+          disposeObserver();
+        });
+      });
+
+      it('runs post-flush callbacks after a callback throws', () => {
+        withConsoleErrorSpy(() => {
+          let postRan = false;
+          Scheduler.scheduleWork(() => { throw new Error('boom'); });
+          Scheduler.schedulePostFlush(() => { postRan = true; });
+          Scheduler.flushSync();
+          expect(postRan).toBe(true);
+        });
+      });
+
+      it('re-queues Transition lane work that exceeds the frame budget', () => {
+        const previousRAF = globalThis.requestAnimationFrame;
+        const frames = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        try {
+          const ran = [];
+          Scheduler.scheduleWork(() => {
+            const start = performance.now();
+            while (performance.now() - start < 12) { /* exceed the 8 ms budget */ }
+            ran.push('slow');
+          }, Scheduler.TransitionLane);
+          Scheduler.scheduleWork(() => ran.push('next'), Scheduler.TransitionLane);
+
+          for (let i = 0; i < 5 && frames.length > 0; i++) frames.shift()();
+          expect(ran).toEqual(['slow', 'next']);
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+        }
+      });
+
+      it('re-queues Idle lane work that exceeds the idle deadline', () => {
+        const previousIdle = globalThis.requestIdleCallback;
+        const idles = [];
+        globalThis.requestIdleCallback = (callback) => { idles.push(callback); return idles.length; };
+        try {
+          const ran = [];
+          Scheduler.scheduleWork(() => ran.push('first'), Scheduler.IdleLane);
+          Scheduler.scheduleWork(() => ran.push('second'), Scheduler.IdleLane);
+
+          const exhausted = { timeRemaining: () => 0, didTimeout: false };
+          for (let i = 0; i < 5 && idles.length > 0; i++) idles.shift()(exhausted);
+          expect(ran).toEqual(['first', 'second']);
+        } finally {
+          globalThis.requestIdleCallback = previousIdle;
+        }
+      });
+
+      it('isolates errors in Transition lane work', () => {
+        const previousRAF = globalThis.requestAnimationFrame;
+        const frames = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        try {
+          withConsoleErrorSpy((errors) => {
+            let ran = false;
+            Scheduler.scheduleWork(() => { throw new Error('transition failed'); }, Scheduler.TransitionLane);
+            Scheduler.scheduleWork(() => { ran = true; }, Scheduler.TransitionLane);
+            for (let i = 0; i < 5 && frames.length > 0; i++) frames.shift()();
+            expect(ran).toBe(true);
+            expect(errors).toHaveLength(1);
+          });
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+        }
+      });
+    });
+
     describe('Signal', () => {
       it('createSignal returns [read, write]', () => {
         const [read, write] = Signal.createSignal(0);

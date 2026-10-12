@@ -68,6 +68,9 @@ let _postFlushCallbacks = new Set();
 /** @type {number} Frame budget in ms (target 16ms for 60fps, leave room for browser work) */
 const FRAME_BUDGET_MS = 8;
 
+/** @type {number} Idle budget in ms when no IdleDeadline is available (setTimeout fallback) */
+const IDLE_FALLBACK_BUDGET_MS = 50;
+
 /** @type {Map<Function, number>} Deduplication map: callback -> lane */
 const _callbackLanes = new Map();
 
@@ -169,6 +172,42 @@ export function batch(fn) {
 }
 
 // ---------------------------------------------------------------------------
+// Error isolation
+// ---------------------------------------------------------------------------
+
+/**
+ * Run one scheduled callback. A throwing callback is reported and does not
+ * stop the callbacks queued after it (invariant I4, #45).
+ *
+ * @param {Function} callback
+ */
+function runCallback(callback) {
+  try {
+    callback();
+  } catch (error) {
+    console.error('[SwiftUI-For-Web] A scheduled update threw; other updates continue.', error);
+  }
+}
+
+/**
+ * Put callbacks that a lane could not run within its time budget back on
+ * that lane, unless they were already re-scheduled while the lane was running.
+ *
+ * @param {Function[]} callbacks
+ * @param {number} from - Index of the first callback that did not run
+ * @param {number} lane
+ */
+function requeue(callbacks, from, lane) {
+  const work = _pendingWork.get(lane);
+  for (let i = from; i < callbacks.length; i++) {
+    const callback = callbacks[i];
+    if (_callbackLanes.has(callback)) continue;
+    work.add(callback);
+    _callbackLanes.set(callback, lane);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Flush Logic
 // ---------------------------------------------------------------------------
 
@@ -211,7 +250,7 @@ export function flushSync() {
         }
 
         for (const callback of callbacks) {
-          callback();
+          runCallback(callback);
         }
       }
       if (!didWork) break;
@@ -229,7 +268,7 @@ export function flushSync() {
       const postCallbacks = Array.from(_postFlushCallbacks);
       _postFlushCallbacks.clear();
       for (const cb of postCallbacks) {
-        cb();
+        runCallback(cb);
       }
     }
   } finally {
@@ -298,14 +337,16 @@ function flushTransitionWork() {
     _callbackLanes.delete(cb);
   }
 
-  for (const callback of callbacks) {
-    callback();
-    // Yield if we've exceeded frame budget
-    if (performance.now() - start > FRAME_BUDGET_MS) {
-      // Re-schedule remaining work
+  for (let i = 0; i < callbacks.length; i++) {
+    runCallback(callbacks[i]);
+    // Yield if we've exceeded the frame budget; the rest runs next frame.
+    if (performance.now() - start > FRAME_BUDGET_MS && i < callbacks.length - 1) {
+      requeue(callbacks, i + 1, TransitionLane);
       break;
     }
   }
+
+  if (work.size > 0) scheduleRAFFlush();
 }
 
 /**
@@ -323,15 +364,22 @@ function flushIdleWork(deadline) {
     _callbackLanes.delete(cb);
   }
 
-  const timeRemaining = deadline?.timeRemaining?.() ?? 50;
+  const hasDeadline = deadline && typeof deadline.timeRemaining === 'function';
   const start = performance.now();
 
-  for (const callback of callbacks) {
-    callback();
-    if (performance.now() - start > timeRemaining) {
+  for (let i = 0; i < callbacks.length; i++) {
+    runCallback(callbacks[i]);
+    const outOfTime = hasDeadline
+      ? deadline.timeRemaining() <= 0
+      : performance.now() - start > IDLE_FALLBACK_BUDGET_MS;
+    // Yield when idle time runs out; the rest runs in the next idle period.
+    if (outOfTime && i < callbacks.length - 1) {
+      requeue(callbacks, i + 1, IdleLane);
       break;
     }
   }
+
+  if (work.size > 0) scheduleIdleFlush();
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +413,7 @@ function flushDOMWrites() {
   _domWriteScheduled = false;
   const writes = _domWriteQueue.splice(0);
   for (const write of writes) {
-    write();
+    runCallback(write);
   }
 }
 
