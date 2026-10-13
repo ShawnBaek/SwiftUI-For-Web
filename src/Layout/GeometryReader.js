@@ -20,6 +20,7 @@ import { View } from '../Core/View.js';
 import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../Core/Renderer.js';
 import { createOwnedSlot } from '../Core/OwnedSlot.js';
+import { releaseChildren } from '../Core/ElementPool.js';
 
 /**
  * GeometryProxy - Provides size and coordinate space information
@@ -145,8 +146,9 @@ export class GeometryReaderView extends View {
         return;
       }
 
-      // Clear existing content
-      container.innerHTML = '';
+      // Dispose the previous content's effects, then release its elements
+      contentSlot.clear();
+      releaseChildren(container);
 
       // Invalidate cached measurements
       this._geometry._invalidate();

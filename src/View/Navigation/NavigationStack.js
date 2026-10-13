@@ -18,6 +18,7 @@
 import { View } from '../../Core/View.js';
 import { State } from '../../Data/State.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
+import { releaseChildren, releaseTree } from '../../Core/ElementPool.js';
 
 /**
  * Global navigation context for nested NavigationLinks
@@ -175,8 +176,9 @@ class NavigationStackView extends View {
     _currentNavigationStack = previousStack;
 
     if (!animated || this._transitionStyle === 'none') {
-      // No animation
-      this._container.innerHTML = '';
+      // No animation. The slot already disposed the previous screen's
+      // effects, so its elements can go back to the pool.
+      releaseChildren(this._container);
       this._container.appendChild(newContent);
       newContent.style.position = 'relative';
       return;
@@ -231,14 +233,20 @@ class NavigationStackView extends View {
       });
     }
 
-    // Cleanup after animation
+    // Cleanup after animation. Only touch elements that are still in this
+    // stack's container: if the app unmounted meanwhile, they were released
+    // to the pool and may already belong to another view.
+    const container = this._container;
     setTimeout(() => {
-      if (existingContent && existingContent.parentNode) {
+      if (existingContent && existingContent.parentNode === container) {
         existingContent.remove();
+        releaseTree(existingContent);
       }
-      newContent.style.position = 'relative';
-      newContent.style.transform = '';
-      newContent.style.transition = '';
+      if (newContent.parentNode === container) {
+        newContent.style.position = 'relative';
+        newContent.style.transform = '';
+        newContent.style.transition = '';
+      }
     }, duration);
   }
 

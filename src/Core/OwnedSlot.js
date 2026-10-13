@@ -18,7 +18,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner } from '../Data/Signal.js';
 
 /**
- * @returns {{ render: (build: () => Node|null) => Node|null, dispose: () => void, isDisposed: () => boolean }}
+ * @returns {{ render: (build: () => Node|null) => Node|null, clear: () => void, dispose: () => void, isDisposed: () => boolean }}
  */
 export function createOwnedSlot() {
   const owner = getOwner();
@@ -58,6 +58,9 @@ export function createOwnedSlot() {
         return build();
       });
     },
+    // Dispose the current content's effects without closing the slot. Call
+    // before releasing that content's elements to the pool (#46).
+    clear: disposeCurrent,
     dispose,
     isDisposed: () => disposed,
   };

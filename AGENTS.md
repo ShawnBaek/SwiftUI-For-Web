@@ -195,8 +195,11 @@ signature.
 
 ## 6. Performance rules
 
-- Create elements with `acquireElement`. Pool release must clear handlers and
-  lifecycle callbacks (#46).
+- Create elements with `acquireElement`. Release clears an element's delegated
+  handlers and lifecycle callbacks (#46).
+- Release replaced content only after its effects are disposed: dispose first
+  (for example `slot.clear()`), then `releaseChildren(container)`. Releasing
+  first lets a reused element receive the old view's updates.
 - Don't assign untrusted strings with `innerHTML`; use `textContent` or
   `appendChild`.
 - Don't read layout (`getBoundingClientRect`, `offsetWidth`) and then write

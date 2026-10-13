@@ -49,7 +49,7 @@ whenever a phase completes or a goal changes.
 | Area | Problem | Issue |
 |---|---|---|
 | Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed by the #44 PR. | #44 |
-| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. Pooled elements keep stale handlers and lifecycle callbacks. | #45, #46 |
+| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR. The lifecycle observer still rescans every registered element on each mutation batch. | #45, #46, #57 |
 | Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
 | Semantics | Modifier order is ignored, a second handler for the same event replaces the first, and `frame(maxWidth: 'infinity')` produces invalid CSS. | #50 |
@@ -69,7 +69,7 @@ Small, high-leverage fixes, each with a failing test written first.
 
 - [x] #44 Bind reactive thunks and modifiers during render, under the current owner.
 - [x] #45 Isolate effects in the scheduler.
-- #46 Release delegated handlers and lifecycle callbacks when pooled elements are reused.
+- [x] #46 Release delegated handlers and lifecycle callbacks when pooled elements are reused.
 - #47 Fix the entries and exports, and add a `.d.ts`-versus-runtime check.
 - #53 Run every existing test in CI, without adding dependencies.
 
@@ -83,6 +83,7 @@ in the reactive core, and every package entry loads.
 - #49 Scope the environment to the owner tree, and keep imports free of browser access.
 - #50 Make modifier order follow SwiftUI semantics.
 - #51 Make the controls accessible.
+- #57 Scan only the changed subtrees for lifecycle callbacks.
 
 **Exit criteria:** invariants I1–I9 in
 [ARCHITECTURE.md](ARCHITECTURE.md#3-invariants) hold, and each has a test.
@@ -101,8 +102,8 @@ in the reactive core, and every package entry loads.
 | Measure | Today | Target |
 |---|---|---|
 | Tests running in CI | 96 | Every test in `Tests/**` plus the node suites |
-| Known core correctness bugs | 2 (#46–#47) | 0 |
-| Invariants with a test | 2 / 10 (I2, I4) | 10 / 10 |
+| Known core correctness bugs | 1 (#47) | 0 |
+| Invariants with a test | 3 / 10 (I2, I3, I4; I3 is partial) | 10 / 10 |
 | `.d.ts` agrees with the runtime | No | Checked in CI |
 | Release build size budget | Reported only | Enforced in CI |
 | Accessibility of controls | Partial | Every control passes keyboard and role checks |
