@@ -49,7 +49,7 @@ whenever a phase completes or a goal changes.
 | Area | Problem | Issue |
 |---|---|---|
 | Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed by the #44 PR. | #44 |
-| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR. The lifecycle observer still rescans every registered element on each mutation batch. | #45, #46, #57 |
+| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR (only elements created by `acquireElement` are pooled). The lifecycle observer still rescans every registered element on each mutation batch. | #45, #46, #57 |
 | Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
 | Semantics | Modifier order is ignored, a second handler for the same event replaces the first, and `frame(maxWidth: 'infinity')` produces invalid CSS. | #50 |

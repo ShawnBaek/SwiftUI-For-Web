@@ -22,6 +22,14 @@ import { releaseCallbacks } from './LifecycleObserver.js';
 /** @type {Map<string, HTMLElement[]>} Tag name -> array of recycled elements */
 const _pools = new Map();
 
+/**
+ * Elements created by acquireElement. Only these are pooled: elements made
+ * elsewhere (legacy View subclasses) may carry listeners added directly with
+ * addEventListener, which release cannot see or remove.
+ * @type {WeakSet<HTMLElement>}
+ */
+const _poolable = new WeakSet();
+
 /** Maximum number of elements to keep per tag type */
 const MAX_POOL_SIZE = 50;
 
@@ -53,7 +61,9 @@ export function acquireElement(tagName) {
   }
 
   _misses++;
-  return document.createElement(tagName);
+  const element = document.createElement(tagName);
+  _poolable.add(element);
+  return element;
 }
 
 /**
@@ -71,7 +81,7 @@ export function releaseElement(element) {
   releaseCallbacks(element);
 
   const tag = element.tagName.toLowerCase();
-  if (!POOLABLE_TAGS.has(tag)) return;
+  if (!POOLABLE_TAGS.has(tag) || !_poolable.has(element)) return;
 
   let pool = _pools.get(tag);
   if (!pool) {

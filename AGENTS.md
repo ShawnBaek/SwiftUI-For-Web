@@ -195,8 +195,10 @@ signature.
 
 ## 6. Performance rules
 
-- Create elements with `acquireElement`. Release clears an element's delegated
-  handlers and lifecycle callbacks (#46).
+- Create elements with `acquireElement`, and attach their events with
+  `delegateEvent`, never `addEventListener`: release clears delegated handlers
+  and lifecycle callbacks (#46), but it can't see listeners added directly.
+  Only elements from `acquireElement` are pooled.
 - Release replaced content only after its effects are disposed: dispose first
   (for example `slot.clear()`), then `releaseChildren(container)`. Releasing
   first lets a reused element receive the old view's updates.

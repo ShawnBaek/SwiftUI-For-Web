@@ -377,6 +377,7 @@ async function runTests() {
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
+    const { Stepper } = await import('./src/View/Control/Stepper.js');
 
     // Test State
     describe('State', () => {
@@ -772,8 +773,6 @@ async function runTests() {
     // Test Signal core (Phase 1 — internal reactive primitives)
     const Signal = await import('./src/Data/Signal.js');
 
-    // Invariant I4 (#45): the scheduler isolates each callback. An error is
-    // reported, and every other queued callback still runs; no lane drops work.
     // Invariant I3 (#46): releasing an element releases everything keyed on it
     // (delegated handlers, lifecycle callbacks), so a pooled element that is
     // reused never carries the previous view's behavior.
@@ -919,8 +918,101 @@ async function runTests() {
         app.unmount();
         root.remove();
       });
+
+      const findTag = (element, tag) => element.tagName === tag
+        ? element
+        : element.children.map((child) => findTag(child, tag)).find(Boolean);
+
+      it('does not pool legacy elements that carry their own listeners', () => {
+        // Stepper is a legacy View: its buttons get listeners through
+        // addEventListener, which release cannot remove. Switching tabs must
+        // not hand those buttons to the next tab's Button.
+        ElementPool.clearPools();
+        const count = new State(0);
+        const actions = [];
+        const root = attachedRoot();
+        const app = App(() => TabView(
+          new State(0),
+          Stepper('Count', count),
+          VStack(Button('Tab 1 action', () => actions.push('tab1')))
+        )).mount(root);
+        const tabView = root.children[0];
+        const content = tabView.children.find((child) => child.dataset.tabviewPart === 'content');
+        const tabBar = tabView.children.find((child) => child.dataset.tabviewPart === 'tabbar');
+        tabBar.children[1].click();
+
+        findTag(content, 'BUTTON').click();
+        expect(actions).toEqual(['tab1']);
+        expect(count.value).toBe(0);
+        app.unmount();
+        root.remove();
+      });
+
+      it('releases a popped NavigationStack screen to the pool without its handlers', () => {
+        ElementPool.clearPools();
+        const actions = [];
+        let stack;
+        const root = attachedRoot();
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+        stack.push(new GroupView(Button('Save', () => actions.push('save'))), '', false);
+        const saveButton = findTag(root, 'BUTTON');
+        stack.pop(false);
+
+        const reused = ElementPool.acquireElement('button');
+        expect(reused).toBe(saveButton);
+        const other = attachedRoot();
+        Delegate.initDelegation(other);
+        other.appendChild(reused);
+        reused.click();
+        expect(actions).toEqual([]);
+        Delegate.teardownDelegation(other);
+        other.remove();
+        app.unmount();
+        root.remove();
+      });
+
+      it('releases replaced GeometryReader content to the pool without its handlers', () => {
+        const previousRAF = globalThis.requestAnimationFrame;
+        const previousRO = globalThis.ResizeObserver;
+        const frames = [];
+        const resizeCallbacks = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        globalThis.ResizeObserver = class {
+          constructor(callback) { resizeCallbacks.push(callback); }
+          observe() {}
+          disconnect() {}
+        };
+        try {
+          ElementPool.clearPools();
+          const actions = [];
+          let renders = 0;
+          const root = attachedRoot();
+          const app = App(() => GeometryReader(() => {
+            const id = ++renders;
+            return Button('Render ' + id, () => actions.push(id));
+          })).mount(root);
+          frames.splice(0).forEach((callback) => callback());
+          const firstButton = findTag(root, 'BUTTON');
+
+          // A resize re-renders the content. The previous button is released
+          // and the new content takes it back from the pool, without the old
+          // handler.
+          resizeCallbacks[0]();
+          const secondButton = findTag(root, 'BUTTON');
+          expect(secondButton === firstButton).toBe(true);
+          secondButton.click();
+          expect(actions).toEqual([2]);
+          app.unmount();
+          root.remove();
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+          globalThis.ResizeObserver = previousRO;
+        }
+      });
     });
 
+    // Invariant I4 (#45): the scheduler isolates each callback. An error is
+    // reported, and every other queued callback still runs; no lane drops work.
     describe('Scheduler error isolation and lanes (#45)', () => {
       const withConsoleErrorSpy = (fn) => {
         const previous = console.error;
@@ -1128,6 +1220,35 @@ async function runTests() {
           });
         });
       });
+    });
+
+    console.log('\n📦 Element pool release cleanup, timers (#46)');
+    await itAsync('leaves a remounted view alone when NavigationStack\'s animation timer fires after unmount', async () => {
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      try {
+        ElementPool.clearPools();
+        let stack;
+        const first = document.createElement('div');
+        document.body.appendChild(first);
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
+        stack.push(new GroupView(ModifierText('detail')), '', true);
+        app.unmount();
+        first.remove();
+
+        // The new view reuses the stack's pooled elements before the timer fires.
+        const second = document.createElement('div');
+        document.body.appendChild(second);
+        const next = App(() => VStack(VStack(VStack(ModifierText('new'))))).mount(second);
+        const depth = (element) => (element.children[0] ? 1 + depth(element.children[0]) : 0);
+        const before = depth(second);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        expect(depth(second)).toBe(before);
+        next.unmount();
+        second.remove();
+      } finally {
+        globalThis.requestAnimationFrame = previousRAF;
+      }
     });
 
     console.log('\n📦 Scheduler microtask flush (#45)');

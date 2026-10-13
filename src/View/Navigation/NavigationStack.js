@@ -233,11 +233,13 @@ class NavigationStackView extends View {
       });
     }
 
-    // Cleanup after animation. Only touch elements that are still in this
-    // stack's container: if the app unmounted meanwhile, they were released
-    // to the pool and may already belong to another view.
+    // Cleanup after animation. If the stack was disposed meanwhile (the app
+    // unmounted), its elements went back to the pool and may already belong
+    // to another view, so leave them alone.
     const container = this._container;
+    const slot = this._contentSlot;
     setTimeout(() => {
+      if (slot.isDisposed()) return;
       if (existingContent && existingContent.parentNode === container) {
         existingContent.remove();
         releaseTree(existingContent);
