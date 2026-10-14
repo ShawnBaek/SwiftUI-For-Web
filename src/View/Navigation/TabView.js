@@ -24,6 +24,7 @@ import { Color } from '../../Graphic/Color.js';
 import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
+import { releaseChildren } from '../../Core/ElementPool.js';
 
 /**
  * Helper to check if something is a descriptor
@@ -248,9 +249,10 @@ export class TabViewView extends View {
   _updateTabView(contentSlot, contentArea, tabBar, newSelection) {
     if (contentSlot.isDisposed()) return;
 
-    // Update content. Rendering through the slot disposes the previous tab's
-    // effects before the new tab is built.
-    contentArea.innerHTML = '';
+    // Update content: dispose the previous tab's effects, then release its
+    // elements to the pool (handlers and lifecycle callbacks included).
+    contentSlot.clear();
+    releaseChildren(contentArea);
     const selectedTab = this._tabs.find((tab, index) => getTag(tab, index) === newSelection);
     if (selectedTab) {
       const rendered = contentSlot.render(() => renderTab(selectedTab));

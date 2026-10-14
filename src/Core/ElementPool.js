@@ -16,8 +16,19 @@
  * - Cap pool size to prevent memory leaks
  */
 
+import { undelegateAll } from './EventDelegate.js';
+import { releaseCallbacks } from './LifecycleObserver.js';
+
 /** @type {Map<string, HTMLElement[]>} Tag name -> array of recycled elements */
 const _pools = new Map();
+
+/**
+ * Elements created by acquireElement. Only these are pooled: elements made
+ * elsewhere (legacy View subclasses) may carry listeners added directly with
+ * addEventListener, which release cannot see or remove.
+ * @type {WeakSet<HTMLElement>}
+ */
+const _poolable = new WeakSet();
 
 /** Maximum number of elements to keep per tag type */
 const MAX_POOL_SIZE = 50;
@@ -50,7 +61,9 @@ export function acquireElement(tagName) {
   }
 
   _misses++;
-  return document.createElement(tagName);
+  const element = document.createElement(tagName);
+  _poolable.add(element);
+  return element;
 }
 
 /**
@@ -62,8 +75,13 @@ export function acquireElement(tagName) {
 export function releaseElement(element) {
   if (!element || !element.tagName) return;
 
+  // Whatever is keyed on this element belongs to the view being released,
+  // pooled or not: delegated handlers and lifecycle callbacks (I3, #46).
+  undelegateAll(element);
+  releaseCallbacks(element);
+
   const tag = element.tagName.toLowerCase();
-  if (!POOLABLE_TAGS.has(tag)) return;
+  if (!POOLABLE_TAGS.has(tag) || !_poolable.has(element)) return;
 
   let pool = _pools.get(tag);
   if (!pool) {
@@ -93,6 +111,22 @@ export function releaseTree(root) {
   }
 
   releaseElement(root);
+}
+
+/**
+ * Remove and release every child of a container. Call this only after the
+ * effects that write into those children have been disposed; otherwise a
+ * reused element could still receive their updates.
+ *
+ * @param {HTMLElement} container
+ */
+export function releaseChildren(container) {
+  if (!container) return;
+  const children = Array.from(container.children);
+  container.textContent = '';
+  for (const child of children) {
+    releaseTree(child);
+  }
 }
 
 /**
@@ -158,6 +192,7 @@ export default {
   acquireElement,
   releaseElement,
   releaseTree,
+  releaseChildren,
   getPoolStats,
   clearPools,
 };

@@ -377,6 +377,7 @@ async function runTests() {
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
+    const { Stepper } = await import('./src/View/Control/Stepper.js');
 
     // Test State
     describe('State', () => {
@@ -772,6 +773,244 @@ async function runTests() {
     // Test Signal core (Phase 1 — internal reactive primitives)
     const Signal = await import('./src/Data/Signal.js');
 
+    // Invariant I3 (#46): releasing an element releases everything keyed on it
+    // (delegated handlers, lifecycle callbacks), so a pooled element that is
+    // reused never carries the previous view's behavior.
+    const ElementPool = await import('./src/Core/ElementPool.js');
+    const Lifecycle = await import('./src/Core/LifecycleObserver.js');
+    const Delegate = await import('./src/Core/EventDelegate.js');
+    describe('Element pool release cleanup (#46)', () => {
+      const withLifecycleStub = (fn) => {
+        const previous = globalThis.MutationObserver;
+        globalThis.MutationObserver = class { observe() {} disconnect() {} };
+        try {
+          fn();
+        } finally {
+          Lifecycle.flushLifecycleCallbacks();
+          globalThis.MutationObserver = previous;
+        }
+      };
+      const attachedRoot = () => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        return root;
+      };
+
+      it('releases delegated handlers, so a reused button does not fire the previous action', () => {
+        ElementPool.clearPools();
+        const actions = [];
+        const root = attachedRoot();
+        const app = App(() => Button('Old', () => actions.push('old'))).mount(root);
+        const oldButton = root.children[0];
+        app.unmount();
+        root.remove();
+
+        const reused = ElementPool.acquireElement('button');
+        expect(reused).toBe(oldButton);
+        const other = attachedRoot();
+        Delegate.initDelegation(other);
+        other.appendChild(reused);
+        reused.click();
+        expect(actions).toEqual([]);
+        Delegate.teardownDelegation(other);
+        other.remove();
+      });
+
+      it('does not fire a released element\'s onAppear on the view that reuses it', () => {
+        withLifecycleStub(() => {
+          ElementPool.clearPools();
+          let appeared = 0;
+          const detached = document.createElement('div');
+          const app = App(() => ModifierText('never attached').onAppear(() => { appeared++; })).mount(detached);
+          const oldText = detached.children[0];
+          app.unmount();
+
+          const reused = ElementPool.acquireElement('span');
+          expect(reused).toBe(oldText);
+          const root = attachedRoot();
+          root.appendChild(reused);
+          Lifecycle.flushLifecycleCallbacks();
+          expect(appeared).toBe(0);
+          root.remove();
+        });
+      });
+
+      it('fires onDisappear once when released, even if the element is reused at once', () => {
+        withLifecycleStub(() => {
+          ElementPool.clearPools();
+          let disappeared = 0;
+          const root = attachedRoot();
+          const app = App(() => ModifierText('leaving').onDisappear(() => { disappeared++; })).mount(root);
+          const oldText = root.children[0];
+          Lifecycle.flushLifecycleCallbacks();
+          app.unmount();
+          root.remove();
+
+          // Reused and attached before the lifecycle flush runs.
+          const reused = ElementPool.acquireElement('span');
+          expect(reused).toBe(oldText);
+          const other = attachedRoot();
+          other.appendChild(reused);
+          Lifecycle.flushLifecycleCallbacks();
+          expect(disappeared).toBe(1);
+
+          other.remove();
+          Lifecycle.flushLifecycleCallbacks();
+          expect(disappeared).toBe(1);
+        });
+      });
+
+      it('drops onAppear of content disposed before it ever appeared', () => {
+        withLifecycleStub(() => {
+          const baseline = Lifecycle.getLifecycleStats().pendingAppear;
+          const dispose = Signal.createRoot((d) => {
+            render(ModifierText('never shown').onAppear(() => {}));
+            return d;
+          });
+          expect(Lifecycle.getLifecycleStats().pendingAppear).toBe(baseline + 1);
+          dispose();
+          expect(Lifecycle.getLifecycleStats().pendingAppear).toBe(baseline);
+        });
+      });
+
+      it('returns lifecycle maps to baseline after mounting and unmounting 1,000 rows', () => {
+        withLifecycleStub(() => {
+          const before = Lifecycle.getLifecycleStats();
+          const rows = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+          const detached = document.createElement('div');
+          const app = App(() => VStack(For(
+            () => rows,
+            (row) => ModifierText('row ' + row.id).onAppear(() => {}).onDisappear(() => {}),
+            (row) => row.id
+          ))).mount(detached);
+          app.unmount();
+          Lifecycle.flushLifecycleCallbacks();
+          const after = Lifecycle.getLifecycleStats();
+          expect(after.pendingAppear).toBe(before.pendingAppear);
+          expect(after.pendingDisappear).toBe(before.pendingDisappear);
+        });
+      });
+
+      it('releases replaced TabView content to the pool without its handlers', () => {
+        ElementPool.clearPools();
+        const actions = [];
+        const root = attachedRoot();
+        const app = App(() => TabView(
+          new State(0),
+          VStack(Button('In tab 0', () => actions.push('tab0'))),
+          VStack(ModifierText('tab 1'))
+        )).mount(root);
+        const tabView = root.children[0];
+        const content = tabView.children.find((child) => child.dataset.tabviewPart === 'content');
+        const tabBar = tabView.children.find((child) => child.dataset.tabviewPart === 'tabbar');
+        const oldButton = content.children[0].children[0];
+        tabBar.children[1].click();
+
+        const reused = ElementPool.acquireElement('button');
+        expect(reused).toBe(oldButton);
+        const other = attachedRoot();
+        Delegate.initDelegation(other);
+        other.appendChild(reused);
+        reused.click();
+        expect(actions).toEqual([]);
+        Delegate.teardownDelegation(other);
+        other.remove();
+        app.unmount();
+        root.remove();
+      });
+
+      const findTag = (element, tag) => element.tagName === tag
+        ? element
+        : element.children.map((child) => findTag(child, tag)).find(Boolean);
+
+      it('does not pool legacy elements that carry their own listeners', () => {
+        // Stepper is a legacy View: its buttons get listeners through
+        // addEventListener, which release cannot remove. Switching tabs must
+        // not hand those buttons to the next tab's Button.
+        ElementPool.clearPools();
+        const count = new State(0);
+        const actions = [];
+        const root = attachedRoot();
+        const app = App(() => TabView(
+          new State(0),
+          Stepper('Count', count),
+          VStack(Button('Tab 1 action', () => actions.push('tab1')))
+        )).mount(root);
+        const tabView = root.children[0];
+        const content = tabView.children.find((child) => child.dataset.tabviewPart === 'content');
+        const tabBar = tabView.children.find((child) => child.dataset.tabviewPart === 'tabbar');
+        tabBar.children[1].click();
+
+        findTag(content, 'BUTTON').click();
+        expect(actions).toEqual(['tab1']);
+        expect(count.value).toBe(0);
+        app.unmount();
+        root.remove();
+      });
+
+      it('releases a popped NavigationStack screen to the pool without its handlers', () => {
+        ElementPool.clearPools();
+        const actions = [];
+        let stack;
+        const root = attachedRoot();
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+        stack.push(new GroupView(Button('Save', () => actions.push('save'))), '', false);
+        const saveButton = findTag(root, 'BUTTON');
+        stack.pop(false);
+
+        const reused = ElementPool.acquireElement('button');
+        expect(reused).toBe(saveButton);
+        const other = attachedRoot();
+        Delegate.initDelegation(other);
+        other.appendChild(reused);
+        reused.click();
+        expect(actions).toEqual([]);
+        Delegate.teardownDelegation(other);
+        other.remove();
+        app.unmount();
+        root.remove();
+      });
+
+      it('releases replaced GeometryReader content to the pool without its handlers', () => {
+        const previousRAF = globalThis.requestAnimationFrame;
+        const previousRO = globalThis.ResizeObserver;
+        const frames = [];
+        const resizeCallbacks = [];
+        globalThis.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+        globalThis.ResizeObserver = class {
+          constructor(callback) { resizeCallbacks.push(callback); }
+          observe() {}
+          disconnect() {}
+        };
+        try {
+          ElementPool.clearPools();
+          const actions = [];
+          let renders = 0;
+          const root = attachedRoot();
+          const app = App(() => GeometryReader(() => {
+            const id = ++renders;
+            return Button('Render ' + id, () => actions.push(id));
+          })).mount(root);
+          frames.splice(0).forEach((callback) => callback());
+          const firstButton = findTag(root, 'BUTTON');
+
+          // A resize re-renders the content. The previous button is released
+          // and the new content takes it back from the pool, without the old
+          // handler.
+          resizeCallbacks[0]();
+          const secondButton = findTag(root, 'BUTTON');
+          expect(secondButton === firstButton).toBe(true);
+          secondButton.click();
+          expect(actions).toEqual([2]);
+          app.unmount();
+          root.remove();
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+          globalThis.ResizeObserver = previousRO;
+        }
+      });
+    });
+
     // Invariant I4 (#45): the scheduler isolates each callback. An error is
     // reported, and every other queued callback still runs; no lane drops work.
     describe('Scheduler error isolation and lanes (#45)', () => {
@@ -981,6 +1220,35 @@ async function runTests() {
           });
         });
       });
+    });
+
+    console.log('\n📦 Element pool release cleanup, timers (#46)');
+    await itAsync('leaves a remounted view alone when NavigationStack\'s animation timer fires after unmount', async () => {
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      try {
+        ElementPool.clearPools();
+        let stack;
+        const first = document.createElement('div');
+        document.body.appendChild(first);
+        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
+        stack.push(new GroupView(ModifierText('detail')), '', true);
+        app.unmount();
+        first.remove();
+
+        // The new view reuses the stack's pooled elements before the timer fires.
+        const second = document.createElement('div');
+        document.body.appendChild(second);
+        const next = App(() => VStack(VStack(VStack(ModifierText('new'))))).mount(second);
+        const depth = (element) => (element.children[0] ? 1 + depth(element.children[0]) : 0);
+        const before = depth(second);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        expect(depth(second)).toBe(before);
+        next.unmount();
+        second.remove();
+      } finally {
+        globalThis.requestAnimationFrame = previousRAF;
+      }
     });
 
     console.log('\n📦 Scheduler microtask flush (#45)');

@@ -19,7 +19,7 @@ import {
   ModifierType
 } from './ViewDescriptor.js';
 import { acquireElement, releaseTree } from './ElementPool.js';
-import { onAppear, onDisappear } from './LifecycleObserver.js';
+import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
@@ -258,6 +258,9 @@ function applyModifier(element, modifier) {
     case ModifierType.ON_APPEAR:
       // Use shared lifecycle observer instead of per-element MutationObserver
       onAppear(element, value);
+      // If the owner is disposed before the element ever appears, drop the
+      // pending callback so it neither leaks nor fires later (#46).
+      if (getOwner()) onCleanup(() => cancelAppear(element));
       break;
 
     case ModifierType.ON_DISAPPEAR:

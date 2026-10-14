@@ -19,6 +19,9 @@ const _appearCallbacks = new Map();
 /** @type {Map<HTMLElement, Function>} Elements being watched for onDisappear */
 const _disappearCallbacks = new Map();
 
+/** @type {Function[]} onDisappear callbacks of released elements, run on the next flush */
+const _releasedDisappearCallbacks = [];
+
 /** @type {MutationObserver|null} Shared observer instance */
 let _observer = null;
 
@@ -74,10 +77,54 @@ export function removeCallbacks(element) {
 }
 
 /**
+ * Release an element's lifecycle callbacks because the element is being
+ * returned to the element pool (its view is gone). A pending onAppear is
+ * dropped; a registered onDisappear is detached from the element and run once
+ * on the next flush. The pooled element therefore carries no callbacks into
+ * the view that reuses it (invariant I3, #46).
+ *
+ * @param {HTMLElement} element
+ */
+export function releaseCallbacks(element) {
+  _appearCallbacks.delete(element);
+  const disappear = _disappearCallbacks.get(element);
+  if (disappear) {
+    _disappearCallbacks.delete(element);
+    _releasedDisappearCallbacks.push(disappear);
+    scheduleAppearCheck();
+  }
+  maybeDisconnectObserver();
+}
+
+/**
+ * Drop an element's pending onAppear, for example when the owner that rendered
+ * it is disposed before the element was ever attached.
+ *
+ * @param {HTMLElement} element
+ */
+export function cancelAppear(element) {
+  if (_appearCallbacks.delete(element)) {
+    maybeDisconnectObserver();
+  }
+}
+
+/**
  * Process any pending appear/disappear callbacks.
  * Called after reconciliation to batch lifecycle events.
  */
 export function flushLifecycleCallbacks() {
+  // Run onDisappear for elements that were released while registered
+  if (_releasedDisappearCallbacks.length > 0) {
+    const released = _releasedDisappearCallbacks.splice(0);
+    for (const callback of released) {
+      try {
+        callback();
+      } catch (e) {
+        console.error('onDisappear callback error:', e);
+      }
+    }
+  }
+
   // Check appear callbacks
   for (const [element, callback] of _appearCallbacks) {
     if (document.contains(element)) {
@@ -158,6 +205,8 @@ export default {
   onAppear,
   onDisappear,
   removeCallbacks,
+  releaseCallbacks,
+  cancelAppear,
   flushLifecycleCallbacks,
   getLifecycleStats,
 };
