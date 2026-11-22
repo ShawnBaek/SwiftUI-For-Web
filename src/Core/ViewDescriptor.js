@@ -31,12 +31,6 @@ import { DEV_BUILD } from './Dev.js';
 export const VIEW_DESCRIPTOR = Symbol.for('swiftui.descriptor');
 
 /**
- * Symbol for memoized descriptors
- * @type {symbol}
- */
-export const MEMOIZED = Symbol.for('swiftui.memoized');
-
-/**
  * Create an immutable view descriptor
  *
  * @param {string} type - View type name (e.g., 'VStack', 'Text', 'Button')
@@ -54,16 +48,7 @@ export function createDescriptor(type, props = {}, children = [], key = null, mo
     children: Object.freeze(children.filter(c => c != null)),
     key,
     modifiers: Object.freeze([...modifiers]),
-    // Cached hashes for fast equality checks. _selfHash covers only this
-    // node's own type/props/modifiers (not its children) so the diff can
-    // distinguish "this node changed" from "a descendant changed". _hash
-    // includes children, used for whole-subtree skip optimization.
-    _selfHash: null,
-    _hash: null
   };
-
-  descriptor._selfHash = computeSelfHash(descriptor);
-  descriptor._hash = computeHash(descriptor);
 
   // Development builds remember where the view was created, so render
   // errors can point at the user's code (#42). The stack is only formatted
@@ -110,6 +95,31 @@ export function isLegacyView(value) {
  * @param {Object} modifier - Modifier to add
  * @returns {Object} New descriptor with modifier added
  */
+/**
+ * Whether a value is a view: a descriptor or a legacy View instance.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+export function isView(value) {
+  return isDescriptor(value) || isLegacyView(value);
+}
+
+/**
+ * The value of a view's last `.tag(_:)`, or undefined. Legacy Views keep
+ * their modifiers in `_modifiers`.
+ *
+ * @param {Object} view
+ * @returns {*}
+ */
+export function tagOf(view) {
+  const modifiers = view?.modifiers ?? view?._modifiers ?? [];
+  for (let i = modifiers.length - 1; i >= 0; i--) {
+    if (modifiers[i]?.type === ModifierType.TAG) return modifiers[i].value;
+  }
+  return undefined;
+}
+
 export function addModifier(descriptor, modifier) {
   if (!isDescriptor(descriptor)) {
     throw new Error('addModifier requires a view descriptor');
@@ -143,226 +153,6 @@ export function setKey(descriptor, key) {
     key,
     descriptor.modifiers
   );
-}
-
-/**
- * FNV-1a 32-bit hash - fast numeric hashing for change detection.
- * This replaces the previous string concatenation approach, reducing
- * GC pressure and improving comparison speed (number === vs string ===).
- *
- * FNV-1a is chosen for its excellent distribution and speed on short inputs.
- *
- * @param {string} str - Input string
- * @returns {number} 32-bit hash value
- */
-function fnv1a(str) {
-  let hash = 0x811c9dc5; // FNV offset basis
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    hash = (hash * 0x01000193) | 0; // FNV prime, keep as 32-bit int
-  }
-  return hash >>> 0; // Convert to unsigned
-}
-
-/**
- * Mix a value into an existing hash.
- * @param {number} hash - Current hash
- * @param {number} value - Value to mix in
- * @returns {number} Updated hash
- */
-function hashMix(hash, value) {
-  hash ^= value;
-  hash = (hash * 0x01000193) | 0;
-  return hash >>> 0;
-}
-
-/**
- * Compute a numeric hash for a descriptor for fast comparison.
- * Uses FNV-1a with incremental mixing to avoid string allocations.
- *
- * @param {Object} descriptor - View descriptor
- * @returns {number} Numeric hash
- */
-/**
- * Hash of just this node's own type, key, props, and modifiers — children
- * are *not* mixed in. The reconciler uses this to distinguish "this view's
- * own attributes changed" from "a descendant's attributes changed", which
- * lets it patch the affected leaf instead of re-rendering the entire
- * ancestor chain.
- */
-function computeSelfHash(descriptor) {
-  let hash = fnv1a(descriptor.type);
-
-  if (descriptor.key != null) {
-    hash = hashMix(hash, fnv1a(String(descriptor.key)));
-  }
-
-  hash = hashMix(hash, descriptor.children.length);
-  hash = hashMix(hash, descriptor.modifiers.length);
-
-  // Hash prop values (skip functions - they change identity each render)
-  const propKeys = Object.keys(descriptor.props);
-  for (let i = 0; i < propKeys.length; i++) {
-    const key = propKeys[i];
-    const v = descriptor.props[key];
-    if (typeof v === 'function') continue;
-
-    hash = hashMix(hash, fnv1a(key));
-    if (typeof v === 'string') {
-      hash = hashMix(hash, fnv1a(v));
-    } else if (typeof v === 'number') {
-      hash = hashMix(hash, v | 0);
-    } else if (typeof v === 'boolean') {
-      hash = hashMix(hash, v ? 1 : 0);
-    } else if (v != null) {
-      // String coercion can throw on objects with no meaningful toString
-      // (e.g. frozen descriptors used as Show's then/else props). Hash a
-      // stable type token in that case rather than crashing.
-      try {
-        hash = hashMix(hash, fnv1a(String(v)));
-      } catch {
-        hash = hashMix(hash, fnv1a('[object]'));
-      }
-    }
-  }
-
-  // Hash modifier types and simple values
-  for (let i = 0; i < descriptor.modifiers.length; i++) {
-    const mod = descriptor.modifiers[i];
-    hash = hashMix(hash, fnv1a(mod.type));
-    const mv = mod.value;
-    if (typeof mv === 'string') {
-      hash = hashMix(hash, fnv1a(mv));
-    } else if (typeof mv === 'number') {
-      hash = hashMix(hash, mv | 0);
-    } else if (typeof mv === 'boolean') {
-      hash = hashMix(hash, mv ? 1 : 0);
-    } else if (mv && typeof mv === 'object' && typeof mv.rgba === 'function') {
-      hash = hashMix(hash, fnv1a(mv.rgba()));
-    }
-  }
-
-  return hash;
-}
-
-function computeHash(descriptor) {
-  let hash = descriptor._selfHash != null
-    ? descriptor._selfHash
-    : computeSelfHash(descriptor);
-
-  // Mix in child hashes for content-sensitive diffing
-  for (let i = 0; i < descriptor.children.length; i++) {
-    const child = descriptor.children[i];
-    if (child && child._hash != null) {
-      hash = hashMix(hash, child._hash);
-    }
-  }
-
-  return hash;
-}
-
-/**
- * Check if two descriptors are shallowly equal
- *
- * @param {Object} a - First descriptor
- * @param {Object} b - Second descriptor
- * @returns {boolean} True if descriptors are equal
- */
-export function descriptorsEqual(a, b) {
-  if (a === b) return true;
-  if (!isDescriptor(a) || !isDescriptor(b)) return false;
-
-  // Fast path: different hashes mean definitely different
-  if (a._hash !== b._hash) return false;
-
-  // Same type and key
-  if (a.type !== b.type) return false;
-  if (a.key !== b.key) return false;
-
-  // Same number of children and modifiers
-  if (a.children.length !== b.children.length) return false;
-  if (a.modifiers.length !== b.modifiers.length) return false;
-
-  // Shallow props comparison (skip functions - they change identity each render)
-  const aKeys = Object.keys(a.props);
-  const bKeys = Object.keys(b.props);
-  if (aKeys.length !== bKeys.length) return false;
-
-  for (const key of aKeys) {
-    const av = a.props[key];
-    const bv = b.props[key];
-    if (typeof av === 'function' && typeof bv === 'function') continue;
-    if (av !== bv) return false;
-  }
-
-  // Compare modifier values (not just count)
-  for (let i = 0; i < a.modifiers.length; i++) {
-    const am = a.modifiers[i];
-    const bm = b.modifiers[i];
-    if (am.type !== bm.type) return false;
-    if (typeof am.value !== typeof bm.value) return false;
-    if (typeof am.value === 'function') continue;
-    if (typeof am.value === 'object' && am.value !== null) {
-      if (typeof am.value.rgba === 'function' && typeof bm.value?.rgba === 'function') {
-        if (am.value.rgba() !== bm.value.rgba()) return false;
-      } else if (am.value !== bm.value) {
-        // Different object references for non-Color objects
-        const amJSON = JSON.stringify(am.value);
-        const bmJSON = JSON.stringify(bm.value);
-        if (amJSON !== bmJSON) return false;
-      }
-    } else if (am.value !== bm.value) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Memoize a descriptor factory function
- * Returns cached descriptor if inputs haven't changed
- *
- * @param {Function} factory - Function that returns a descriptor
- * @returns {Function} Memoized factory
- */
-export function memo(factory) {
-  let lastArgs = null;
-  let lastResult = null;
-
-  const memoized = (...args) => {
-    // Check if args are the same
-    if (lastArgs !== null && args.length === lastArgs.length) {
-      let same = true;
-      for (let i = 0; i < args.length; i++) {
-        if (args[i] !== lastArgs[i]) {
-          same = false;
-          break;
-        }
-      }
-      if (same) {
-        return lastResult;
-      }
-    }
-
-    lastArgs = args;
-    lastResult = factory(...args);
-    lastResult[MEMOIZED] = true;
-    return lastResult;
-  };
-
-  memoized.isMemo = true;
-  return memoized;
-}
-
-/**
- * Check if a descriptor was memoized (unchanged from previous render)
- *
- * @param {Object} descriptor - View descriptor
- * @returns {boolean} True if memoized
- */
-export function isMemoized(descriptor) {
-  return descriptor && descriptor[MEMOIZED] === true;
 }
 
 /**
@@ -403,6 +193,17 @@ export const ModifierType = {
   // Scoped environment for this view and its descendants (#49):
   // { values: [[key, value]], objects: [object] }.
   ENVIRONMENT: 'environment',
+  // Motion (src/Animation): the value is { apply(element) } built by
+  // animationModifier / transitionModifier / matchedGeometryModifier.
+  ANIMATION: 'animation',
+  TRANSITION: 'transition',
+  MATCHED_GEOMETRY: 'matchedGeometryEffect',
+  // .gesture / .onLongPressGesture / .onDrag (src/Gesture): the value is
+  // { gesture, apply(element) → dispose }.
+  GESTURE: 'gesture',
+  // .mask(_:) and .contentShape(_:): { shape, alignment } / { shape, eoFill }.
+  MASK: 'mask',
+  CONTENT_SHAPE: 'contentShape',
   CUSTOM: 'custom'
 };
 
@@ -439,11 +240,7 @@ export default {
   isLegacyView,
   addModifier,
   setKey,
-  descriptorsEqual,
-  memo,
-  isMemoized,
   createModifier,
   ModifierType,
-  VIEW_DESCRIPTOR,
-  MEMOIZED
+  VIEW_DESCRIPTOR
 };

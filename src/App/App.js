@@ -22,6 +22,9 @@ import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { initDelegation, teardownDelegation } from '../Core/EventDelegate.js';
 import { mount as signalMount } from '../Core/SignalRenderer.js';
 
+/** Host → the AppInstance mounted in it last. */
+const _owners = new WeakMap();
+
 /**
  * App class implementation for mounting views to the DOM.
  */
@@ -75,10 +78,12 @@ class AppInstance {
     // the view is rendered (off-document), then the two are swapped in one
     // step. The host holds its current size until the next frame, so
     // swapping the fallback for the view causes no layout shift.
-    // mode 'adopt' (#39) takes over markup from renderDocument: like
-    // replace, plus a development check that the client tree matches the
-    // server markup, and focus kept inside the host. It swaps in the
-    // client's nodes; it does not reuse the server's (no hydration yet).
+    // mode 'adopt' (#39) hydrates markup from renderDocument or
+    // renderToString: the view renders onto the server's nodes (see
+    // src/Core/Hydration.js), so their identity, focus and scroll offsets
+    // are kept and effects and handlers bind to them. Nodes that don't
+    // match are created fresh; development builds warn about the first
+    // difference.
     const adopt = options.mode === 'adopt';
     const replace = adopt || options.mode === 'replace';
     if (replace) this._holdSize(this._rootElement);
@@ -96,6 +101,7 @@ class AppInstance {
     this._renderCount++;
     if (this._debugMode) console.log(`[App] Mount #${this._renderCount}`);
     this._rootElement.dataset.swiftuiMounted = 'true';
+    _owners.set(this._rootElement, this);
 
     return this;
   }
@@ -151,14 +157,19 @@ class AppInstance {
    */
   unmount() {
     if (this._rootElement) {
-      teardownDelegation(this._rootElement);
+      // A later mount on the same host replaced this app: leave the host to it.
+      const owner = _owners.get(this._rootElement) === this;
+      if (owner) teardownDelegation(this._rootElement);
 
       if (this._signalDispose) {
         this._signalDispose();
         this._signalDispose = null;
       }
 
-      delete this._rootElement.dataset.swiftuiMounted;
+      if (owner) {
+        _owners.delete(this._rootElement);
+        delete this._rootElement.dataset.swiftuiMounted;
+      }
       this._mountedView = null;
     }
     return this;

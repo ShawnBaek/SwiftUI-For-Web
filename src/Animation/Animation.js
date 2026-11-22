@@ -22,6 +22,7 @@
  */
 
 import { nextElementId } from '../Core/ElementID.js';
+import { onRelease } from '../Core/ElementPool.js';
 
 // =============================================================================
 // Animation Class - Matches SwiftUI's Animation type
@@ -361,7 +362,11 @@ export class AnyTransition {
   constructor(options = {}) {
     this._insertion = options.insertion ?? {};
     this._removal = options.removal ?? {};
-    this._animation = options.animation ?? Animation.default;
+    // An animation given with .animation(_:) runs the removal even outside
+    // withAnimation; without one the transition needs a transaction.
+    this._explicitAnimation = options.animation ?? null;
+    this._removalAnimation = options.removalAnimation ?? this._explicitAnimation;
+    this._animation = this._explicitAnimation ?? Animation.default;
   }
 
   /**
@@ -471,7 +476,8 @@ export class AnyTransition {
     return new AnyTransition({
       insertion: { ...this._insertion, ...other._insertion },
       removal: { ...this._removal, ...other._removal },
-      animation: this._animation
+      animation: this._explicitAnimation ?? other._explicitAnimation,
+      removalAnimation: this._removalAnimation ?? other._removalAnimation
     });
   }
 
@@ -484,7 +490,8 @@ export class AnyTransition {
   static asymmetric(insertion, removal) {
     return new AnyTransition({
       insertion: insertion._insertion,
-      removal: removal._removal
+      removal: removal._removal,
+      removalAnimation: removal._removalAnimation
     });
   }
 
@@ -594,6 +601,14 @@ export function withAnimation(animationOrBody, body) {
   return animate(animationOrBody, body);
 }
 
+// Duration plus delay, in ms. `delay` is also the name of the instance
+// method that returns a delayed copy (the method replaces the getter), so
+// read the field.
+function totalMilliseconds(animation) {
+  const delay = typeof animation._delay === 'number' ? animation._delay : 0;
+  return (animation.duration + delay) * 1000;
+}
+
 /**
  * Runs imperative changes inside a SwiftUI-shaped animation transaction.
  *
@@ -637,7 +652,7 @@ export function animate(animationOrBody, body, completion) {
       requestAnimationFrame(() => {
         updateFn();
 
-        const totalMs = (animation.duration + (animation.delay ?? 0)) * 1000;
+        const totalMs = totalMilliseconds(animation);
         setTimeout(() => {
           _isAnimating = false;
           _currentAnimation = null;
@@ -709,7 +724,7 @@ export function animateStyles(element, animationOrStyles = Animation.default, st
   }
 
   const transition = properties
-    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation.delay}s`)
+    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation._delay ?? 0}s`)
     .join(', ');
 
   element.style.transition = transition;
@@ -727,99 +742,213 @@ export function animateStyles(element, animationOrStyles = Animation.default, st
 // =============================================================================
 
 /**
- * Adds animation modifier to a View class
- * Call this with your View class to enable .animation() modifier
+ * `.animation(_:value:)`: changes to this view's styles animate with
+ * `animation`. On the web this is a CSS transition on the element, so any
+ * style change (a State-driven `.opacity(isVisible)`, a frame) animates.
  *
- * @param {Function} ViewClass - The View class to extend
+ * Shared by descriptor views (Chainable) and the legacy View prototype.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/animation(_:value:)
+ * @param {Animation|null} animation - `null` turns animation off
+ * @param {*} [value] - The value whose changes animate (kept for API parity)
+ * @returns {{ animation: Animation|null, value: *, apply: (element: HTMLElement) => void }}
  */
-export function extendViewWithAnimation(ViewClass) {
-  /**
-   * Implicit animation modifier
-   * Animates changes when the specified value changes
-   *
-   * @param {Animation} animation - Animation to use
-   * @param {Object} value - State value to watch (e.g., a State instance)
-   * @returns {View} this
-   */
-  ViewClass.prototype.animation = function(animation, value) {
-    const anim = animation instanceof Animation ? animation : Animation.default;
+export function animationModifier(animation, value) {
+  const anim = animation === null
+    ? null
+    : (animation instanceof Animation ? animation : Animation.default);
+  return {
+    animation: anim,
+    value,
+    apply(element) {
+      element.style.transition = anim ? anim.toCSS() : 'none';
+    }
+  };
+}
 
-    return this.modifier({
-      _animation: anim,
-      _value: value,
-      apply(element) {
-        // Apply CSS transition
-        element.style.transition = anim.toCSS();
+/**
+ * `.transition(_:)`: how the view appears and disappears. An element
+ * inserted inside `withAnimation` starts at the transition's insertion
+ * styles and animates to its normal styles. An element removed inside
+ * `withAnimation`, or whose transition carries an animation
+ * (`AnyTransition.opacity.animation(...)`), animates to the removal styles
+ * before it leaves the document (see removeWithTransition).
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/transition(_:)
+ * @param {AnyTransition} transition
+ */
+export function transitionModifier(transition) {
+  const trans = transition instanceof AnyTransition ? transition : AnyTransition.opacity;
+  return {
+    transition: trans,
+    apply(element) {
+      // Read by removeWithTransition when the view is removed.
+      element._swiftuiTransition = trans;
+      // Insertion runs inside withAnimation only: the first render (and a
+      // hydrating one) must not start transparent.
+      if (!_isAnimating) return undefined;
+      const animation = _currentAnimation ?? Animation.default;
 
-        // If value is a State, subscribe to changes
-        if (value && typeof value.subscribe === 'function') {
-          value.subscribe(() => {
-            // Animation is already applied via CSS transition
-          });
-        }
+      const insertion = trans.insertion;
+      const previous = {};
+      for (const key of Object.keys(insertion)) previous[key] = element.style[key] || '';
+      Object.assign(element.style, insertion);
+
+      if (typeof requestAnimationFrame !== 'function') {
+        Object.assign(element.style, previous);
+        return undefined;
       }
-    });
+      // Animate to identity after a frame, back to the view's own styles.
+      const frame = requestAnimationFrame(() => {
+        element.style.transition = animation.toCSS();
+        Object.assign(element.style, previous);
+      });
+      return () => {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+      };
+    }
+  };
+}
+
+// Elements whose `.transition` runs when `node` is removed: the node itself,
+// or the view inside modifier layers, navigation screen wrappers and
+// `display: contents` wrappers (Show, For, ForEach).
+function transitionTargets(node, out = []) {
+  if (!node || node.nodeType !== 1) return out;
+  if (node._swiftuiTransition) {
+    out.push(node);
+    return out;
+  }
+  const dataset = node.dataset;
+  if (dataset && (dataset.modifierLayer !== undefined || dataset.navigationScreen !== undefined)) {
+    transitionTargets(node.children?.[0], out);
+  } else if (node.style && node.style.display === 'contents' && node.children) {
+    for (const child of Array.from(node.children)) transitionTargets(child, out);
+  }
+  return out;
+}
+
+/** Nodes waiting for their removal transition to finish. */
+const _lingering = new WeakSet();
+
+/**
+ * Run the removal half of the `.transition` of the view(s) in `node`, then
+ * call `finish` (which removes and releases the node). Returns false, and
+ * does nothing, when there is nothing to animate: no transition, no
+ * animation (outside `withAnimation`, with no animation on the transition),
+ * reduced motion, or a node that isn't in the document. The caller then
+ * removes the node right away.
+ *
+ * Only the element lingers: the caller disposes the view's effects first.
+ * While it lingers the node takes no pointer events and is hidden from
+ * assistive technology. If it is released meanwhile (its container went
+ * away), the pending removal is cancelled.
+ *
+ * @param {Node} node - The node about to be removed
+ * @param {() => void} finish - Removes and releases the node
+ * @returns {boolean} Whether removal was deferred
+ * @internal
+ */
+export function removeWithTransition(node, finish) {
+  if (!node || node.nodeType !== 1) return false;
+  if (_lingering.has(node)) return true;
+  const targets = transitionTargets(node);
+  if (targets.length === 0 || !node.isConnected || prefersReducedMotion()) return false;
+
+  const plays = [];
+  let longest = 0;
+  for (const target of targets) {
+    const trans = target._swiftuiTransition;
+    const animation = _isAnimating ? (_currentAnimation ?? Animation.default) : trans._removalAnimation;
+    const removal = trans.removal;
+    if (!animation || !removal || Object.keys(removal).length === 0) continue;
+    plays.push({ target, animation, removal });
+    longest = Math.max(longest, totalMilliseconds(animation));
+  }
+  if (plays.length === 0) return false;
+
+  _lingering.add(node);
+  node.style.pointerEvents = 'none';
+  if (typeof node.setAttribute === 'function') node.setAttribute('aria-hidden', 'true');
+
+  const players = [];
+  const cssPlays = [];
+  let frame = null;
+  let timer = null;
+  let done = false;
+  const end = (removeNow) => {
+    if (done) return;
+    done = true;
+    _lingering.delete(node);
+    if (timer) clearTimeout(timer);
+    if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+    for (const player of players) {
+      try { player.cancel(); } catch { /* already finished */ }
+    }
+    if (removeNow) finish();
   };
 
-  /**
-   * Transition modifier for view insertion/removal
-   *
-   * @param {AnyTransition} transition - Transition to apply
-   * @returns {View} this
-   */
-  ViewClass.prototype.transition = function(transition) {
-    const trans = transition instanceof AnyTransition ? transition : AnyTransition.opacity;
-
-    return this.modifier({
-      _transition: trans,
-      apply(element) {
-        // Store transition for later use
-        element._swiftuiTransition = trans;
-
-        // Apply insertion styles initially (for appearing views)
-        if (_isAnimating) {
-          Object.assign(element.style, trans.insertion);
-
-          // Animate to identity after a frame
-          requestAnimationFrame(() => {
-            element.style.transition = _currentAnimation?.toCSS() ?? Animation.default.toCSS();
-            // Reset to normal state
-            Object.keys(trans.insertion).forEach(key => {
-              element.style[key] = '';
-            });
-          });
-        }
+  for (const play of plays) {
+    if (typeof play.target.animate === 'function') {
+      try {
+        players.push(play.target.animate([play.removal], {
+          ...play.animation.toWAAPIOptions(),
+          iterations: 1,
+          direction: 'normal',
+          fill: 'forwards'
+        }));
+        continue;
+      } catch {
+        // Fall through to a CSS transition.
       }
-    });
-  };
+    }
+    play.target.style.transition = play.animation.toCSS();
+    cssPlays.push(play);
+  }
+  if (cssPlays.length > 0) {
+    const toRemoval = () => {
+      frame = null;
+      for (const play of cssPlays) Object.assign(play.target.style, play.removal);
+    };
+    if (typeof requestAnimationFrame === 'function') frame = requestAnimationFrame(toRemoval);
+    else toRemoval();
+  }
 
-  /**
-   * matchedGeometryEffect - Synchronizes geometry between views
-   * Uses CSS view-transition-name for hero animations
-   *
-   * @param {string} id - Unique identifier for matching
-   * @param {Object} namespace - Namespace from Namespace()
-   * @param {Object} [options] - Options
-   * @param {boolean} [options.isSource=true] - Whether this is the source view
-   * @returns {View} this
-   */
-  ViewClass.prototype.matchedGeometryEffect = function(id, namespace, options = {}) {
-    const { isSource = true } = options;
-    const transitionName = namespace.name(id);
+  timer = setTimeout(() => {
+    timer = null;
+    end(true);
+  }, longest);
+  onRelease(node, () => end(false));
+  return true;
+}
 
-    return this.modifier({
-      apply(element) {
-        // Use CSS view-transition-name for cross-view animations
-        element.style.viewTransitionName = transitionName;
-
-        // Store metadata for the animation system
-        element._matchedGeometry = {
-          id,
-          namespace: namespace.id,
-          isSource
-        };
-      }
-    });
+/**
+ * `.matchedGeometryEffect(id:in:isSource:)`: views with the same id in a
+ * namespace share a `view-transition-name`, so a View Transition animates
+ * one into the other.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/matchedgeometryeffect(id:in:properties:anchor:issource:)
+ * @param {string} id
+ * @param {{ id: string, name: (id: string) => string }} namespace - From Namespace()
+ * @param {{ isSource?: boolean }} [options]
+ */
+export function matchedGeometryModifier(id, namespace, options = {}) {
+  const { isSource = true } = options;
+  const transitionName = namespace && typeof namespace.name === 'function'
+    ? namespace.name(id)
+    : String(id);
+  return {
+    id,
+    namespace,
+    isSource,
+    apply(element) {
+      element.style.viewTransitionName = transitionName;
+      element._matchedGeometry = {
+        id,
+        namespace: namespace?.id,
+        isSource
+      };
+    }
   };
 }
 
@@ -841,7 +970,7 @@ export function isViewTransitionSupported() {
  * @returns {boolean}
  */
 export function prefersReducedMotion() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
@@ -973,7 +1102,8 @@ export function getAnimationStyles() {
  * Inject animation styles into the document
  */
 export function injectAnimationStyles() {
-  if (typeof document === 'undefined') return;
+  // Minimal DOMs (server shims, test mocks) may lack these.
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function' || !document.head) return;
 
   // Check if already injected
   if (document.getElementById('swiftui-animation-styles')) return;
@@ -985,7 +1115,7 @@ export function injectAnimationStyles() {
 }
 
 // Auto-inject styles when module loads in browser
-if (typeof document !== 'undefined') {
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectAnimationStyles);
   } else {
@@ -1006,7 +1136,6 @@ export default {
   withAnimation,
   isAnimating,
   currentAnimation,
-  extendViewWithAnimation,
   isViewTransitionSupported,
   prefersReducedMotion,
   getAnimationStyles,

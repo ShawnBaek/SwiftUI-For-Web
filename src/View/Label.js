@@ -10,10 +10,9 @@
  * Label({ title: () => Text('Custom'), icon: () => Image.systemName('heart') })
  */
 
-import { isDescriptor } from '../Core/ViewDescriptor.js';
-import { render as renderAnyView } from '../Core/Renderer.js';
-import { View } from '../Core/View.js';
-import { Color } from '../Graphic/Color.js';
+import { createDescriptor, isView } from '../Core/ViewDescriptor.js';
+import { chainable } from '../Core/Chainable.js';
+import { registerRenderer, render } from '../Core/Renderer.js';
 
 /**
  * Label style enum
@@ -102,110 +101,67 @@ const SystemIcons = {
 };
 
 /**
- * Label view class
- */
-export class LabelView extends View {
-  constructor(titleOrOptions, options = {}) {
-    super();
-
-    this._labelStyle = LabelStyle.automatic;
-
-    if (typeof titleOrOptions === 'string') {
-      // Label('Title', { systemImage: 'star' })
-      this._title = titleOrOptions;
-      this._systemImage = options.systemImage ?? null;
-      this._image = options.image ?? null;
-      this._titleBuilder = null;
-      this._iconBuilder = null;
-    } else if (typeof titleOrOptions === 'object') {
-      // Label({ title: () => Text('...'), icon: () => Image(...) })
-      this._title = null;
-      this._systemImage = null;
-      this._image = null;
-      this._titleBuilder = titleOrOptions.title ?? null;
-      this._iconBuilder = titleOrOptions.icon ?? null;
-    }
-  }
-
-  /**
-   * Set the label style
-   * @param {string} style - LabelStyle value
-   * @returns {LabelView} Returns this for chaining
-   */
-  labelStyle(style) {
-    this._labelStyle = style;
-    return this;
-  }
-
-  _render() {
-    const el = document.createElement('div');
-    el.dataset.view = 'label';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.gap = '6px';
-
-    const showIcon = this._labelStyle === LabelStyle.automatic ||
-      this._labelStyle === LabelStyle.iconOnly ||
-      this._labelStyle === LabelStyle.titleAndIcon;
-
-    const showTitle = this._labelStyle === LabelStyle.automatic ||
-      this._labelStyle === LabelStyle.titleOnly ||
-      this._labelStyle === LabelStyle.titleAndIcon;
-
-    // Render icon
-    if (showIcon) {
-      const iconEl = document.createElement('span');
-      iconEl.dataset.labelPart = 'icon';
-
-      if (this._iconBuilder) {
-        const iconView = this._iconBuilder();
-        if (iconView instanceof View || isDescriptor(iconView)) {
-          const rendered = renderAnyView(iconView);
-          iconEl.appendChild(rendered);
-        }
-      } else if (this._systemImage) {
-        iconEl.textContent = SystemIcons[this._systemImage] ?? '●';
-        iconEl.style.fontSize = '1.1em';
-      } else if (this._image) {
-        const img = document.createElement('img');
-        img.src = this._image;
-        img.style.width = '1.2em';
-        img.style.height = '1.2em';
-        img.style.objectFit = 'contain';
-        iconEl.appendChild(img);
-      }
-
-      el.appendChild(iconEl);
-    }
-
-    // Render title
-    if (showTitle) {
-      const titleEl = document.createElement('span');
-      titleEl.dataset.labelPart = 'title';
-
-      if (this._titleBuilder) {
-        const titleView = this._titleBuilder();
-        if (titleView instanceof View || isDescriptor(titleView)) {
-          const rendered = renderAnyView(titleView);
-          titleEl.appendChild(rendered);
-        }
-      } else if (this._title) {
-        titleEl.textContent = this._title;
-      }
-
-      el.appendChild(titleEl);
-    }
-
-    return this._applyModifiers(el);
-  }
-}
-
-/**
- * Factory function for Label
+ * Label('Title', { systemImage | image }) or Label({ title, icon }), where
+ * title and icon are functions returning views.
+ *
+ * @returns {Object} Chainable view descriptor
  */
 export function Label(titleOrOptions, options = {}) {
-  return new LabelView(titleOrOptions, options);
+  const custom = typeof titleOrOptions === 'object' && titleOrOptions !== null;
+  return chainable(createDescriptor('Label', {
+    title: custom ? null : titleOrOptions,
+    systemImage: custom ? null : options.systemImage ?? null,
+    image: custom ? null : options.image ?? null,
+    titleBuilder: custom ? titleOrOptions.title ?? null : null,
+    iconBuilder: custom ? titleOrOptions.icon ?? null : null,
+    labelStyle: LabelStyle.automatic,
+  }), ({ withProps }) => ({
+    labelStyle: (style) => withProps({ labelStyle: style }),
+  }));
 }
+
+function labelPart(name, builder) {
+  const part = document.createElement('span');
+  part.dataset.labelPart = name;
+  const view = builder?.();
+  if (isView(view)) part.appendChild(render(view));
+  return part;
+}
+
+registerRenderer('Label', (props) => {
+  const el = document.createElement('div');
+  el.dataset.view = 'label';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.gap = '6px';
+
+  const style = props.labelStyle;
+  if (style !== LabelStyle.titleOnly) {
+    const icon = labelPart('icon', props.iconBuilder);
+    if (props.iconBuilder) {
+      // labelPart rendered it.
+    } else if (props.systemImage) {
+      icon.textContent = SystemIcons[props.systemImage] ?? '●';
+      icon.style.fontSize = '1.1em';
+    } else if (props.image) {
+      const img = document.createElement('img');
+      img.src = props.image;
+      img.style.width = '1.2em';
+      img.style.height = '1.2em';
+      img.style.objectFit = 'contain';
+      icon.appendChild(img);
+    }
+    el.appendChild(icon);
+  }
+
+  if (style !== LabelStyle.iconOnly) {
+    const title = labelPart('title', props.titleBuilder);
+    if (!props.titleBuilder && props.title) title.textContent = props.title;
+    el.appendChild(title);
+  }
+
+  return el;
+});
 
 export { SystemIcons };
 export default Label;

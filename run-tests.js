@@ -9,6 +9,23 @@ class MockDocument {
     this.body = this.createElement('body');
     this.head = this.createElement('head');
     this.elements = new Map();
+    this._eventListeners = {};
+  }
+
+  // Document-level listeners (DragGesture tracks mouse moves on the document).
+  addEventListener(event, handler) {
+    (this._eventListeners[event] ||= []).push(handler);
+  }
+
+  removeEventListener(event, handler) {
+    const listeners = this._eventListeners[event];
+    if (listeners) this._eventListeners[event] = listeners.filter((candidate) => candidate !== handler);
+  }
+
+  dispatchEvent(event) {
+    if (!event.target) event.target = this;
+    (this._eventListeners[event.type] || []).slice().forEach((handler) => handler(event));
+    return !event.defaultPrevented;
   }
 
   createElement(tag) {
@@ -183,6 +200,25 @@ class MockElement {
 
   get isConnected() {
     return global.document?.contains(this) || false;
+  }
+
+  // Document order, for .navigationTitle's title stack: 4 when `other`
+  // follows this node (or is inside it), 2 when it precedes it.
+  compareDocumentPosition(other) {
+    const path = (node) => {
+      const chain = [];
+      for (let at = node; at; at = at.parentNode) chain.unshift(at);
+      return chain;
+    };
+    const a = path(this);
+    const b = path(other);
+    if (a[0] !== b[0]) return 1; // DISCONNECTED
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    if (i === a.length) return 16 | 4; // other is inside this
+    if (i === b.length) return 8 | 2; // other contains this
+    const siblings = a[i - 1].children;
+    return siblings.indexOf(b[i]) > siblings.indexOf(a[i]) ? 4 : 2;
   }
 
   addEventListener(event, handler) {
@@ -385,19 +421,28 @@ async function runTests() {
     const { For } = await import('./src/View/ControlFlow/For.js');
     const { TabView, TabViewStyle } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
-    const { GroupView } = await import('./src/View/Container/Group.js');
+    const { Group } = await import('./src/View/Container/Group.js');
+    const { View: LegacyView } = await import('./src/Core/View.js');
+    // A user-defined class view on the deprecated View base (#48).
+    class LegacyGroup extends LegacyView {
+      static builtIn = true; // no deprecation warning in these tests
+      constructor(...children) { super(); this._children = children; }
+      _render() {
+        const el = document.createElement('div');
+        for (const child of this._children) el.appendChild(render(child));
+        return this._applyModifiers(el);
+      }
+    }
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
-    const { Picker, PickerStyle, PickerView } = await import('./src/View/Control/Picker.js');
+    const { Picker, PickerStyle } = await import('./src/View/Control/Picker.js');
     const { List: A11yList } = await import('./src/View/List/List.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
     const { Button: MenuButton } = await import('./src/View/Control/Button.js');
     const { Divider: MenuDivider } = await import('./src/Layout/Divider.js');
     const focusRingControls = {
-      // The control classes (#48: the factories return descriptors).
-      Slider: (await import('./src/View/Control/Slider.js')).SliderView,
-      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePickerView,
-      TextField: (await import('./src/View/Control/TextField.js')).TextFieldView,
+      Slider: (await import('./src/View/Control/Slider.js')).Slider,
+      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
     };
     const { Stepper } = await import('./src/View/Control/Stepper.js');
 
@@ -997,6 +1042,23 @@ async function runTests() {
         teardown();
       });
 
+      // #42: the creation site survives chainable() (it copies enumerable
+      // properties only), so errors from built-in views say where they were created.
+      it('render errors from built-in views name the creation site', () => {
+        let caught = null;
+        try {
+          mountInRoot(() => VStack(ModifierText(() => { throw new Error('thunk exploded'); })));
+        } catch (error) {
+          caught = error;
+        }
+        expect(Boolean(caught)).toBe(true);
+        expect(caught.message.includes('failed to render: thunk exploded')).toBe(true);
+        if (DEV_BUILD) {
+          expect(caught.message.includes('created at')).toBe(true);
+          expect(caught.message.includes('run-tests.js')).toBe(true);
+        }
+      });
+
       // #42: render and modifier errors name the view and where it was created.
       it('render and modifier errors name the view, the modifier and the creation site', () => {
         registerRenderer('BoomView', () => { throw new Error('renderer exploded'); });
@@ -1331,8 +1393,8 @@ async function runTests() {
       });
 
       it('a selectable List makes untagged rows disabled options, and a page TabView without dots has no tab roles', () => {
-        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two')).tabViewStyle(TabViewStyle.page);
-        hiddenDots._pageIndicatorVisibility = 'never';
+        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two'))
+          .tabViewStyle(TabViewStyle.page, { indexDisplayMode: 'never' });
         const root = document.createElement('div');
         document.body.appendChild(root);
         const app = App(() => VStack(
@@ -1700,13 +1762,13 @@ async function runTests() {
       it('owns the effects of screens NavigationStack pushes and pops', () => {
         const n = new State(0);
         const actions = [];
-        const detail = () => new GroupView(
+        const detail = () => Group(
           ModifierText(() => 'd' + n.value).onChange(() => n.value, (_, value) => actions.push(value))
         );
         let stack;
         const root = document.createElement('div');
         document.body.appendChild(root);
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root'))))).mount(root);
 
         stack.push(detail(), '', false);
         stack.pop(false);
@@ -1733,18 +1795,18 @@ async function runTests() {
         try {
           // Rendered from a callback with no owner (as NavigationSplitView does
           // for its detail): content stays static, no effects are created.
-          TabView(new State(0), reactive('B'), VStack(ModifierText('y')))._render();
+          render(TabView(new State(0), reactive('B'), VStack(ModifierText('y'))));
           n.value = 1;
           Scheduler.flushSync();
           expect(actions).toEqual([]);
 
-          // View.rerender() of a mounted NavigationStack (as NavigationPath
-          // does): nothing keeps firing after the app unmounts.
+          // A mounted NavigationStack rendered again from outside any owner:
+          // nothing keeps firing after the app unmounts.
           let stack;
           const root = document.createElement('div');
           document.body.appendChild(root);
-          const app = App(() => (stack = NavigationStack(new GroupView(reactive('C'))))).mount(root);
-          stack.rerender();
+          const app = App(() => (stack = NavigationStack(Group(reactive('C'))))).mount(root);
+          render(stack);
           app.unmount();
           root.remove();
           actions.length = 0;
@@ -1958,8 +2020,8 @@ async function runTests() {
         const actions = [];
         let stack;
         const root = attachedRoot();
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
-        stack.push(new GroupView(Button('Save', () => actions.push('save'))), '', false);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root'))))).mount(root);
+        stack.push(Group(Button('Save', () => actions.push('save'))), '', false);
         const saveButton = findTag(root, 'BUTTON');
         stack.pop(false);
 
@@ -2236,8 +2298,8 @@ async function runTests() {
         let stack;
         const first = document.createElement('div');
         document.body.appendChild(first);
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
-        stack.push(new GroupView(ModifierText('detail')), '', true);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
+        stack.push(Group(ModifierText('detail')), '', true);
         app.unmount();
         first.remove();
 
@@ -2808,7 +2870,7 @@ async function runTests() {
             TaskSpacer().task(run('Spacer')),
             TaskDivider().task(run('Divider')),
             TaskForEach([1], () => ModifierText('row')).task(run('ForEach')),
-            new GroupView(ModifierText('legacy')).task(run('legacy View'))
+            new LegacyGroup(ModifierText('legacy')).task(run('legacy View'))
           )).mount(attachedRoot());
           appear();
           await tick();
@@ -3244,12 +3306,12 @@ async function runTests() {
       });
 
       it('legacy View.environment scopes its subtree too', () => {
-        // GroupView extends the legacy View base class; install .environment on it.
-        extendViewWithEnvironment(Object.getPrototypeOf(GroupView));
+        // Install .environment on the legacy View base class.
+        extendViewWithEnvironment(LegacyView);
         const root = document.createElement('div');
         document.body.appendChild(root);
         const app = App(() => VStack(
-          new GroupView(ModifierText(() => String(EnvStore.get('theme') ?? 'global'))).environment('theme', 'legacy'),
+          new LegacyGroup(ModifierText(() => String(EnvStore.get('theme') ?? 'global'))).environment('theme', 'legacy'),
           ModifierText(() => String(EnvStore.get('theme') ?? 'global'))
         )).mount(root);
         const texts = [];
@@ -3608,42 +3670,43 @@ async function runTests() {
     });
 
     // Test TextField
-    const { TextField, TextFieldView, SecureField, SecureFieldView } = await import('./src/View/Control/TextField.js');
+    const { TextField, SecureField } = await import('./src/View/Control/TextField.js');
     describe('TextField', () => {
-      it('TextField returns a descriptor that TextFieldView renders (#48)', () => {
+      it('TextField returns a descriptor with its own methods (#48)', () => {
         const field = TextField('Placeholder').textFieldStyle('plain');
         expect(field.type).toBe('TextField');
-        expect(field.props.calls).toEqual([['textFieldStyle', ['plain']]]);
-        expect(new TextFieldView('Placeholder')).toBeInstanceOf(TextFieldView);
+        expect(field.props.style).toBe('plain');
+        expect(render(field).style.border).toBe('none');
       });
 
-      it('should set placeholder', () => {
-        const field = new TextFieldView('Enter name');
-        expect(field._placeholder).toBe('Enter name');
+      it('does not mutate the descriptor a method is called on', () => {
+        const base = TextField('Placeholder');
+        base.disabled();
+        expect(render(base).disabled).toBe(false);
       });
 
       it('should render an input element', () => {
-        const field = new TextFieldView('Placeholder');
-        const element = field._render();
+        const field = TextField('Placeholder');
+        const element = render(field);
         expect(element.tagName).toBe('INPUT');
       });
 
       it('should set data-view to TextField', () => {
-        const field = new TextFieldView('Placeholder');
-        const element = field._render();
+        const field = TextField('Placeholder');
+        const element = render(field);
         expect(element.dataset.view).toBe('TextField');
       });
 
       it('should set placeholder attribute', () => {
-        const field = new TextFieldView('Enter name');
-        const element = field._render();
+        const field = TextField('Enter name');
+        const element = render(field);
         expect(element.placeholder).toBe('Enter name');
       });
 
       it('should update binding when input changes', () => {
         const state = new State('');
-        const field = new TextFieldView('Placeholder', state.binding);
-        const element = field._render();
+        const field = TextField('Placeholder', state.binding);
+        const element = render(field);
 
         element.value = 'New Value';
         element.dispatchEvent(new Event('input'));
@@ -3652,63 +3715,81 @@ async function runTests() {
       });
 
       it('should disable the input', () => {
-        const field = new TextFieldView('Placeholder').disabled();
-        const element = field._render();
+        const field = TextField('Placeholder').disabled();
+        const element = render(field);
         expect(element.disabled).toBe(true);
       });
 
       it('should apply roundedBorder style', () => {
-        const field = new TextFieldView('Placeholder').textFieldStyle('roundedBorder');
-        const element = field._render();
+        const field = TextField('Placeholder').textFieldStyle('roundedBorder');
+        const element = render(field);
         expect(element.style.borderRadius).toBe('6px');
       });
 
       it('should set input type for email keyboard', () => {
-        const field = new TextFieldView('Email').keyboardType('email');
-        const element = field._render();
+        const field = TextField('Email').keyboardType('email');
+        const element = render(field);
         expect(element.type).toBe('email');
       });
     });
 
     describe('SecureField', () => {
-      it('should create a SecureFieldView instance', () => {
-        const field = new SecureFieldView('Password');
-        expect(field).toBeInstanceOf(SecureFieldView);
+      it('should return a SecureField descriptor', () => {
+        expect(SecureField('Password').type).toBe('SecureField');
+      });
+
+      it('keeps the commit callback from the options object', () => {
+        let committed = 0;
+        const element = render(SecureField({ placeholder: 'Password', onCommit: () => committed++ }));
+        element.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Enter' }));
+        expect(committed).toBe(1);
       });
 
       it('should render input with type password', () => {
-        const field = new SecureFieldView('Password');
-        const element = field._render();
+        const field = SecureField('Password');
+        const element = render(field);
         expect(element.type).toBe('password');
       });
     });
 
     // Test Toggle
-    const { Toggle, ToggleView } = await import('./src/View/Control/Toggle.js');
+    const { Toggle } = await import('./src/View/Control/Toggle.js');
     describe('Toggle', () => {
-      it('should create a ToggleView instance', () => {
+      it('should return a Toggle descriptor', () => {
         const state = new State(false);
         expect(Toggle(state.binding).type).toBe('Toggle');
-        expect(new ToggleView(state.binding)).toBeInstanceOf(ToggleView);
       });
 
       it('should accept label and binding', () => {
         const state = new State(false);
-        const toggle = new ToggleView('Enable', state.binding);
-        expect(toggle._label).toBe('Enable');
+        const element = render(Toggle('Enable', state.binding));
+        expect(element.children[0]._textContent ?? element.children[0].textContent).toBe('Enable');
+      });
+
+      it('accepts a descriptor label view and names the switch with it', () => {
+        const state = new State(false);
+        const element = render(Toggle(ModifierText('Bluetooth'), state.binding));
+        const [label, track] = element.children;
+        expect(track.getAttribute('aria-labelledby')).toBe(label.id);
+      });
+
+      it('accepts an options object', () => {
+        const state = new State(true);
+        const element = render(Toggle({ label: 'Opt', isOn: state.binding }));
+        expect(element.children[1].getAttribute('aria-checked')).toBe('true');
       });
 
       it('should render a div for switch style', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
         expect(element.tagName).toBe('DIV');
       });
 
       // #51: the switch is a native button with role="switch".
       // #51: no control suppresses the :focus-visible ring with inline styles.
       it('DisclosureGroup exposes aria-expanded and hides collapsed content', () => {
-        const element = A11yDisclosureGroup('Details', new GroupView(ModifierText('Body')))._render();
+        const element = render(A11yDisclosureGroup('Details', Group(ModifierText('Body'))));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const header = find(element, (node) => node.dataset?.disclosurePart === 'header');
         const content = find(element, (node) => node.dataset?.disclosurePart === 'content');
@@ -3729,7 +3810,7 @@ async function runTests() {
         if (!hadListener) document.addEventListener = () => {};
         let element;
         try {
-          element = A11yMenu('Actions', new GroupView(ModifierText('Copy')))._render();
+          element = render(A11yMenu('Actions', Group(ModifierText('Copy'))));
         } finally {
           if (!hadListener) delete document.addEventListener;
         }
@@ -3754,12 +3835,12 @@ async function runTests() {
         const calls = [];
         let element;
         try {
-          element = A11yMenu('Actions',
+          element = render(A11yMenu('Actions',
             MenuButton('Copy', () => calls.push('copy')),
             MenuDivider(),
             MenuButton('Delete', () => calls.push('delete')).disabled(),
             MenuButton(() => calls.push('share'), ModifierText('Share')).foregroundColor('red')
-          )._render();
+          ));
         } finally {
           if (!hadListener) delete document.addEventListener;
         }
@@ -3834,13 +3915,14 @@ async function runTests() {
       });
 
       it('form controls leave the focus ring to :focus-visible', () => {
-        const { Slider, DatePicker, TextField } = focusRingControls;
+        const { Slider, DatePicker } = focusRingControls;
         const all = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => all(c, out)); return out; };
         const rendered = [
-          new Slider(new State(0.5).binding)._render(),
-          new DatePicker('Date', new State(new Date(0)).binding)._render(),
-          new TextFieldView('Name', new State('').binding).textFieldStyle('plain')._render(),
-          new PickerView('Pick', new State('a').binding, ModifierText('A').tag('a'))._render(),
+          render(Slider(new State(0.5).binding)),
+          render(DatePicker('Date', new State(new Date(0)).binding)),
+          render(TextField('Name', new State('').binding).textFieldStyle('plain')),
+          render(Picker('Pick', new State('a').binding, ModifierText('A').tag('a'))),
+          render(Picker('Pick', new State('a').binding, ModifierText('A').tag('a')).pickerStyle(PickerStyle.segmented)),
         ];
         for (const root of rendered) {
           for (const node of all(root)) expect(node.style?.outline || '').toBe('');
@@ -3849,7 +3931,7 @@ async function runTests() {
 
       it('renders the switch as a labelled button with role switch and aria-checked', () => {
         const state = new State(false);
-        const element = new ToggleView('Wi-Fi', state.binding)._render();
+        const element = render(Toggle('Wi-Fi', state.binding));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(Boolean(button)).toBe(true);
@@ -3865,7 +3947,7 @@ async function runTests() {
 
       it('a disabled switch is a disabled button', () => {
         const state = new State(false);
-        const element = new ToggleView('Off', state.binding).disabled(true)._render();
+        const element = render(Toggle('Off', state.binding).disabled(true));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(button.disabled).toBe(true);
@@ -3874,15 +3956,15 @@ async function runTests() {
 
       it('should set data-view to Toggle', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
         expect(element.dataset.view).toBe('Toggle');
       });
 
       it('should update binding when clicked', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
 
         element.click();
 
@@ -3891,8 +3973,8 @@ async function runTests() {
 
       it('should not toggle when disabled', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding).disabled();
-        const element = toggle._render();
+        const toggle = Toggle(state.binding).disabled();
+        const element = render(toggle);
 
         element.click();
 
@@ -3901,17 +3983,879 @@ async function runTests() {
 
       it('should render checkbox style', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
-        const element = toggle._render();
+        const toggle = Toggle(state.binding).toggleStyle('checkbox');
+        const element = render(toggle);
         expect(element.tagName).toBe('LABEL');
       });
 
       it('should render button style', () => {
         const state = new State(false);
-        const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button');
-        const element = toggle._render();
+        const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+        const element = render(toggle);
         expect(element.tagName).toBe('BUTTON');
       });
+    });
+
+    // Restored modifiers on descriptor views: gestures, animation, mask,
+    // contentShape (#48, #50). docs/parity-audit.md lists the gaps.
+    const GestureModule = await import('./src/Gesture/Gesture.js');
+    const AnimationModule = await import('./src/Animation/Animation.js');
+    const { Circle: ParityCircle, Rectangle: ParityRectangle, RoundedRectangle: ParityRoundedRectangle } = await import('./src/Shape/Shape.js');
+    const { LinearGradient: ParityLinearGradient } = await import('./src/Graphic/Gradient.js');
+    const { Toggle: ParityToggle } = await import('./src/View/Control/Toggle.js');
+    const { DatePicker: ParityDatePicker } = await import('./src/View/Control/DatePicker.js');
+    const { ColorPicker: ParityColorPicker } = await import('./src/View/Control/ColorPicker.js');
+    const { Color: ParityColor } = await import('./src/Graphic/Color.js');
+    await import('./src/runtime.js');
+    const mouse = (type, x, y) => Object.assign(new MockEvent(type), { clientX: x, clientY: y });
+    const touch = (type, points) => Object.assign(new MockEvent(type), {
+      touches: points.map(([x, y]) => ({ clientX: x, clientY: y })),
+      cancelable: true,
+    });
+    const findAll = (node, test, out = []) => {
+      if (test(node)) out.push(node);
+      (node.children || []).forEach((child) => findAll(child, test, out));
+      return out;
+    };
+
+    describe('Descriptor parity: restored legacy modifiers', () => {
+      const RESTORED = ['animation', 'transition', 'matchedGeometryEffect', 'gesture',
+        'onLongPressGesture', 'onDrag', 'mask', 'contentShape'];
+
+      it('every descriptor family has the restored modifiers, and they survive chaining', () => {
+        const views = {
+          Text: ModifierText('a'),
+          VStack: VStack(ModifierText('a')),
+          Button: Button('b', () => {}),
+          Toggle: ParityToggle('t', new State(false).binding),
+          Picker: Picker('p', new State(1).binding, ModifierText('One').tag(1)),
+          Stepper: Stepper('s', new State(0).binding),
+          ChainedText: ModifierText('a').padding(4).bold(),
+        };
+        for (const [name, view] of Object.entries(views)) {
+          for (const method of RESTORED) {
+            if (typeof view[method] !== 'function') throw new Error(`${name} lacks .${method}()`);
+          }
+        }
+        expect(Object.isFrozen(ModifierText('a').gesture(GestureModule.TapGesture()))).toBe(true);
+      });
+
+      it('the legacy View class still has the same modifiers', () => {
+        for (const method of RESTORED) {
+          expect(typeof LegacyView.prototype[method]).toBe('function');
+        }
+      });
+
+      it('.gesture(TapGesture()) fires onEnded on click; TapGesture(2) needs two clicks', () => {
+        const taps = [];
+        const single = render(ModifierText('tap').gesture(GestureModule.TapGesture().onEnded(() => taps.push('single'))));
+        single.dispatchEvent(mouse('click', 1, 2));
+        const double = render(ModifierText('tap').gesture(GestureModule.TapGesture(2).onEnded(() => taps.push('double'))));
+        double.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toEqual(['single']);
+        double.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toEqual(['single', 'double']);
+      });
+
+      it('.onDrag reports translation through onChanged and onEnded', () => {
+        const changed = [];
+        let ended = null;
+        const element = render(VStack(ModifierText('drag')).onDrag((v) => changed.push(v.translation), (v) => { ended = v.translation; }));
+        expect(element.style.cursor).toBe('grab');
+        element.dispatchEvent(mouse('mousedown', 10, 10));
+        document.dispatchEvent(mouse('mousemove', 13, 10)); // below minimumDistance
+        expect(changed.length).toBe(0);
+        document.dispatchEvent(mouse('mousemove', 40, 30));
+        document.dispatchEvent(mouse('mouseup', 40, 30));
+        expect(changed).toEqual([{ width: 30, height: 20 }]);
+        expect(ended).toEqual({ width: 30, height: 20 });
+      });
+
+      it('one gesture attached to two elements keeps separate state per element', () => {
+        const ends = [];
+        const drag = GestureModule.DragGesture({ minimumDistance: 0 }).onEnded((v) => ends.push(v.startLocation.x));
+        const view = ModifierText('x').gesture(drag);
+        const a = render(view);
+        const b = render(view);
+        a.dispatchEvent(mouse('mousedown', 1, 0));
+        document.dispatchEvent(mouse('mousemove', 5, 0));
+        document.dispatchEvent(mouse('mouseup', 5, 0));
+        expect(ends).toEqual([1]);
+        b.dispatchEvent(mouse('mousedown', 7, 0));
+        document.dispatchEvent(mouse('mousemove', 9, 0));
+        document.dispatchEvent(mouse('mouseup', 9, 0));
+        expect(ends).toEqual([1, 7]);
+      });
+
+      it('MagnificationGesture and RotationGesture follow two touches', () => {
+        let scale = null;
+        let angle = null;
+        const pinch = render(ModifierText('p').gesture(GestureModule.MagnificationGesture().onEnded((v) => { scale = v.magnification; })));
+        pinch.dispatchEvent(touch('touchstart', [[0, 0], [10, 0]]));
+        pinch.dispatchEvent(touch('touchmove', [[0, 0], [20, 0]]));
+        pinch.dispatchEvent(touch('touchend', []));
+        expect(scale).toBe(2);
+        const rotate = render(ModifierText('r').gesture(GestureModule.RotationGesture().onEnded((v) => { angle = v.rotation; })));
+        rotate.dispatchEvent(touch('touchstart', [[0, 0], [10, 0]]));
+        rotate.dispatchEvent(touch('touchmove', [[0, 0], [0, 10]]));
+        rotate.dispatchEvent(touch('touchend', []));
+        expect(Math.round(angle * 1000) / 1000).toBe(Math.round((Math.PI / 2) * 1000) / 1000);
+      });
+
+      it('gesture listeners are removed when the owner is disposed', () => {
+        let taps = 0;
+        let element = null;
+        const dispose = Signal.createRoot((d) => {
+          element = render(ModifierText('t').gesture(GestureModule.TapGesture().onEnded(() => { taps++; })));
+          return d;
+        });
+        element.dispatchEvent(mouse('click', 0, 0));
+        dispose();
+        element.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toBe(1);
+        expect((element._eventListeners.click || []).length).toBe(0);
+      });
+
+      it('gesture listeners are removed when the element is released to the pool, including document listeners', () => {
+        ElementPool.clearPools();
+        const before = (document._eventListeners.mousemove || []).length;
+        let taps = 0;
+        const element = render(ModifierText('t').gesture(GestureModule.TapGesture().onEnded(() => { taps++; })));
+        const dragged = render(ModifierText('d').onDrag(() => {}));
+        expect((document._eventListeners.mousemove || []).length).toBe(before + 1);
+        ElementPool.releaseElement(element);
+        ElementPool.releaseElement(dragged);
+        element.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toBe(0);
+        expect((document._eventListeners.mousemove || []).length).toBe(before);
+      });
+
+      it('.animation sets a CSS transition from the Animation; .animation(null) turns it off', () => {
+        const animated = render(ModifierText('a').opacity(0.5).animation(AnimationModule.Animation.easeInOut(0.3)));
+        expect(animated.style.transition).toBe(AnimationModule.Animation.easeInOut(0.3).toCSS());
+        expect(render(ModifierText('a').animation(null)).style.transition).toBe('none');
+        expect(render(ModifierText('a').animation()).style.transition).toBe(AnimationModule.Animation.default.toCSS());
+      });
+
+      it('.matchedGeometryEffect names the view transition from the namespace', () => {
+        const ns = AnimationModule.Namespace();
+        const element = render(ModifierText('hero').matchedGeometryEffect('card', ns, { isSource: false }));
+        expect(element.style.viewTransitionName).toBe(ns.name('card'));
+        expect(element._matchedGeometry.isSource).toBe(false);
+      });
+
+      it('.transition outside withAnimation leaves the view at its normal styles', () => {
+        const element = render(ModifierText('t').transition(AnimationModule.AnyTransition.opacity));
+        expect(element.style.opacity === undefined || element.style.opacity === '').toBe(true);
+        expect(element._swiftuiTransition instanceof AnimationModule.AnyTransition).toBe(true);
+      });
+
+      it('.mask clips to a shape, and a gradient masks with mask-image', () => {
+        expect(render(ModifierText('m').mask(ParityCircle())).style.clipPath).toBe('circle(50%)');
+        expect(render(ModifierText('m').mask('capsule')).style.clipPath).toBe('inset(0 round 9999px)');
+        expect(render(ModifierText('m').mask(ParityRoundedRectangle({ cornerRadius: 6 }))).style.clipPath).toBe('inset(0 round 6px)');
+        // clipShape read the Shape view's cornerRadius() method as the radius.
+        expect(render(ModifierText('m').clipShape(ParityRoundedRectangle({ cornerRadius: 6 }))).style.borderRadius).toBe('6px');
+        const gradient = ParityLinearGradient([ParityColor.black, ParityColor.clear]);
+        const masked = render(ModifierText('m').mask(gradient));
+        expect(masked.style.maskImage).toBe(gradient.css());
+      });
+
+      it('.mask orders with drawing modifiers: a background after the mask is not masked', () => {
+        const inside = render(ModifierText('m').background('red').mask(ParityCircle()));
+        expect(inside.style.clipPath).toBe('circle(50%)');
+        expect(inside.style.background || inside.style.backgroundColor).toBeTruthy();
+        const outside = render(ModifierText('m').mask(ParityCircle()).background('red'));
+        expect(outside.dataset.modifierLayer).toBe('');
+        expect(outside.style.clipPath === undefined || outside.style.clipPath === '').toBe(true);
+        expect(outside.children[0].style.clipPath).toBe('circle(50%)');
+      });
+
+      it('.contentShape makes the box hit-testable; a rectangle does not clip, a circle rounds', () => {
+        const rect = render(ModifierText('c').contentShape(ParityRectangle()));
+        expect(rect.style.pointerEvents).toBe('auto');
+        expect(rect.style.overflow === undefined || rect.style.overflow === '').toBe(true);
+        const round = render(ModifierText('c').contentShape(ParityCircle()));
+        expect(round.style.borderRadius).toBe('50%');
+      });
+    });
+
+    describe('Descriptor parity: controls follow binding writes made elsewhere', () => {
+      const owned = (view) => {
+        let element = null;
+        const dispose = Signal.createRoot((d) => { element = render(view); return d; });
+        return { element, dispose };
+      };
+
+      it('Picker (menu, segmented, inline) shows a selection written elsewhere', () => {
+        const flavor = new State('a');
+        const options = () => [ModifierText('A').tag('a'), ModifierText('B').tag('b')];
+        const menu = owned(Picker('F', flavor.binding, ...options()));
+        const segmented = owned(Picker('F', flavor.binding, ...options()).pickerStyle(PickerStyle.segmented));
+        const inline = owned(Picker('F', flavor.binding, ...options()).pickerStyle(PickerStyle.inline));
+        flavor.value = 'b';
+        Scheduler.flushSync();
+        const select = findAll(menu.element, (n) => n.tagName === 'SELECT')[0];
+        expect(select.selectedIndex).toBe(1);
+        const radios = findAll(segmented.element, (n) => n.getAttribute && n.getAttribute('role') === 'radio');
+        expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+        const marks = inline.element.children.map((row) => row.children[0].textContent);
+        expect(marks).toEqual(['', '✓']);
+        menu.dispose(); segmented.dispose(); inline.dispose();
+      });
+
+      it('Stepper dims the + button when the value reaches max from elsewhere', () => {
+        const count = new State(0);
+        const { element, dispose } = owned(Stepper('Count', count.binding, { in: [0, 3] }));
+        const buttons = findAll(element, (n) => n.tagName === 'BUTTON');
+        expect(buttons[1].style.opacity).toBe('1');
+        count.value = 3;
+        Scheduler.flushSync();
+        expect(buttons[1].style.opacity).toBe('0.3');
+        expect(buttons[0].style.opacity).toBe('1');
+        dispose();
+      });
+
+      it('Stepper disables the button at a range limit, not only dims it', () => {
+        const count = new State(0);
+        const { element, dispose } = owned(Stepper('Count', count.binding, { in: [0, 1] }));
+        const [minus, plus] = findAll(element, (n) => n.tagName === 'BUTTON');
+        // `disabled` stops keyboard activation and is exposed to assistive technology.
+        expect(minus.disabled).toBe(true);
+        expect(plus.disabled).toBe(false);
+        expect(minus.style.pointerEvents || '').toBe('');
+        count.value = 1;
+        Scheduler.flushSync();
+        expect([minus.disabled, plus.disabled]).toEqual([false, true]);
+        expect(plus.style.opacity).toBe('0.3');
+        dispose();
+      });
+
+      it('DatePicker and ColorPicker show values written elsewhere', () => {
+        const date = new State(new Date(2026, 0, 2));
+        const color = new State(ParityColor.hex('#112233'));
+        const dp = owned(ParityDatePicker('Date', date.binding));
+        const cp = owned(ParityColorPicker('Color', color.binding));
+        date.value = new Date(2026, 4, 6);
+        color.value = ParityColor.hex('#445566');
+        Scheduler.flushSync();
+        const input = findAll(dp.element, (n) => n.tagName === 'INPUT')[0];
+        expect(input.value).toBe('2026-05-06');
+        const colorInput = findAll(cp.element, (n) => n.tagName === 'INPUT')[0];
+        expect(colorInput.value.toLowerCase()).toBe('#445566');
+        dp.dispose(); cp.dispose();
+      });
+    });
+
+    {
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      await itAsync('.transition inserted inside withAnimation starts at the insertion styles and animates back', async () => {
+        let element = null;
+        await AnimationModule.withAnimation(AnimationModule.Animation.linear(0.01), () => {
+          element = render(ModifierText('t').opacity(0.8).transition(AnimationModule.AnyTransition.opacity));
+          if (element.style.opacity !== '0') throw new Error(`expected insertion opacity 0, got ${element.style.opacity}`);
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(element.style.opacity).toBe('0.8');
+        expect(element.style.transition).toBe(AnimationModule.Animation.linear(0.01).toCSS());
+      });
+      globalThis.requestAnimationFrame = previousRAF;
+    }
+
+    await itAsync('.onLongPressGesture fires after minimumDuration, and a release before that cancels it', async () => {
+      let presses = 0;
+      const element = render(ModifierText('hold').onLongPressGesture(() => { presses++; }, { minimumDuration: 0.01 }));
+      element.dispatchEvent(mouse('mousedown', 0, 0));
+      element.dispatchEvent(mouse('mouseup', 0, 0));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(presses).toBe(0);
+      element.dispatchEvent(mouse('mousedown', 0, 0));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(presses).toBe(1);
+    });
+
+    // #48: containers, navigation, shapes and the other former View
+    // subclasses are descriptors with their own renderers.
+    {
+      const { isDescriptor: isContainerDescriptor } = await import('./src/Core/ViewDescriptor.js');
+      const { NavigationPath } = await import('./src/View/Navigation/NavigationPath.js');
+      const { BackButton } = await import('./src/View/Navigation/NavigationStack.js');
+      const { NavigationSplitView } = await import('./src/View/Navigation/NavigationSplitView.js');
+      const containers = {
+        ...(await import('./src/View/Container/Form.js')),
+        ...(await import('./src/View/Container/ScrollView.js')),
+        ...(await import('./src/Layout/Grid.js')),
+        ...(await import('./src/Layout/Stack/LazyStack.js')),
+        ...(await import('./src/Layout/GeometryReader.js')),
+        ...(await import('./src/Layout/ViewThatFits.js')),
+        ...(await import('./src/View/Label.js')),
+        ...(await import('./src/View/Image.js')),
+        ...(await import('./src/Shape/Shape.js')),
+        ...(await import('./src/Graphic/Gradient.js')),
+        ...(await import('./src/App/WindowGroup.js')),
+        ...(await import('./src/Core/ViewBuilder.js')),
+      };
+      const textOf = (node) => (node._textContent ?? '') + (node.children || []).map(textOf).join('');
+      const findNode = (node, test) => test(node) ? node : (node.children || []).map((child) => findNode(child, test)).find(Boolean);
+      const mountView = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, done: () => { app.unmount(); root.remove(); } };
+      };
+
+      describe('Containers are descriptors (#48)', () => {
+        it('every former View subclass factory returns a frozen descriptor with the shared modifiers', () => {
+          const c = containers;
+          const views = [
+            Group(ModifierText('a')), A11yList(ModifierText('a')), c.Section(ModifierText('a')), c.Form(ModifierText('a')),
+            c.ScrollView(ModifierText('a')), A11yDisclosureGroup('d', ModifierText('a')), A11yMenu('m', ModifierText('a')),
+            TabView(ModifierText('a')), NavigationStack(ModifierText('a')), NavigationLink('l', ModifierText('a')),
+            BackButton(), NavigationSplitView({ sidebar: () => ModifierText('s'), detail: () => ModifierText('d') }),
+            c.Label('l', { systemImage: 'star' }), c.Image('/a.png'), c.Image.systemName('star'), c.Rectangle(), c.Circle(),
+            c.RoundedRectangle(4), c.Capsule(), c.Ellipse(), c.UnevenRoundedRectangle({}), c.Path((p) => p.move({ x: 0, y: 0 })),
+            c.Grid(c.GridRow(ModifierText('a'))), c.LazyVGrid({}, ModifierText('a')), c.LazyHGrid({}, ModifierText('a')),
+            c.LazyVStack(ModifierText('a')), c.LazyHStack(ModifierText('a')), c.GeometryReader(() => ModifierText('a')),
+            c.ViewThatFits(ModifierText('a')), c.LinearGradient(['red', 'blue']), c.WindowGroup(ModifierText('a')),
+            c.Settings(ModifierText('a')), c.DocumentGroup('doc', () => ModifierText('a')), c.EmptyView(), c.AnyView(ModifierText('a')),
+          ];
+          for (const view of views) {
+            expect(isContainerDescriptor(view)).toBe(true);
+            expect(Object.isFrozen(view)).toBe(true);
+            expect(typeof view.padding).toBe('function');
+            expect(typeof view.gesture).toBe('function');
+          }
+        });
+
+        it('their own methods return new descriptors and keep the original unchanged', () => {
+          const list = A11yList(ModifierText('a'));
+          const inset = list.listStyle('inset').padding(4);
+          expect(list.props.listStyle).toBe('automatic');
+          expect(inset.props.listStyle).toBe('inset');
+          const circle = containers.Circle();
+          expect(circle.fill('red').props.fill).toBe('red');
+          expect(circle.props.fill).toBe(null);
+          expect(containers.LinearGradient(['red', 'blue']).css()).toBe('linear-gradient(to bottom, red, blue)');
+          expect(containers.ScrollView(ModifierText('a')).pagingEnabled().props.paging).toBe(true);
+        });
+
+        it('a Section renders its header, rows and footer; a Path its commands', () => {
+          const section = render(containers.Section({ header: 'Head', footer: () => ModifierText('Foot') }, ModifierText('One'), ModifierText('Two')));
+          expect(section.children.map((part) => part.dataset.sectionPart)).toEqual(['header', 'content', 'footer']);
+          expect(section.children[1].children.length).toBe(2);
+          expect(textOf(section)).toBe('HeadOneTwoFoot');
+          const path = render(containers.Path((p) => { p.move({ x: 0, y: 0 }); p.addLine({ x: 10, y: 0 }); p.closeSubpath(); }).stroke('red', 2));
+          expect(path.children[0].getAttribute('d')).toBe('M 0 0 L 10 0 Z');
+          expect(path.children[0].getAttribute('stroke-width')).toBe('2');
+        });
+
+        it('TabView takes a descriptor as its first tab when there is no selection', () => {
+          const element = render(TabView(ModifierText('First').tabItem(() => ModifierText('1')), ModifierText('Second')));
+          const tabBar = element.children.find((child) => child.dataset.tabviewPart === 'tabbar');
+          expect(tabBar.children.length).toBe(2);
+          expect(textOf(element.children[0])).toBe('First');
+        });
+
+        it('TabView follows writes to its selection made elsewhere, in both styles', () => {
+          const selection = new State('a');
+          const tabs = () => [ModifierText('Alpha').tag('a'), ModifierText('Beta').tag('b')];
+          const bar = mountView(() => TabView(selection, ...tabs()));
+          const pages = mountView(() => TabView(selection, ...tabs()).tabViewStyle(TabViewStyle.page));
+          selection.value = 'b';
+          Scheduler.flushSync();
+          const content = bar.root.children[0].children[0];
+          expect(textOf(content)).toBe('Beta');
+          const buttons = bar.root.children[0].children[1].children;
+          expect(buttons.map((button) => button.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+          const dots = pages.root.children[0].children[1].children;
+          expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+          bar.done();
+          pages.done();
+          // Unmounted: a later write renders nothing.
+          const before = content.children.length;
+          selection.value = 'a';
+          Scheduler.flushSync();
+          expect(content.children.length).toBe(before);
+        });
+
+        it('NavigationStack follows a NavigationPath through its navigationDestination', () => {
+          const path = new NavigationPath();
+          const view = mountView(() => NavigationStack(ModifierText('Home'), { path, transitionStyle: 'none' })
+            .navigationDestination('number', (value) => VStack(ModifierText(`Item ${value}`), BackButton())));
+          const stack = findNode(view.root, (node) => node.dataset?.view === 'NavigationStack').children[0];
+          path.append(7);
+          expect(textOf(stack)).toBe('Item 7‹ Back');
+          findNode(stack, (node) => node.dataset?.view === 'BackButton').click();
+          expect(path.count).toBe(0);
+          expect(textOf(stack)).toBe('Home');
+          view.done();
+          // Unmounted: the stack no longer follows the path.
+          const before = stack.children.length;
+          path.append(8);
+          expect(stack.children.length).toBe(before);
+        });
+
+        it('Menu and NavigationSplitView remove their document and window listeners on unmount', () => {
+          const listeners = new Map();
+          const target = (object) => {
+            const saved = [object.addEventListener, object.removeEventListener];
+            object.addEventListener = (type, fn) => listeners.set(fn, type);
+            object.removeEventListener = (type, fn) => listeners.delete(fn);
+            return () => { [object.addEventListener, object.removeEventListener] = saved; };
+          };
+          const restoreDocument = target(document);
+          const hadWindow = 'window' in globalThis;
+          if (!hadWindow) globalThis.window = { innerWidth: 1024 };
+          const restoreWindow = target(globalThis.window);
+          try {
+            const view = mountView(() => VStack(
+              A11yMenu('Actions', MenuButton('Copy', () => {})),
+              NavigationSplitView({ sidebar: () => ModifierText('Side'), detail: () => ModifierText('Detail') })
+            ));
+            expect(listeners.size).toBe(3);
+            view.done();
+            expect(listeners.size).toBe(0);
+          } finally {
+            restoreDocument();
+            restoreWindow();
+            if (!hadWindow) delete globalThis.window;
+          }
+        });
+
+        it('a user-defined View subclass gets one deprecation warning in development', () => {
+          if (!DEV_BUILD) return; // compiled out of the optimized build
+          const warnings = [];
+          const previousWarn = console.warn;
+          console.warn = (message) => warnings.push(String(message));
+          try {
+            class Card extends LegacyView {}
+            class Badge extends LegacyView {}
+            new Card();
+            new Card();
+            new Badge();
+          } finally {
+            console.warn = previousWarn;
+          }
+          expect(warnings.length).toBe(1);
+          expect(warnings[0].includes('Card extends the deprecated View class')).toBe(true);
+        });
+
+        it('a legacy View subclass renders its modifiers through the descriptor pipeline', () => {
+          const tags = [];
+          const legacy = new LegacyGroup(ModifierText('x')).padding(8).tag('t').onTapGesture(() => tags.push('tap'));
+          const element = render(legacy);
+          expect(element.style.padding).toBe('8px');
+          expect(element.style.cursor).toBe('pointer');
+          // .tag(_:) is a descriptor modifier, read by List, Picker and TabView.
+          const list = render(A11yList({ selection: new State(null).binding }, legacy));
+          expect(list.children[0]._listId).toBe('t');
+        });
+      });
+    }
+
+    const ChartsModule = await import('./src/Charts/index.js');
+    const { value: plot } = ChartsModule;
+    const { isDescriptor: isChartDescriptor } = await import('./src/Core/ViewDescriptor.js');
+    describe('Charts are descriptors (#48)', () => {
+      const C = ChartsModule;
+      const tagsOf = (element) => findAll(element, (n) => n.namespaceURI === 'http://www.w3.org/2000/svg').map((n) => n.tagName.toLowerCase());
+      const sales = [{ m: 'Jan', v: 10 }, { m: 'Feb', v: 20 }];
+
+      it('Chart and every mark return frozen descriptors with the shared modifiers', () => {
+        const x = plot('X', 1);
+        const y = plot('Y', 2);
+        const views = [
+          C.Chart(sales, (item) => C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) })),
+          C.BarMark({ x, y }), C.LineMark({ x, y }), C.AreaMark({ x, y }), C.PointMark({ x, y }),
+          C.RuleMark({ y }), C.RectangleMark({ x, y }), C.SectorMark({ angle: x }),
+        ];
+        expect(views.map((view) => view.type)).toEqual(['Chart', 'BarMark', 'LineMark', 'AreaMark', 'PointMark', 'RuleMark', 'RectangleMark', 'SectorMark']);
+        for (const view of views) {
+          expect(isChartDescriptor(view)).toBe(true);
+          expect(Object.isFrozen(view)).toBe(true);
+          expect(typeof view.padding).toBe('function');
+        }
+        expect(C.createChart).toBe(C.Chart);
+        expect('Mark' in ChartsModule).toBe(false);
+      });
+
+      it('mark and chart methods return new descriptors and keep the original unchanged', () => {
+        const bar = C.BarMark({ x: plot('M', 'a'), y: plot('V', 1) });
+        const styled = bar.foregroundStyle('red').cornerRadius(4).opacity(0.5);
+        expect([styled.props.foregroundStyle, styled.props.cornerRadius, styled.props.opacity]).toEqual(['red', 4, 0.5]);
+        expect([bar.props.foregroundStyle, bar.props.cornerRadius, bar.props.opacity]).toEqual([null, 0, 1]);
+        expect(styled.modifiers.length).toBe(0);
+        expect(bar.foregroundStyle({ by: plot('S', 'a') }).props.foregroundStyleField.rawValue).toBe('a');
+        expect(C.RuleMark({}).lineStyle({ dash: [5, 5] }).props.lineStyle).toEqual({ lineWidth: 1, dash: [5, 5] });
+        const chart = C.Chart([bar]);
+        const configured = chart.frame({ width: 500 }).chartYScale({ domain: [0, 10] }).chartXAxis('hidden').chartLegend('visible');
+        expect([configured.props.width, configured.props.height]).toEqual([500, 300]);
+        expect(configured.props.yDomain).toEqual([0, 10]);
+        expect(configured.props.xAxis.visible).toBe(false);
+        expect(configured.props.legend.visible).toBe(true);
+        expect([chart.props.width, chart.props.xAxis.visible, chart.props.yDomain]).toEqual([400, true, null]);
+      });
+
+      it('draws a bar chart: grid, bars, axes, and the shared modifiers on the container', () => {
+        const element = render(C.Chart(sales, (item) =>
+          C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) }).foregroundStyle('#f00').cornerRadius(2),
+        ).frame({ width: 300, height: 200 }).padding(8));
+        expect(element.dataset.view).toBe('Chart');
+        expect(element.style.width).toBe('300px');
+        expect(element.style.padding).toBe('8px');
+        const root = element.children[0];
+        expect([root.getAttribute('width'), root.getAttribute('height')]).toEqual(['300', '200']);
+        const bars = findAll(root, (n) => n.tagName === 'RECT');
+        expect(bars.length).toBe(2);
+        expect(bars.map((bar) => [bar.getAttribute('fill'), bar.getAttribute('rx')])).toEqual([['#f00', '2'], ['#f00', '2']]);
+        // The taller bar reaches the top of the plot area.
+        expect(bars[1].getAttribute('y')).toBe('0');
+        const labels = findAll(root, (n) => n.tagName === 'TEXT').map((n) => n.textContent);
+        expect(labels.slice(0, 2)).toEqual(['Jan', 'Feb']);
+        // One series: no legend.
+        expect(element.children.length).toBe(1);
+      });
+
+      it('draws marks given directly, series lines, a legend and a pie', () => {
+        const direct = render(C.Chart([C.BarMark({ x: plot('M', 'a'), y: plot('V', 5) }), C.RuleMark({ y: plot('T', 3) }).lineStyle({ dash: [5, 5] })]));
+        expect(tagsOf(direct).filter((tag) => tag === 'rect').length).toBe(1);
+        const rule = findAll(direct, (n) => n.getAttribute && n.getAttribute('stroke-dasharray'))[0];
+        expect(rule.getAttribute('stroke-dasharray')).toBe('5,5');
+
+        const temps = [['SF', 1, 5], ['SF', 2, 6], ['NY', 1, 2], ['NY', 2, 8]];
+        const lines = render(C.Chart(temps, ([city, day, t]) =>
+          C.LineMark({ x: plot('Day', day), y: plot('T', t) }).foregroundStyle({ by: plot('City', city) })));
+        const paths = findAll(lines, (n) => n.tagName === 'PATH');
+        expect(paths.map((path) => path.getAttribute('stroke'))).toEqual(['#007AFF', '#34C759']);
+        const legend = lines.children[1];
+        expect(legend.children.map((item) => item.children[1].textContent)).toEqual(['SF', 'NY']);
+
+        const pie = render(C.Chart([['A', 1], ['B', 3]], ([name, share]) =>
+          C.SectorMark({ angle: plot('Share', share), innerRadius: C.MarkDimension.ratio(0.5) }).foregroundStyle({ by: plot('Name', name) })));
+        const sectors = findAll(pie, (n) => n.tagName === 'PATH');
+        expect(sectors.map((sector) => sector.getAttribute('fill'))).toEqual(['#007AFF', '#34C759']);
+        expect(sectors[0].getAttribute('d').startsWith('M ')).toBe(true);
+        expect(tagsOf(pie).includes('g')).toBe(false);
+      });
+
+      it('a mark on its own renders as a one-mark chart', () => {
+        const element = render(C.PointMark({ x: plot('X', 1), y: plot('Y', 1) }).symbol('square'));
+        expect(element.dataset.view).toBe('PointMark');
+        expect(tagsOf(element).includes('rect')).toBe(true);
+      });
+
+      it('redraws when a State its data or marks read changes, and stops when disposed', () => {
+        const rows = new State([{ m: 'a', v: 1 }]);
+        let element = null;
+        const dispose = Signal.createRoot((d) => {
+          element = render(C.Chart(rows, (item) => C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) })));
+          return d;
+        });
+        const bars = () => findAll(element, (n) => n.tagName === 'RECT').length;
+        expect(bars()).toBe(1);
+        rows.value = [{ m: 'a', v: 1 }, { m: 'b', v: 2 }, { m: 'c', v: 3 }];
+        Scheduler.flushSync();
+        expect(bars()).toBe(3);
+        expect(element.children.length).toBe(1);
+
+        const target = new State(2);
+        let ruled = null;
+        const disposeRule = Signal.createRoot((d) => {
+          ruled = render(C.Chart(() => [C.BarMark({ x: plot('M', 'a'), y: plot('V', 4) }), C.RuleMark({ y: plot('T', target.value) })]));
+          return d;
+        });
+        const ruleY = () => findAll(ruled, (n) => n.tagName === 'LINE' && n.getAttribute('stroke') === '#999999')[0].getAttribute('y1');
+        const before = ruleY();
+        target.value = 3;
+        Scheduler.flushSync();
+        expect(ruleY() !== before).toBe(true);
+
+        dispose();
+        disposeRule();
+        rows.value = [];
+        Scheduler.flushSync();
+        expect(bars()).toBe(3);
+      });
+    });
+
+    // Gesture composition (#50): .simultaneousGesture, .highPriorityGesture,
+    // .gesture(_:including:).
+    describe('Gesture composition: simultaneous, high priority, GestureMask', () => {
+      const { TapGesture, DragGesture, GestureMask, gestureAllowed } = GestureModule;
+      const tap = (log, name) => TapGesture().onEnded(() => log.push(name));
+      const mountAttached = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, teardown: () => { app.unmount(); root.remove(); } };
+      };
+      const firstText = (root) => findAll(root, (n) => n.dataset?.view === 'Text')[0];
+
+      it('every descriptor and the legacy View have simultaneousGesture and highPriorityGesture', () => {
+        for (const view of [ModifierText('a'), VStack(ModifierText('a')), Button('b', () => {}), ModifierText('a').padding(2).bold()]) {
+          expect(typeof view.simultaneousGesture).toBe('function');
+          expect(typeof view.highPriorityGesture).toBe('function');
+        }
+        expect(Object.isFrozen(ModifierText('a').highPriorityGesture(TapGesture()))).toBe(true);
+        expect(typeof LegacyView.prototype.simultaneousGesture).toBe('function');
+        expect(typeof LegacyView.prototype.highPriorityGesture).toBe('function');
+      });
+
+      it("a high-priority tap on a parent beats the child's TapGesture and onTapGesture", () => {
+        const log = [];
+        const { root, teardown } = mountAttached(() => VStack(
+          ModifierText('child').gesture(tap(log, 'child')).onTapGesture(() => log.push('onTap'))
+        ).highPriorityGesture(tap(log, 'parent')));
+        firstText(root).dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['parent']);
+        teardown();
+      });
+
+      it("on one view, a high-priority tap beats .gesture but not .simultaneousGesture", () => {
+        const log = [];
+        const element = render(ModifierText('x')
+          .gesture(tap(log, 'own'))
+          .highPriorityGesture(tap(log, 'high'))
+          .simultaneousGesture(tap(log, 'sim')));
+        element.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['high', 'sim']);
+      });
+
+      it('without a high-priority gesture, .gesture and .simultaneousGesture both fire', () => {
+        const log = [];
+        const element = render(ModifierText('x').gesture(tap(log, 'own')).simultaneousGesture(tap(log, 'sim')));
+        element.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['own', 'sim']);
+      });
+
+      it('a high-priority drag on a parent keeps a child drag from starting; a child tap still fires', () => {
+        const log = [];
+        const childDrag = DragGesture({ minimumDistance: 0 }).onChanged(() => log.push('child drag'));
+        const parentDrag = DragGesture({ minimumDistance: 0 }).onEnded((v) => log.push('parent ' + v.translation.width));
+        const { root, teardown } = mountAttached(() => VStack(
+          ModifierText('c').gesture(childDrag).gesture(tap(log, 'child tap'))
+        ).highPriorityGesture(parentDrag));
+        const child = firstText(root);
+        child.dispatchEvent(mouse('mousedown', 0, 0));
+        document.dispatchEvent(mouse('mousemove', 12, 0));
+        document.dispatchEvent(mouse('mouseup', 12, 0));
+        child.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['parent 12', 'child tap']);
+        teardown();
+      });
+
+      it('.gesture(_, { including }) masks the subviews, the gesture, or both', () => {
+        const run = (including) => {
+          const log = [];
+          const parent = render(VStack(ModifierText('c').gesture(tap(log, 'child'))).gesture(tap(log, 'parent'), { including }));
+          findAll(parent, (n) => n.dataset?.view === 'Text')[0].dispatchEvent(new MockEvent('click'));
+          return log;
+        };
+        expect(run(GestureMask.all)).toEqual(['child', 'parent']);
+        expect(run(GestureMask.gesture)).toEqual(['parent']);
+        expect(run(GestureMask.subviews)).toEqual(['child']);
+        expect(run(GestureMask.none)).toEqual([]);
+      });
+
+      it('claims are released with the view: the child tap works again after the parent is disposed', () => {
+        const log = [];
+        const child = render(ModifierText('c').gesture(tap(log, 'child')));
+        let parent = null;
+        const dispose = Signal.createRoot((d) => {
+          parent = render(VStack(ModifierText('x')).highPriorityGesture(TapGesture()));
+          return d;
+        });
+        parent.appendChild(child);
+        expect(gestureAllowed(child, 'tap')).toBe(false);
+        dispose();
+        expect(gestureAllowed(child, 'tap')).toBe(true);
+        child.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['child']);
+      });
+    });
+
+    // Removal transitions (#50): a removed view with a .transition stays in
+    // the document while the removal animation runs.
+    {
+      const { AnyTransition, Animation } = AnimationModule;
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const mountAttached = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, wrapper: root.children[0].children[0], teardown: () => { app.unmount(); root.remove(); } };
+      };
+
+      await itAsync('Show: a view with a transition lingers for its removal animation; effects stop at once', async () => {
+        const shown = new State(true);
+        const n = new State(0);
+        let runs = 0;
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.03));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value,
+          ModifierText(() => { runs++; return 'n' + n.value; }).transition(fade))));
+        const node = wrapper.children[0];
+        shown.value = false;
+        Scheduler.flushSync();
+        expect(wrapper.children.includes(node)).toBe(true);
+        expect(node.style.pointerEvents).toBe('none');
+        expect(node.getAttribute('aria-hidden')).toBe('true');
+        const runsAtRemoval = runs;
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(runs).toBe(runsAtRemoval);
+        await wait(5);
+        expect(wrapper.children.includes(node)).toBe(true);
+        expect(node.style.opacity).toBe('0');
+        expect(node.style.transition).toBe(Animation.linear(0.03).toCSS());
+        await wait(50);
+        expect(wrapper.children.includes(node)).toBe(false);
+        teardown();
+      });
+
+      await itAsync('without a transition, or outside an animation, removal is immediate', async () => {
+        const shown = new State(true);
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value,
+          ModifierText('plain'))));
+        shown.value = false;
+        Scheduler.flushSync();
+        expect(wrapper.children.length).toBe(0);
+        teardown();
+        // A transition with no animation, outside withAnimation: immediate.
+        const again = new State(true);
+        const second = mountAttached(() => VStack(Show(() => again.value, ModifierText('t').transition(AnyTransition.opacity))));
+        again.value = false;
+        Scheduler.flushSync();
+        expect(second.wrapper.children.length).toBe(0);
+        second.teardown();
+      });
+
+      await itAsync('withAnimation animates removal with its animation; asymmetric uses the removal half', async () => {
+        const shown = new State(true);
+        const slideOut = AnyTransition.asymmetric(AnyTransition.opacity, AnyTransition.move('trailing'));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value, ModifierText('m').transition(slideOut))));
+        const node = wrapper.children[0];
+        await AnimationModule.withAnimation(Animation.linear(0.02), () => {
+          shown.value = false;
+          Scheduler.flushSync();
+          expect(wrapper.children.includes(node)).toBe(true);
+        });
+        // withAnimation resolves after the animation's duration.
+        await wait(30);
+        expect(wrapper.children.includes(node)).toBe(false);
+        teardown();
+      });
+
+      await itAsync('For: a removed row lingers, the others update; prefers-reduced-motion removes at once', async () => {
+        const items = new State([{ id: 'a' }, { id: 'b' }]);
+        const fade = AnyTransition.scale().animation(Animation.linear(0.02));
+        const { wrapper, teardown } = mountAttached(() => VStack(For(() => items.value,
+          (item) => ModifierText(item.id).transition(fade), (item) => item.id)));
+        const rowA = wrapper.children[0];
+        items.value = [items.value[1]];
+        Scheduler.flushSync();
+        expect(wrapper.children.includes(rowA)).toBe(true);
+        await wait(40);
+        expect(wrapper.children.map((row) => row.textContent)).toEqual(['b']);
+
+        const previousWindow = globalThis.window;
+        globalThis.window = { matchMedia: () => ({ matches: true }) };
+        try {
+          items.value = [];
+          Scheduler.flushSync();
+          expect(wrapper.children.length).toBe(0);
+        } finally {
+          globalThis.window = previousWindow;
+        }
+        teardown();
+      });
+
+      await itAsync('unmounting while a view lingers cancels the pending removal', async () => {
+        const shown = new State(true);
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.02));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value, ModifierText('x').transition(fade))));
+        const node = wrapper.children[0];
+        shown.value = false;
+        Scheduler.flushSync();
+        teardown();
+        // The element went back to the pool with its container; a view that
+        // reuses it must not lose it to the old timer.
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        host.appendChild(node);
+        await wait(40);
+        expect(node.parentNode).toBe(host);
+        host.remove();
+      });
+
+      await itAsync('NavigationStack pop: the popped screen lingers over the root for its transition', async () => {
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(ModifierText('Home'), { transitionStyle: 'none' }))).mount(root);
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.02));
+        stack.push(() => ModifierText('Detail').transition(fade), '', false);
+        const findStack = (node) => node.dataset?.view === 'NavigationStack' ? node : (node.children || []).map(findStack).find(Boolean);
+        const container = findStack(root).children[0];
+        const detail = container.children[0];
+        stack.pop(false);
+        expect(container.children.length).toBe(2);
+        expect(detail.style.position).toBe('absolute');
+        await wait(40);
+        expect(container.children.length).toBe(1);
+        expect(container.children.includes(detail)).toBe(false);
+        app.unmount();
+        root.remove();
+      });
+
+      globalThis.requestAnimationFrame = previousRAF;
+    }
+
+    // .navigationTitle of a view attached later (rAF, setTimeout, await).
+    await itAsync('.navigationTitle updates when a titled view is attached later, and leaves no watcher after cleanup', async () => {
+      const LifecycleModuleForTitle = await import('./src/Core/LifecycleObserver.js');
+      const previousObserver = globalThis.MutationObserver;
+      globalThis.MutationObserver = class { observe() {} disconnect() {} };
+      const previousTitle = document.title;
+      document.title = 'Page';
+      try {
+        const first = document.createElement('div');
+        document.body.appendChild(first);
+        const appA = App(() => VStack(ModifierText('a')).navigationTitle('A')).mount(first);
+        expect(document.title).toBe('A');
+
+        // Rendered into a detached host, attached after an await.
+        const later = document.createElement('div');
+        const appB = App(() => VStack(ModifierText('b')).navigationTitle('B')).mount(later);
+        await Promise.resolve();
+        expect(document.title).toBe('A');
+        const pending = LifecycleModuleForTitle.getLifecycleStats().pendingAppear;
+        expect(pending >= 1).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        document.body.appendChild(later);
+        LifecycleModuleForTitle.flushLifecycleCallbacks();
+        expect(document.title).toBe('B');
+        appB.unmount();
+        later.remove();
+        expect(document.title).toBe('A');
+
+        // Disposed before it was ever attached: the watcher goes with it.
+        const never = document.createElement('div');
+        const appC = App(() => VStack(ModifierText('c')).navigationTitle('C')).mount(never);
+        await Promise.resolve();
+        const watching = LifecycleModuleForTitle.getLifecycleStats().pendingAppear;
+        appC.unmount();
+        expect(LifecycleModuleForTitle.getLifecycleStats().pendingAppear).toBe(watching - 1);
+        appA.unmount();
+        first.remove();
+        expect(document.title).toBe('Page');
+      } finally {
+        LifecycleModuleForTitle.flushLifecycleCallbacks();
+        globalThis.MutationObserver = previousObserver;
+        document.title = previousTitle;
+      }
     });
 
     // Summary

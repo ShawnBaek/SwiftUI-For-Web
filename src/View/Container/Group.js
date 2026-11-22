@@ -3,6 +3,7 @@
  *
  * Matches SwiftUI's Group view which is useful for applying modifiers
  * to multiple views at once or for working around the 10-child limit.
+ * Its children are laid out by the enclosing stack.
  *
  * @example
  * Group(
@@ -13,42 +14,20 @@
  * .foregroundColor(Color.blue)
  */
 
-import { View } from '../../Core/View.js';
-import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { createDescriptor } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, renderChildren } from '../../Core/Renderer.js';
 
-/**
- * Group view class
- */
-export class GroupView extends View {
-  constructor(...children) {
-    super();
-    this._children = children.flat();
-  }
-
-  _render() {
-    // Group renders as a transparent container
-    const el = document.createElement('div');
-    el.dataset.view = 'group';
-    el.style.display = 'contents'; // Makes the wrapper invisible to layout
-
-    for (const child of this._children) {
-      if (child instanceof View) {
-        el.appendChild(child._render());
-      } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
-        el.appendChild(renderDescriptor(child));
-      }
-    }
-
-    return this._applyModifiers(el);
-  }
-}
-
-/**
- * Factory function for Group
- */
 export function Group(...children) {
-  return new GroupView(...children);
+  return chainable(createDescriptor('Group', {}, children.flat()));
 }
+
+registerRenderer('Group', (props, children) => {
+  const el = document.createElement('div');
+  el.dataset.view = 'group';
+  el.style.display = 'contents';
+  el.appendChild(renderChildren(children));
+  return el;
+});
 
 export default Group;

@@ -33,56 +33,30 @@
  *   )
  */
 
-// Import classes
 import { PlottableValue, value } from './PlottableValue.js';
-import { Mark } from './Mark.js';
-import { Chart as ChartClass, createChart } from './Chart.js';
-import { BarMark as BarMarkClass, createBarMark } from './BarMark.js';
-import { LineMark as LineMarkClass, createLineMark } from './LineMark.js';
-import { PointMark as PointMarkClass, createPointMark } from './PointMark.js';
-import { AreaMark as AreaMarkClass, createAreaMark } from './AreaMark.js';
-import { RuleMark as RuleMarkClass, createRuleMark } from './RuleMark.js';
-import { RectangleMark as RectangleMarkClass, createRectangleMark } from './RectangleMark.js';
-import { SectorMark as SectorMarkClass, createSectorMark, MarkDimension } from './SectorMark.js';
+import { Chart } from './Chart.js';
+import { BarMark } from './BarMark.js';
+import { LineMark } from './LineMark.js';
+import { PointMark } from './PointMark.js';
+import { AreaMark } from './AreaMark.js';
+import { RuleMark } from './RuleMark.js';
+import { RectangleMark } from './RectangleMark.js';
+import { SectorMark, MarkDimension } from './SectorMark.js';
 
-// Export factory functions (callable without 'new')
-export function Chart(dataOrContent, contentBuilder) {
-  return new ChartClass(dataOrContent, contentBuilder);
-}
-
-export function BarMark(options) {
-  return new BarMarkClass(options);
-}
-
-export function LineMark(options) {
-  return new LineMarkClass(options);
-}
-
-export function PointMark(options) {
-  return new PointMarkClass(options);
-}
-
-export function AreaMark(options) {
-  return new AreaMarkClass(options);
-}
-
-export function RuleMark(options) {
-  return new RuleMarkClass(options);
-}
-
-export function RectangleMark(options) {
-  return new RectangleMarkClass(options);
-}
-
-export function SectorMark(options) {
-  return new SectorMarkClass(options);
-}
-
-// Re-export other items
+// Chart and the marks are descriptor factories (#48): call them directly.
+export { Chart, BarMark, LineMark, PointMark, AreaMark, RuleMark, RectangleMark, SectorMark };
 export { PlottableValue, value };
-export { Mark };
 export { MarkDimension };
-export { createChart, createBarMark, createLineMark, createPointMark, createAreaMark, createRuleMark, createRectangleMark, createSectorMark };
+
+// Aliases of the factories, kept for existing code.
+export const createChart = Chart;
+export const createBarMark = BarMark;
+export const createLineMark = LineMark;
+export const createPointMark = PointMark;
+export const createAreaMark = AreaMark;
+export const createRuleMark = RuleMark;
+export const createRectangleMark = RectangleMark;
+export const createSectorMark = SectorMark;
 
 // Charts namespace
 export const Charts = {
@@ -94,6 +68,7 @@ export const Charts = {
   RuleMark,
   RectangleMark,
   SectorMark,
+  PlottableValue,
   value,
   MarkDimension
 };

@@ -27,219 +27,79 @@
  * );
  */
 
-import { isDescriptor } from './ViewDescriptor.js';
-import { render as renderAnyView } from './Renderer.js';
-import { View } from './View.js';
+import { createDescriptor, isView } from './ViewDescriptor.js';
+import { chainable } from './Chainable.js';
+import { registerRenderer, render } from './Renderer.js';
+import { Group } from '../View/Container/Group.js';
 
 /**
  * ViewBuilder - Constructs view hierarchies from builder functions
  */
 export class ViewBuilder {
-  /**
-   * Build a view from a builder function
-   * @param {Function} builder - Function that returns views
-   * @returns {View|View[]} The built view(s)
-   */
+  /** Several views as one: none is EmptyView, one is itself, more a Group. */
   static buildBlock(...components) {
-    // Flatten and filter out null/undefined
-    const views = components
-      .flat(Infinity)
-      .filter(v => v != null && v !== false);
-
-    if (views.length === 0) {
-      return new EmptyView();
-    }
-
-    if (views.length === 1) {
-      return views[0];
-    }
-
-    // Return a Group containing all views
-    return new TupleView(views);
+    const views = components.flat(Infinity).filter((v) => v != null && v !== false);
+    if (views.length === 0) return EmptyView();
+    return views.length === 1 ? views[0] : Group(views);
   }
 
-  /**
-   * Build optional content
-   * @param {*} condition - Condition to evaluate
-   * @param {Function} builder - Builder function if condition is truthy
-   * @returns {View|EmptyView}
-   */
   static buildIf(condition, builder) {
-    if (condition) {
-      return builder();
-    }
-    return new EmptyView();
+    return condition ? builder() : EmptyView();
   }
 
-  /**
-   * Build either/or content
-   * @param {*} condition - Condition to evaluate
-   * @param {Function} trueBuilder - Builder if condition is truthy
-   * @param {Function} falseBuilder - Builder if condition is falsy
-   * @returns {View}
-   */
   static buildEither(condition, trueBuilder, falseBuilder) {
     return condition ? trueBuilder() : falseBuilder();
   }
 
-  /**
-   * Build from an array
-   * @param {Array} array - Array of items
-   * @param {Function} builder - Builder function for each item
-   * @returns {View[]}
-   */
   static buildArray(array, builder) {
     return array.map((item, index) => builder(item, index));
   }
 
-  /**
-   * Build with availability check (for web, always available)
-   * @param {Function} builder - Builder function
-   * @returns {View}
-   */
   static buildLimitedAvailability(builder) {
     return builder();
   }
 }
 
-/**
- * EmptyView - A view that displays nothing
- *
- * @example
- * EmptyView()
- */
-export class EmptyView extends View {
-  constructor() {
-    super();
-  }
-
-  _render() {
-    // Return an empty comment node as placeholder
-    const comment = document.createComment('EmptyView');
-    return comment;
-  }
+/** A view that renders nothing (an empty comment node). */
+export function EmptyView() {
+  return chainable(createDescriptor('EmptyView'));
 }
 
+registerRenderer('EmptyView', () => document.createComment('EmptyView'));
+
 /**
- * Factory function for EmptyView
+ * One of two views, chosen when it renders. The condition and each content
+ * may be a value or a function returning one.
  */
-export function Empty() {
-  return new EmptyView();
+export function ConditionalContent(condition, trueContent, falseContent = null) {
+  return AnyView(() => {
+    const value = (v) => (typeof v === 'function' && !isView(v) ? v() : v);
+    return value(value(condition) ? trueContent : falseContent);
+  });
 }
 
-/**
- * TupleView - A view that contains multiple child views
- * Used internally by ViewBuilder to group multiple views
- */
-export class TupleView extends View {
-  constructor(views) {
-    super();
-    this._views = views;
-  }
-
-  _render() {
-    const fragment = document.createDocumentFragment();
-
-    for (const view of this._views) {
-      if (view instanceof View || isDescriptor(view)) {
-        fragment.appendChild(renderAnyView(view));
-      } else if (view instanceof Node) {
-        fragment.appendChild(view);
-      }
-    }
-
-    // Wrap in a container div
-    const container = document.createElement('div');
-    container.dataset.view = 'tuple';
-    container.style.display = 'contents'; // Don't affect layout
-    container.appendChild(fragment);
-
-    return this._applyModifiers(container);
-  }
+/** Type erasure: wraps a view, or a function returning one, as one view. */
+export function AnyView(view) {
+  return chainable(createDescriptor('AnyView', { view }));
 }
 
-/**
- * ConditionalContent - A view that shows content based on a condition
- *
- * @example
- * ConditionalContent(isLoggedIn,
- *   () => Text('Welcome!'),
- *   () => Button('Log In', login)
- * )
- */
-export class ConditionalContent extends View {
-  constructor(condition, trueContent, falseContent = null) {
-    super();
-    this._condition = condition;
-    this._trueContent = trueContent;
-    this._falseContent = falseContent;
-  }
+registerRenderer('AnyView', ({ view }) => {
+  const content = typeof view === 'function' && !isView(view) ? view() : view;
+  return isView(content) ? render(content) : document.createComment('AnyView: empty');
+});
 
-  _render() {
-    const condition = typeof this._condition === 'function'
-      ? this._condition()
-      : this._condition;
+/** Same as EmptyView(). */
+export const Empty = EmptyView;
 
-    if (condition) {
-      const content = typeof this._trueContent === 'function'
-        ? this._trueContent()
-        : this._trueContent;
-      return content instanceof View ? content._render() : document.createComment('empty');
-    } else if (this._falseContent) {
-      const content = typeof this._falseContent === 'function'
-        ? this._falseContent()
-        : this._falseContent;
-      return content instanceof View ? content._render() : document.createComment('empty');
-    }
+/** Same as AnyView(view). */
+export const Any = AnyView;
 
-    return document.createComment('ConditionalContent: false');
-  }
-}
-
-/**
- * AnyView - A type-erased view
- *
- * @example
- * AnyView(someView)
- */
-export class AnyView extends View {
-  constructor(view) {
-    super();
-    this._wrappedView = view;
-  }
-
-  _render() {
-    if (this._wrappedView instanceof View || isDescriptor(this._wrappedView)) {
-      return renderAnyView(this._wrappedView);
-    }
-    return document.createComment('AnyView: empty');
-  }
-}
-
-/**
- * Factory function for AnyView
- */
-export function Any(view) {
-  return new AnyView(view);
-}
-
-/**
- * ViewBuilder function - creates views from a builder function
- * @param {Function} builder - Builder function
- * @returns {View}
- */
+/** The view a builder function returns; an array becomes a block. */
 export function buildView(builder) {
   const result = builder();
-
-  if (result instanceof View || isDescriptor(result)) {
-    return result;
-  }
-
-  if (Array.isArray(result)) {
-    return ViewBuilder.buildBlock(...result);
-  }
-
-  return new EmptyView();
+  if (isView(result)) return result;
+  if (Array.isArray(result)) return ViewBuilder.buildBlock(...result);
+  return EmptyView();
 }
 
 export default ViewBuilder;

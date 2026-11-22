@@ -23,7 +23,7 @@ these files win; fix the other one.
    vendored third-party code.
 2. **Optional optimized release build.** `node scripts/build.js --entry
    <index.html>` makes a smaller release (tree-shaken and minified, with
-   bundling and hashing planned). It uses only Node built-ins, and its output
+   optional `--bundle` and `--hash`). It uses only Node built-ins, and its output
    must behave exactly like the unbuilt source.
 3. **SwiftUI is the reference design.** Public names, parameter labels,
    ownership, and update timing match Apple SwiftUI. A difference is allowed
@@ -87,9 +87,9 @@ Fine-grained updates (signals → textContent / attributes / styles)
 
 **Transitional state (read before editing):**
 
-- The core still has two view systems: descriptors, and legacy `View`
-  subclasses such as `Toggle`, `TextField`, `List`, and `NavigationStack`.
-  Write all new views as descriptors. The migration is tracked in #48.
+- Every built-in view is a descriptor with its own renderer (#48). Write new
+  views the same way. `src/Core/View.js` is only a deprecated adapter for
+  user-defined class views; don't extend it in `src`.
 - Reactive wiring happens in `Renderer.render`, while each element is built
   (`bindReactive` in `src/Core/Renderer.js`, #44). Never bind by walking the
   mounted DOM afterwards.
@@ -104,14 +104,15 @@ Fine-grained updates (signals → textContent / attributes / styles)
 ### 4.1 Adding a modifier
 
 - **Generic modifiers** (any view): add a `ModifierType` and its handler in
-  `src/Core/ViewDescriptor.js` and `Renderer.applyModifiers`. Until #48
-  introduces one shared modifier table, also add the chain method to every
-  descriptor view's `chainable()`: `Text`, `Button`, `VStack`, `HStack`,
-  `ZStack`, `Spacer`, `Divider`, and `ForEach`. Add a test that the modifier
-  works on at least one view from each family.
+  `src/Core/ViewDescriptor.js` and `Renderer.applyModifiers`, and add the
+  chain method once to the shared table in `src/Core/Chainable.js`; every
+  descriptor view (Text, Button, stacks, the form controls, …) gets it from
+  there (#48). Add a test that the modifier works on at least one view from
+  each family.
 - **View-specific modifiers** (change the view's own props, such as
-  `Text.bold()`): add them to that view's `chainable()` and have its renderer
-  read the new prop. [src/View/Text.js](src/View/Text.js) is the canonical
+  `Text.bold()` or `Toggle.toggleStyle()`): add them to that view's `extras`
+  passed to `chainable(descriptor, extras)` (usually through `withProps`) and
+  have its renderer read the new prop. [src/View/Text.js](src/View/Text.js) is the canonical
   example:
 
 ```js

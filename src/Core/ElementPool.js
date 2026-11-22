@@ -30,6 +30,34 @@ const _pools = new Map();
  */
 const _poolable = new WeakSet();
 
+/**
+ * Functions to run when an element is released: listeners a modifier added
+ * directly with addEventListener (gestures), which delegation can't own.
+ * @type {WeakMap<HTMLElement, Function[]>}
+ */
+const _releaseHooks = new WeakMap();
+
+/**
+ * Run `dispose` when `element` is released (returned to the pool or
+ * discarded with its view). Each hook runs at most once.
+ *
+ * @param {HTMLElement} element
+ * @param {Function} dispose
+ */
+export function onRelease(element, dispose) {
+  if (!element || typeof dispose !== 'function') return;
+  const hooks = _releaseHooks.get(element);
+  if (hooks) hooks.push(dispose);
+  else _releaseHooks.set(element, [dispose]);
+}
+
+function runReleaseHooks(element) {
+  const hooks = _releaseHooks.get(element);
+  if (!hooks) return;
+  _releaseHooks.delete(element);
+  for (const dispose of hooks) dispose();
+}
+
 /** Maximum number of elements to keep per tag type */
 const MAX_POOL_SIZE = 50;
 
@@ -97,6 +125,7 @@ export function releaseElement(element) {
   // pooled or not: delegated handlers and lifecycle callbacks (I3, #46).
   undelegateAll(element);
   releaseCallbacks(element);
+  runReleaseHooks(element);
   // While pooling is suspended (static rendering), nothing is recycled.
   if (_suspended) return;
 

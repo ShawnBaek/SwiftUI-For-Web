@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Migrating from 3.0 · SwiftUI for Web 3.1</title>
+  <meta name="description" content="Breaking changes between the 3.0 prereleases and 3.1.0.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html" aria-current="page">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Migrating from 3.0 to 3.1</h1>
+<p class="lead">Upgrading from <code>3.0.0-alpha.1</code>, <code>3.0.0-alpha.2</code> or an earlier 3.x checkout. These are the
+breaking entries of the <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md#breaking">CHANGELOG</a>,
+with what to change.</p>
+
+<h2>The *View classes are gone</h2>
+<p>Every built-in view is a descriptor built by its factory function: the form controls in alpha.2, and in 3.1 the
+containers, navigation, shapes, grids, lazy stacks, scenes, gradients and <code>Chart</code>. Factory signatures, DOM,
+styles, ARIA and keyboard behaviour are unchanged. Each modifier returns a new descriptor instead of mutating the view.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><td><code>new ToggleView('Wi-Fi', isOn.binding)</code></td><td><code>Toggle('Wi-Fi', isOn.binding)</code></td></tr><tr><td><code>view._render()</code>, <code>view.getElement()</code></td><td>Mount it: <code>App(view).mount(host)</code> (then <code>host.firstElementChild</code> if you need the element), or <code>renderToString(view)</code> from <code>swiftui-for-web/server</code> on a server or in tests</td></tr><tr><td><code>x instanceof ListView</code></td><td><code>x.type === 'List'</code></td></tr><tr><td><code>view._label</code> and other internals</td><td><code>view.props</code> (read-only), or better, the bindings you passed</td></tr><tr><td><code>ScrollView(…).scrollTo(…)</code>, <code>scrollToTop</code>, <code>scrollToBottom</code></td><td><code>.modifier((element) =&gt; …)</code> that keeps the element and scrolls it</td></tr><tr><td><code>TabView._pageIndicatorVisibility</code></td><td><code>.tabViewStyle(TabViewStyle.page, { indexDisplayMode: 'never' })</code></td></tr><tr><td><code>TupleView</code></td><td><code>ViewBuilder.buildBlock</code> returns a <code>Group</code></td></tr><tr><td><code>new ConditionalContent(…)</code></td><td><code>ConditionalContent(…)</code> (a function), or <code>Show</code></td></tr></tbody></table></div>
+
+<p>Removed classes: <code>ToggleView</code>, <code>SliderView</code>, <code>StepperView</code>, <code>TextFieldView</code>,
+<code>SecureFieldView</code>, <code>PickerView</code>, <code>DatePickerView</code>, <code>ColorPickerView</code>,
+<code>ListView</code>, <code>SectionView</code>, <code>FormView</code>, <code>ScrollViewView</code>, <code>GroupView</code>,
+<code>DisclosureGroupView</code>, <code>TabViewView</code>, <code>MenuView</code>, <code>LabelView</code>, <code>ImageView</code>,
+<code>ShapeView</code> and the shape classes, <code>GridView</code>, <code>GridRowView</code>, the lazy grid and stack classes,
+<code>GeometryReaderView</code>, <code>WindowGroupView</code>, <code>SettingsView</code>, <code>DocumentGroupView</code> and
+<code>TupleView</code>, along with <code>src/Core/LegacyControl.js</code> (<code>defineControl</code>).</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Toggle, Text, State } from 'swiftui-for-web';
+
+const isOn = new State(true);
+
+// Before: new ToggleView('Wi-Fi', isOn.binding).toggleStyle('checkbox')._render()
+const toggle = Toggle('Wi-Fi', isOn.binding).toggleStyle('checkbox');
+console.log(toggle.type);          // 'Toggle', instead of instanceof ToggleView
+
+// Modifiers return new descriptors; keep the result.
+const padded = toggle.padding(8);
+console.log(toggle === padded);    // false
+
+App(() =&gt; VStack(padded, Text(() =&gt; (isOn.value ? 'On' : 'Off')))).mount('#root');
+</code></pre></div>
+
+<p><code>View</code> stays only as a deprecated adapter for your own class views
+(<code>class MyView extends View { body() { … } }</code> still renders, with the same modifiers); development builds warn
+once when a class extends it. Prefer functions that return descriptors.</p>
+
+<h2>extend* helpers removed</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">Removed</th><th scope="col">Instead</th></tr></thead><tbody><tr><td><code>extendViewWithAnimation</code></td><td>Nothing: <code>.animation</code>, <code>.transition</code> and <code>.matchedGeometryEffect</code> are on every view.</td></tr><tr><td><code>extendViewWithGestures</code></td><td>Nothing: <code>.gesture</code>, <code>.onLongPressGesture</code>, <code>.onDrag</code> and the composition modifiers are on every view.</td></tr><tr><td><code>extendNavigationStackWithPath</code></td><td><code>NavigationStack(root, { path })</code> with <code>.navigationDestination(dataType, build)</code>. (The helper never worked.)</td></tr></tbody></table></div>
+
+<div class="sample"><pre data-lang="js" data-run><code>import { App, NavigationStack, NavigationPath, VStack, Text, Button } from 'swiftui-for-web';
+
+class Item {
+  constructor(id) { this.id = id; }
+}
+
+const path = new NavigationPath();
+
+const Home = () =&gt;
+  VStack({ spacing: 12 },
+    Text('Home'),
+    Button('Open item 42', () =&gt; path.append(new Item(42)))
+  ).padding(24);
+
+// Like SwiftUI's .navigationDestination(for: Item.self) { item in … }
+App(() =&gt;
+  NavigationStack(Home(), { path })
+    .navigationDestination(Item, (item) =&gt;
+      VStack({ spacing: 12 },
+        Text(`Item ${item.id}`),
+        Button('Back', () =&gt; path.removeLast())
+      ).padding(24))
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Performance internals moved to swiftui-for-web/performance</h2>
+<p>The scheduler (<code>scheduleWork</code>, <code>schedulePostFlush</code>, <code>batchUpdates</code>, <code>endBatch</code>,
+<code>enqueueDOMWrite</code>, <code>getSchedulerStats</code>, <code>resetSchedulerStats</code>, the <code>SyncLane</code> …
+<code>IdleLane</code> constants), the element pool (<code>acquireElement</code>, <code>releaseElement</code>,
+<code>releaseTree</code>, <code>getPoolStats</code>, <code>clearPools</code>), event delegation (<code>delegateEvent</code>,
+<code>undelegateEvent</code>, <code>initDelegation</code>, <code>teardownDelegation</code>) and
+<code>promoteToGPULayer</code>/<code>demoteFromGPULayer</code> left the main entry and <code>./core</code>.
+<code>batch</code> and <code>flushSync</code> stay.</p>
+<div class="sample"><pre data-lang="js" data-run><code>// Before: import { scheduleWork, SyncLane, acquireElement } from 'swiftui-for-web';
+import { scheduleWork, SyncLane, getSchedulerStats } from 'swiftui-for-web/performance';
+import { batch } from 'swiftui-for-web';
+
+scheduleWork(() =&gt; console.log('ran in the sync lane'), SyncLane);
+batch(() =&gt; {});
+setTimeout(() =&gt; console.log('scheduler stats:', getSchedulerStats()), 50);
+</code></pre></div>
+
+
+<h2>Chart and the marks are descriptors</h2>
+<p><code>Chart</code>, <code>BarMark</code>, <code>LineMark</code>, <code>AreaMark</code>, <code>PointMark</code>,
+<code>RuleMark</code>, <code>RectangleMark</code> and <code>SectorMark</code> are plain functions that build descriptors.
+The chart and mark methods (<code>.chartXAxis</code>, <code>.foregroundStyle</code>, <code>.interpolationMethod</code>, …) return
+new descriptors, and the SVG output is the same, attribute for attribute.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><td><code>mark instanceof BarMark</code></td><td><code>mark.type === 'BarMark'</code></td></tr><tr><td><code>mark.x</code></td><td><code>mark.props.x</code></td></tr><tr><td><code>chart._render()</code></td><td>Mount it with <code>App(chart).mount(host)</code>, or <code>renderToString(chart)</code> from <code>swiftui-for-web/server</code></td></tr><tr><td><code>Mark</code> base class</td><td>Removed (an interface in the type declarations)</td></tr><tr><td><code>getX</code>, <code>getY</code>, <code>markType</code>, <code>clone</code>, <code>render</code>, <code>getPointData</code>, <code>getAngleValue</code>, <code>LineMark.generatePath</code>, <code>AreaMark.generateAreaPath</code></td><td>Removed</td></tr></tbody></table></div>
+
+<p>Also new: <code>Chart([marks])</code> draws an array of marks (it drew an empty plot before), a chart redraws when a
+<code>State</code> its data or builder reads changes, and a mark used on its own renders as a one-mark chart.
+<code>createChart</code>, <code>createBarMark</code>, … remain as aliases.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, Chart, BarMark, RuleMark, State, Button, VStack, value, Color } from 'swiftui-for-web';
+
+const data = new State([
+  { day: 'Mon', steps: 6200 }, { day: 'Tue', steps: 8100 }, { day: 'Wed', steps: 7400 },
+]);
+
+const chart = Chart(() =&gt; [
+  ...data.value.map((d) =&gt; BarMark({ x: value('Day', d.day), y: value('Steps', d.steps) })),
+  RuleMark({ y: value('Goal', 7000) }).foregroundStyle(Color.red),
+]).frame({ width: 360, height: 200 });
+
+console.log(chart.type, chart.props !== undefined);
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    chart,
+    Button('Add Thursday', () =&gt; { data.value = [...data.value, { day: 'Thu', steps: 9000 }]; })
+  ).padding(16)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Entry points</h2>
+<ul>
+  <li><code>swiftui-for-web/src/*</code> is no longer importable. Use the main entry, <code>./core</code> (everything but
+  Charts), <code>./charts</code>, <code>./server</code>, <code>./islands</code> or <code>./performance</code>. Stylesheets are at
+  <code>swiftui-for-web/styles/*</code>. Anything else is under <code>swiftui-for-web/internal/*</code>, with no stability promise.</li>
+  <li>Importing a Charts name from <code>./core</code> is now a type error instead of a load-time failure.</li>
+</ul>
+
+<h2>Behaviour changes to check</h2>
+<ul>
+  <li><code>Group</code> is transparent to the enclosing stack: a <code>Spacer</code> in a <code>Group</code> in an
+  <code>HStack</code> is horizontal.</li>
+  <li><code>Capsule</code> always uses <code>border-radius: 9999px</code>.</li>
+  <li>Built-in views are tagged with <code>data-view</code> (<code>data-view="Image"</code>, <code>data-view="Chart"</code>, …):
+  update selectors and snapshots that match on markup.</li>
+  <li><code>TabView</code>, <code>Picker</code>, <code>Stepper</code>, <code>DatePicker</code>, <code>ColorPicker</code>,
+  <code>DisclosureGroup</code> and a selectable <code>List</code> follow binding writes made elsewhere.</li>
+  <li><code>ForEach</code> given a <code>State</code> or a function is reactive; <code>For</code> is deprecated.</li>
+</ul>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="build.html">← Release build</a><a href="../playground/">Open the Playground →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

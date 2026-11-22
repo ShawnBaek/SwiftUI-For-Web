@@ -16,23 +16,9 @@
  * )
  */
 
-import { isDescriptor } from '../../Core/ViewDescriptor.js';
-import { View } from '../../Core/View.js';
-import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
-
-/**
- * Helper to render both View instances and descriptors
- */
-function renderChild(child) {
-  if (child instanceof View) {
-    return child._render();
-  } else if (child && child.$$typeof === VIEW_DESCRIPTOR) {
-    return renderDescriptor(child);
-  }
-  return null;
-}
+import { createDescriptor, isView } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, render } from '../../Core/Renderer.js';
 
 /**
  * Form style enum
@@ -44,178 +30,103 @@ export const FormStyle = {
 };
 
 /**
- * Section view class - Used within Form to group related controls
- */
-export class SectionView extends View {
-  constructor(optionsOrChildren, ...children) {
-    super();
-
-    this._header = null;
-    this._footer = null;
-    this._children = [];
-
-    // Parse arguments
-    if (typeof optionsOrChildren === 'object' && !(optionsOrChildren instanceof View) && !isDescriptor(optionsOrChildren) && !Array.isArray(optionsOrChildren)) {
-      // Section({ header, footer }, children...)
-      this._header = optionsOrChildren.header ?? null;
-      this._footer = optionsOrChildren.footer ?? null;
-      this._children = children.flat();
-    } else {
-      // Section(children...)
-      if (optionsOrChildren instanceof View || isDescriptor(optionsOrChildren)) {
-        this._children = [optionsOrChildren, ...children].flat();
-      } else if (Array.isArray(optionsOrChildren)) {
-        this._children = optionsOrChildren.flat();
-      } else {
-        this._children = children.flat();
-      }
-    }
-  }
-
-  _render() {
-    const section = document.createElement('div');
-    section.dataset.view = 'section';
-    section.style.marginBottom = '24px';
-
-    // Header
-    if (this._header) {
-      const headerContainer = document.createElement('div');
-      headerContainer.dataset.sectionPart = 'header';
-      headerContainer.style.padding = '8px 16px 8px 16px';
-      headerContainer.style.fontSize = '13px';
-      headerContainer.style.fontWeight = '400';
-      headerContainer.style.color = 'rgba(60, 60, 67, 0.6)';
-      headerContainer.style.textTransform = 'uppercase';
-      headerContainer.style.letterSpacing = '0.5px';
-
-      // Handle header as function, View, or string
-      let headerView = null;
-      if (typeof this._header === 'function') {
-        headerView = this._header();
-      } else if (this._header instanceof View) {
-        headerView = this._header;
-      } else if (typeof this._header === 'string') {
-        // Create a text span for string headers
-        const textSpan = document.createElement('span');
-        textSpan.textContent = this._header;
-        headerContainer.appendChild(textSpan);
-      }
-
-      const rendered = renderChild(headerView);
-      if (rendered) {
-        // Inherit text styles
-        rendered.style.fontSize = 'inherit';
-        rendered.style.color = 'inherit';
-        rendered.style.textTransform = 'inherit';
-        rendered.style.letterSpacing = 'inherit';
-        headerContainer.appendChild(rendered);
-      }
-
-      section.appendChild(headerContainer);
-    }
-
-    // Content
-    const content = document.createElement('div');
-    content.dataset.sectionPart = 'content';
-    content.style.backgroundColor = 'white';
-    content.style.borderRadius = '10px';
-    content.style.overflow = 'hidden';
-
-    this._children.forEach((child, index) => {
-      const rendered = renderChild(child);
-      if (rendered) {
-        const row = document.createElement('div');
-        row.style.padding = '11px 16px';
-
-        // Add separator between rows
-        if (index > 0) {
-          row.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
-        }
-
-        row.appendChild(rendered);
-        content.appendChild(row);
-      }
-    });
-
-    section.appendChild(content);
-
-    // Footer
-    if (this._footer) {
-      const footerContainer = document.createElement('div');
-      footerContainer.dataset.sectionPart = 'footer';
-      footerContainer.style.padding = '8px 16px';
-      footerContainer.style.fontSize = '13px';
-      footerContainer.style.color = 'rgba(60, 60, 67, 0.6)';
-
-      const footerView = this._footer();
-      const footerRendered = renderChild(footerView);
-      if (footerRendered) {
-        footerRendered.style.fontSize = 'inherit';
-        footerRendered.style.color = 'inherit';
-        footerContainer.appendChild(footerRendered);
-      }
-
-      section.appendChild(footerContainer);
-    }
-
-    return this._applyModifiers(section);
-  }
-}
-
-/**
- * Factory function for Section
+ * Section - groups related content, with an optional header and footer.
+ *
+ * Signatures: Section({ header, footer }, ...content) and
+ * Section(...content). A header or footer is a string, a view, or a
+ * function returning one.
  */
 export function Section(optionsOrChildren, ...children) {
-  return new SectionView(optionsOrChildren, ...children);
+  const hasOptions = optionsOrChildren && typeof optionsOrChildren === 'object'
+    && !isView(optionsOrChildren) && !Array.isArray(optionsOrChildren);
+  const options = hasOptions ? optionsOrChildren : {};
+  const content = hasOptions ? children : [optionsOrChildren, ...children];
+  return chainable(createDescriptor('Section', {
+    header: options.header ?? null,
+    footer: options.footer ?? null,
+  }, content.flat()));
 }
 
-/**
- * Form view class
- */
-export class FormView extends View {
-  constructor(...children) {
-    super();
-    this._children = children.flat();
-    this._formStyle = FormStyle.automatic;
+const SECONDARY = 'rgba(60, 60, 67, 0.6)';
+
+// A header or footer: its text styles come from the part's container.
+function renderPart(name, value, inherited, style) {
+  const part = document.createElement('div');
+  part.dataset.sectionPart = name;
+  Object.assign(part.style, style);
+  const view = typeof value === 'function' ? value() : value;
+  if (typeof view === 'string') {
+    const span = document.createElement('span');
+    span.textContent = view;
+    part.appendChild(span);
+  } else if (isView(view)) {
+    const rendered = render(view);
+    for (const property of inherited) rendered.style[property] = 'inherit';
+    part.appendChild(rendered);
   }
-
-  /**
-   * Set the form style
-   * @param {string} style - FormStyle value
-   * @returns {FormView} Returns this for chaining
-   */
-  formStyle(style) {
-    this._formStyle = style;
-    return this;
-  }
-
-  _render() {
-    const form = document.createElement('div');
-    form.dataset.view = 'form';
-    form.setAttribute('role', 'form');
-
-    // Form styles
-    form.style.backgroundColor = 'rgba(242, 242, 247, 1)';
-    form.style.padding = '16px';
-    form.style.minHeight = '100%';
-
-    // Render children
-    for (const child of this._children) {
-      const rendered = renderChild(child);
-      if (rendered) {
-        form.appendChild(rendered);
-      }
-    }
-
-    return this._applyModifiers(form);
-  }
+  return part;
 }
 
+registerRenderer('Section', (props, children) => {
+  const section = document.createElement('div');
+  section.dataset.view = 'section';
+  section.style.marginBottom = '24px';
+
+  if (props.header) {
+    section.appendChild(renderPart('header', props.header, ['fontSize', 'color', 'textTransform', 'letterSpacing'], {
+      padding: '8px 16px 8px 16px',
+      fontSize: '13px',
+      fontWeight: '400',
+      color: SECONDARY,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+    }));
+  }
+
+  const content = document.createElement('div');
+  content.dataset.sectionPart = 'content';
+  content.style.backgroundColor = 'white';
+  content.style.borderRadius = '10px';
+  content.style.overflow = 'hidden';
+  children.forEach((child, index) => {
+    const row = document.createElement('div');
+    row.style.padding = '11px 16px';
+    // A separator between rows
+    if (index > 0) row.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
+    row.appendChild(render(child));
+    content.appendChild(row);
+  });
+  section.appendChild(content);
+
+  if (props.footer) {
+    section.appendChild(renderPart('footer', props.footer, ['fontSize', 'color'], {
+      padding: '8px 16px',
+      fontSize: '13px',
+      color: SECONDARY,
+    }));
+  }
+
+  return section;
+});
+
 /**
- * Factory function for Form
+ * Form - a container for data-entry controls, usually Sections.
  */
 export function Form(...children) {
-  return new FormView(...children);
+  return chainable(createDescriptor('Form', { formStyle: FormStyle.automatic }, children.flat()), ({ withProps }) => ({
+    formStyle: (style) => withProps({ formStyle: style }),
+  }));
 }
+
+registerRenderer('Form', (props, children) => {
+  const form = document.createElement('div');
+  form.dataset.view = 'form';
+  form.setAttribute('role', 'form');
+  form.style.backgroundColor = 'rgba(242, 242, 247, 1)';
+  form.style.padding = '16px';
+  form.style.minHeight = '100%';
+  for (const child of children) form.appendChild(render(child));
+  return form;
+});
 
 export default Form;

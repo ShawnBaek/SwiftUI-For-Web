@@ -193,3 +193,65 @@ describe('App', () => {
     });
   });
 });
+
+// #48: containers are descriptors; these follow state written elsewhere.
+describe('Containers (#48)', () => {
+  const mount = (factory) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = App(factory).mount(host);
+    return { host, done: () => { app.unmount(); host.remove(); } };
+  };
+
+  it('TabView shows a selection written elsewhere and moves the tab stop', async () => {
+    const { TabView } = await import('../../src/View/Navigation/TabView.js');
+    const selection = new State('a');
+    const { host, done } = mount(() => TabView(selection, Text('Alpha').tag('a'), Text('Beta').tag('b')));
+    selection.value = 'b';
+    flushSync();
+    const tabs = Array.from(host.querySelectorAll('[role="tab"]'));
+    expect(host.querySelector('[role="tabpanel"]').textContent).toBe('Beta');
+    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0]);
+    done();
+  });
+
+  it('NavigationStack follows a NavigationPath and BackButton pops it', async () => {
+    const { NavigationStack, BackButton } = await import('../../src/View/Navigation/NavigationStack.js');
+    const { NavigationPath } = await import('../../src/View/Navigation/NavigationPath.js');
+    const path = new NavigationPath();
+    const { host, done } = mount(() => NavigationStack(Text('Home'), { path, transitionStyle: 'none' })
+      .navigationDestination('string', (name) => VStack(Text(`Hello ${name}`), BackButton())));
+    path.append('Ada');
+    expect(host.textContent).toBe('Hello Ada‹ Back');
+    host.querySelector('[data-view="BackButton"]').click();
+    expect(path.count).toBe(0);
+    expect(host.textContent).toBe('Home');
+    done();
+  });
+
+  it('NavigationStack keeps only the last screen after two pushes within the transition', async () => {
+    const { NavigationStack } = await import('../../src/View/Navigation/NavigationStack.js');
+    let navigator;
+    const { host, done } = mount(() => (navigator = NavigationStack(Text('Home'), { transitionDuration: 20 })));
+    navigator.push(Text('First'));
+    navigator.push(Text('Second'));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const container = host.querySelector('[data-view="NavigationStack"]').firstElementChild;
+    expect(container.children.length).toBe(1);
+    expect(container.textContent).toBe('Second');
+    done();
+  });
+
+  it('NavigationStack rendered outside an owner unsubscribes from its path when released', async () => {
+    const { NavigationStack } = await import('../../src/View/Navigation/NavigationStack.js');
+    const { NavigationPath } = await import('../../src/View/Navigation/NavigationPath.js');
+    const { render } = await import('../../src/Core/Renderer.js');
+    const { releaseTree } = await import('../../src/Core/ElementPool.js');
+    const path = new NavigationPath();
+    const element = render(NavigationStack(Text('Home'), { path, transitionStyle: 'none' }));
+    expect(path._subscribers.size).toBe(1);
+    releaseTree(element);
+    expect(path._subscribers.size).toBe(0);
+  });
+});

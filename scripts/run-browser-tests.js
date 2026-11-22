@@ -17,7 +17,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bench = process.argv.includes('--bench');
@@ -61,6 +61,17 @@ function serve() {
   const server = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+      // Server markup for the hydration tests (#39): a fixture from
+      // Tests/App/HydrationViews.js rendered with renderToString.
+      const fixture = pathname.match(/^\/__server-render\/(\w+)$/)?.[1];
+      if (fixture) {
+        const { renderToString } = await import(pathToFileURL(path.join(root, 'src/server.js')).href);
+        const { fixtures } = await import(pathToFileURL(path.join(root, 'Tests/App/HydrationViews.js')).href);
+        if (!Object.hasOwn(fixtures, fixture)) throw new Error('unknown fixture');
+        response.writeHead(200, { 'Content-Type': types['.html'] });
+        response.end(renderToString(fixtures[fixture]().view));
+        return;
+      }
       const file = path.join(root, pathname);
       if (file !== root && !file.startsWith(root + path.sep)) throw new Error('outside root');
       const data = await readFile(file);

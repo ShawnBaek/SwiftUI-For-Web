@@ -29,138 +29,67 @@
  * )
  */
 
-import { render as renderAnyView } from '../Core/Renderer.js';
-import { View } from '../Core/View.js';
-import { isDescriptor } from '../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../Core/Renderer.js';
+import { createDescriptor, isView } from '../Core/ViewDescriptor.js';
+import { chainable } from '../Core/Chainable.js';
+import { registerRenderer, render } from '../Core/Renderer.js';
 
-// Render scene content that is a legacy View, a view descriptor, or a
-// function returning either (#48).
-function renderSceneContent(content) {
-  const view = typeof content === 'function' && !(content instanceof View) && !isDescriptor(content)
-    ? content()
-    : content;
-  if (view instanceof View || isDescriptor(view)) return renderAnyView(view);
-  if (isDescriptor(view)) return renderDescriptor(view);
-  return null;
+// Scene content: a view, or a function returning one (called with `arg`).
+function renderSceneContent(content, arg) {
+  const view = typeof content === 'function' && !isView(content) ? content(arg) : content;
+  return isView(view) ? render(view) : null;
+}
+
+function scene(type, props, extras) {
+  return chainable(createDescriptor(type, props), extras);
 }
 
 /**
- * WindowGroup - Scene container for app windows
- */
-export class WindowGroupView extends View {
-  constructor(...args) {
-    super();
-
-    this._title = null;
-    this._id = null;
-    this._content = null;
-    this._defaultValue = null;
-    this._metadata = null;
-
-    // Parse arguments
-    if (typeof args[0] === 'string') {
-      // WindowGroup('Title', content)
-      this._title = args[0];
-      this._content = args[1];
-    } else if (typeof args[0] === 'object' && !(args[0] instanceof View) && !isDescriptor(args[0])) {
-      // WindowGroup({ id, title }, content)
-      const options = args[0];
-      this._id = options.id ?? null;
-      this._title = options.title ?? null;
-      this._defaultValue = options.defaultValue ?? null;
-      // Scene-level document metadata (#40), read by renderDocument.
-      this._metadata = options.metadata ?? null;
-      this._content = args[1];
-    } else {
-      // WindowGroup(content)
-      this._content = args[0];
-    }
-
-    // Set document title if provided
-    if (this._title && typeof document !== 'undefined') {
-      document.title = this._title;
-    }
-  }
-
-  /**
-   * Set the window's default size
-   * @param {Object} size - { width, height }
-   * @returns {WindowGroupView}
-   */
-  defaultSize(size) {
-    this._defaultSize = size;
-    return this;
-  }
-
-  /**
-   * Set minimum size constraints
-   * @param {Object} size - { minWidth, minHeight }
-   * @returns {WindowGroupView}
-   */
-  windowResizability(resizability) {
-    this._resizability = resizability;
-    return this;
-  }
-
-  /**
-   * Handle new window requests
-   * @param {Function} handler
-   * @returns {WindowGroupView}
-   */
-  handlesExternalEvents(matching) {
-    this._externalEventMatching = matching;
-    return this;
-  }
-
-  /**
-   * Set the window style
-   * @param {string} style
-   * @returns {WindowGroupView}
-   */
-  windowStyle(style) {
-    this._windowStyle = style;
-    return this;
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.scene = 'window-group';
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-
-    if (this._id) {
-      container.dataset.windowId = this._id;
-    }
-
-    // Apply default size if specified
-    if (this._defaultSize) {
-      if (this._defaultSize.width) {
-        container.style.width = `${this._defaultSize.width}px`;
-      }
-      if (this._defaultSize.height) {
-        container.style.height = `${this._defaultSize.height}px`;
-      }
-    }
-
-    // Render content
-    if (this._content) {
-      const rendered = renderSceneContent(this._content);
-      if (rendered) container.appendChild(rendered);
-    }
-
-    return this._applyModifiers(container);
-  }
-}
-
-/**
- * Factory function for WindowGroup
+ * WindowGroup - the app's main scene.
+ *
+ * Signatures: WindowGroup('Title', content), WindowGroup({ id, title,
+ * defaultValue, metadata }, content) and WindowGroup(content). `metadata`
+ * is scene-level document metadata (#40), read by renderDocument.
+ *
+ * @returns {Object} Chainable view descriptor
  */
 export function WindowGroup(...args) {
-  return new WindowGroupView(...args);
+  let options = {};
+  if (typeof args[0] === 'string') options = { title: args.shift() };
+  else if (args[0] && typeof args[0] === 'object' && !isView(args[0])) options = args.shift();
+  const title = options.title ?? null;
+  // The title names the document.
+  if (title && typeof document !== 'undefined') document.title = title;
+  return scene('WindowGroup', {
+    title,
+    id: options.id ?? null,
+    defaultValue: options.defaultValue ?? null,
+    metadata: options.metadata ?? null,
+    content: args[0] ?? null,
+    defaultSize: null,
+  }, ({ withProps }) => ({
+    defaultSize: (size) => withProps({ defaultSize: size }),
+    // Window chrome is the browser's: accepted and ignored on the web.
+    windowResizability: (resizability) => withProps({ resizability }),
+    handlesExternalEvents: (matching) => withProps({ externalEvents: matching }),
+    windowStyle: (style) => withProps({ windowStyle: style }),
+  }));
 }
+
+registerRenderer('WindowGroup', (props) => {
+  const container = document.createElement('div');
+  container.dataset.scene = 'window-group';
+  container.style.width = '100%';
+  container.style.height = '100%';
+  container.style.display = 'flex';
+  container.style.flexDirection = 'column';
+  if (props.id) container.dataset.windowId = props.id;
+  const { defaultSize } = props;
+  if (defaultSize?.width) container.style.width = `${defaultSize.width}px`;
+  if (defaultSize?.height) container.style.height = `${defaultSize.height}px`;
+  const rendered = renderSceneContent(props.content);
+  if (rendered) container.appendChild(rendered);
+  return container;
+});
 
 /**
  * Window resizability options
@@ -195,66 +124,39 @@ export class Scene {
 }
 
 /**
- * Settings scene for preferences window
- */
-export class SettingsView extends View {
-  constructor(content) {
-    super();
-    this._content = content;
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.scene = 'settings';
-    container.style.padding = '20px';
-
-    const rendered = this._content ? renderSceneContent(this._content) : null;
-    if (rendered) container.appendChild(rendered);
-
-    return this._applyModifiers(container);
-  }
-}
-
-/**
- * Factory function for Settings
+ * Settings - the preferences scene.
  */
 export function Settings(content) {
-  return new SettingsView(content);
+  return scene('Settings', { content });
 }
 
-/**
- * DocumentGroup - Scene for document-based apps
- */
-export class DocumentGroupView extends View {
-  constructor(documentType, content) {
-    super();
-    this._documentType = documentType;
-    this._content = content;
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.scene = 'document-group';
-    container.style.width = '100%';
-    container.style.height = '100%';
-
-    if (typeof this._content === 'function') {
-      // Content receives document binding
-      const view = this._content({ document: null });
-      if (view instanceof View || isDescriptor(view)) {
-        container.appendChild(renderAnyView(view));
-      }
-    }
-
-    return this._applyModifiers(container);
-  }
-}
+registerRenderer('Settings', (props) => {
+  const container = document.createElement('div');
+  container.dataset.scene = 'settings';
+  container.style.padding = '20px';
+  const rendered = renderSceneContent(props.content);
+  if (rendered) container.appendChild(rendered);
+  return container;
+});
 
 /**
- * Factory function for DocumentGroup
+ * DocumentGroup - the scene of a document-based app. The content function
+ * receives `{ document }`.
  */
 export function DocumentGroup(documentType, content) {
-  return new DocumentGroupView(documentType, content);
+  return scene('DocumentGroup', { documentType, content });
 }
+
+registerRenderer('DocumentGroup', (props) => {
+  const container = document.createElement('div');
+  container.dataset.scene = 'document-group';
+  container.style.width = '100%';
+  container.style.height = '100%';
+  if (typeof props.content === 'function') {
+    const rendered = renderSceneContent(props.content, { document: null });
+    if (rendered) container.appendChild(rendered);
+  }
+  return container;
+});
 
 export default WindowGroup;

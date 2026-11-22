@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reactivity and layout · SwiftUI for Web 3.1</title>
+  <meta name="description" content="Reactive ForEach, Show, the dev warning, ordered modifiers, frame alignment, lazy stacks, navigationTitle.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html" aria-current="page">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Reactivity and layout</h1>
+<p class="lead">A view body runs once, at mount. State changes re-run only the small effects bound to the DOM nodes that
+read them. These are the rules, and the layout behaviour that changed in 3.1.</p>
+
+<h2>Reactive reads</h2>
+<ul>
+  <li>Pass a <code>State</code> or <code>Binding</code> itself: <code>Text(count)</code>, <code>.opacity(isVisible)</code>,
+  <code>.foregroundColor(color)</code>, <code>.padding(spacing)</code>, <code>.background(…)</code>, <code>.font(…)</code>,
+  <code>.frame(…)</code>, <code>.cornerRadius(…)</code>, <code>.shadow(…)</code> and the accessibility modifiers update on their own.</li>
+  <li>Use a function for derived values: <code>Text(() =&gt; `${count.value} items`)</code>.</li>
+  <li><code>Text(count.value)</code> is a snapshot: it renders once and never updates.</li>
+</ul>
+
+<h3>The development warning for untracked reads</h3>
+<p>Reading <code>State.value</code> while building a view, outside any reactive scope, logs a warning once per call site,
+naming the line. It is on in the source tree and compiled out of the release build. Run this and look at the console:</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Button, State } from 'swiftui-for-web';
+
+const count = new State(0);
+
+App(() =&gt;
+  VStack({ spacing: 8 },
+    Text(count.value),              // warns: a snapshot that never updates
+    Text(count),                    // updates
+    Text(() =&gt; `Double: ${count.value * 2}`), // updates
+    Button('Add', () =&gt; { count.value += 1; })
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Show</h2>
+<p><code>Show(when, then, otherwise)</code> is the reactive <code>if</code>. The <code>when</code> function is tracked; switching
+branches mounts one and disposes the other, with its effects.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Toggle, Show, State, Color } from 'swiftui-for-web';
+
+const signedIn = new State(false);
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Toggle('Signed in', signedIn.binding),
+    Show(() =&gt; signedIn.value,
+      Text('Welcome back!').foregroundColor(Color.green),
+      Text('Please sign in.').foregroundColor(Color.secondary)
+    )
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Reactive, keyed ForEach</h2>
+<p>Given a <code>State</code>, a <code>Binding</code> or a function, <code>ForEach</code> is reactive and keyed. Rows whose key
+stays keep their DOM and effects, new keys mount, removed keys are disposed. A new object with the same key (an
+immutable update with <code>map</code>) remounts its row so its closures see the new item. The key is the <code>id</code>
+option (a property name or a function), else the item’s <code>id</code>, else its index. A plain array is a static
+snapshot. Rows of a reactive <code>ForEach</code> inside a <code>List</code> are list rows, including rows added later.
+<code>For(each, render, key)</code> is the same thing under its old name, deprecated.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, HStack, Text, Button, ForEach, State, Color } from 'swiftui-for-web';
+
+const people = new State([
+  { id: 'a', name: 'Ada', score: 3 },
+  { id: 'b', name: 'Grace', score: 5 },
+]);
+
+const bump = (id) =&gt; {
+  people.value = people.value.map((p) =&gt; (p.id === id ? { ...p, score: p.score + 1 } : p));
+};
+
+App(() =&gt;
+  VStack({ alignment: 'leading', spacing: 8 },
+    ForEach(people, { id: 'id' }, (person) =&gt;
+      HStack({ spacing: 12 },
+        Text(`${person.name}: ${person.score}`),
+        Button('+1', () =&gt; bump(person.id))
+      )
+    ),
+    // Derived and sorted: a function.
+    Text('Leader:').foregroundColor(Color.secondary),
+    ForEach(() =&gt; [...people.value].sort((a, b) =&gt; b.score - a.score).slice(0, 1), { id: 'id' },
+      (person) =&gt; Text(person.name))
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Ordered modifiers</h2>
+<p>Modifier order has SwiftUI’s meaning. Padding, background, frame, border, clipping, opacity, shadow and mask start a new
+layer when an earlier modifier on the view would change their meaning, so padding after a background goes outside it.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, HStack, Text, Color } from 'swiftui-for-web';
+
+App(() =&gt;
+  HStack({ spacing: 24 },
+    Text('Inner then outer')
+      .padding(8).background(Color.yellow)
+      .padding(8).background(Color.orange),
+    Text('Rounded, then bordered')
+      .padding(12).background(Color.mint).cornerRadius(12)
+      .padding(4).border(Color.gray, 1)
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>frame(alignment:)</h2>
+<p><code>.frame({ width, height, alignment })</code> positions the content inside the frame: <code>topLeading</code>,
+<code>top</code>, <code>topTrailing</code>, <code>leading</code>, <code>center</code>, <code>trailing</code>,
+<code>bottomLeading</code>, <code>bottom</code>, <code>bottomTrailing</code>. <code>maxWidth: Infinity</code> fills along a
+stack’s axis, sharing space with spacers, and frames use <code>box-sizing: border-box</code>.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Color } from 'swiftui-for-web';
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Text('bottomTrailing')
+      .frame({ width: 220, height: 90, alignment: 'bottomTrailing' })
+      .background(Color.secondarySystemBackground),
+    Text('Fills the width')
+      .padding(8)
+      .frame({ maxWidth: Infinity, alignment: 'leading' })
+      .background(Color.yellow)
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Lazy stacks</h2>
+<p><code>LazyVStack</code> and <code>LazyHStack</code> render a row when it comes near the viewport (or the nearest scrolling
+ancestor) and keep it once rendered, as in SwiftUI. Until then each row is a placeholder of an estimated size. Without
+<code>IntersectionObserver</code>, and in a static render, every row renders.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, ScrollView, LazyVStack, ForEach, Text } from 'swiftui-for-web';
+
+const rows = Array.from({ length: 1000 }, (_, i) =&gt; ({ id: i }));
+
+App(() =&gt;
+  ScrollView(
+    LazyVStack({ spacing: 4 },
+      ForEach(rows, { id: 'id' }, (row) =&gt; Text(`Row ${row.id}`).padding(6))
+    )
+  ).frame({ height: 300 })
+).mount('#root');
+
+// Scroll the list, then look again: more rows render as they come near.
+setTimeout(() =&gt; {
+  const rendered = document.querySelectorAll('#root [data-view="Text"]').length;
+  console.log(`Rendered ${rendered} of ${rows.length} rows`);
+}, 500);
+</code></pre></div>
+
+
+<h2>navigationTitle</h2>
+<p><code>.navigationTitle(title)</code> sets the document title while its view is shown and restores the previous one when the
+view goes away (a popped screen, a closed branch). A <code>State</code> or <code>Binding</code> title stays in sync, and
+<a href="static-rendering.html"><code>renderDocument</code></a> uses it when the metadata has no title.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, TextField, State } from 'swiftui-for-web';
+
+const title = new State('Inbox');
+
+App(() =&gt;
+  VStack({ spacing: 8 },
+    TextField('Title', title.binding),
+    Text(() =&gt; `document.title follows: ${title.value}`)
+  )
+    .padding(24)
+    .navigationTitle(title)
+).mount('#root');
+</code></pre></div>
+
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="gestures-animation.html">← Gestures and animation</a><a href="accessibility.html">Accessibility →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

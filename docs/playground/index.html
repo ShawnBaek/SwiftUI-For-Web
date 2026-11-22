@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playground · SwiftUI for Web</title>
+  <meta name="description" content="Write SwiftUI for Web code and see it run: a live editor and preview, with shareable links.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="playground.css">
+  <script>
+    // Apply a saved theme before first paint.
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* storage unavailable: follow the system */ }
+  </script>
+  <script type="module" src="playground.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#editor-input">Skip to the code editor</a>
+
+  <header class="pg-header">
+    <div class="pg-brand">
+      <a class="pg-logo" href="../../">SwiftUI for Web</a>
+      <span class="pg-title">Playground</span>
+      <span class="pg-version" title="Framework version">3.1.0</span>
+    </div>
+    <nav class="pg-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="../guides/">What’s new in 3.1</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+    <div class="pg-toolbar">
+      <label class="pg-field">
+        <span>Example</span>
+        <select id="example-select"></select>
+      </label>
+      <button type="button" id="run-button" class="pg-button pg-primary" aria-keyshortcuts="Meta+Enter Control+Enter">
+        Run <kbd class="pg-kbd" aria-hidden="true">⌘↵</kbd>
+      </button>
+      <label class="pg-check">
+        <input type="checkbox" id="auto-run" checked>
+        <span>Run as I type</span>
+      </label>
+      <button type="button" id="share-button" class="pg-button">Copy link</button>
+      <label class="pg-field">
+        <span>Theme</span>
+        <select id="theme-select">
+          <option value="auto">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="pg-main">
+    <section class="pg-pane pg-editor-pane" aria-labelledby="editor-heading">
+      <div class="pg-pane-header">
+        <h2 id="editor-heading">Code</h2>
+        <span class="pg-hint" id="editor-help">Tab indents · Esc then Tab leaves the editor · <span class="pg-mod">⌘</span>+Enter runs</span>
+      </div>
+      <div class="editor" data-editor>
+        <div class="editor-gutter" aria-hidden="true"><div data-editor-gutter></div></div>
+        <div class="editor-body">
+          <pre class="editor-highlight" data-editor-highlight aria-hidden="true"></pre>
+          <textarea id="editor-input" class="editor-input" aria-label="Code editor" aria-describedby="editor-help"
+            spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="pg-pane pg-preview-pane" aria-labelledby="preview-heading">
+      <div class="pg-pane-header">
+        <h2 id="preview-heading">Preview</h2>
+        <span class="pg-run-status" id="run-status" aria-hidden="true"></span>
+      </div>
+      <div class="pg-preview" id="preview"></div>
+      <section class="pg-console" aria-labelledby="console-heading">
+        <div class="pg-console-header">
+          <h2 id="console-heading">Console <span class="pg-count" id="console-count"></span></h2>
+          <button type="button" class="pg-button pg-small" id="console-clear">Clear</button>
+        </div>
+        <ol class="pg-console-list" id="console-list" tabindex="0" aria-label="Console messages"></ol>
+      </section>
+    </section>
+  </main>
+
+  <div class="visually-hidden" id="status" role="status" aria-live="polite"></div>
+</body>
+</html>

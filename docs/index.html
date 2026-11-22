@@ -50,6 +50,8 @@
 
     .header-content {
       display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
       align-items: center;
       justify-content: space-between;
     }
@@ -63,7 +65,8 @@
 
     nav {
       display: flex;
-      gap: 24px;
+      flex-wrap: wrap;
+      gap: 6px 24px;
     }
 
     nav a {
@@ -122,6 +125,78 @@
 
     .badge strong {
       color: var(--text-primary);
+    }
+
+    a.badge-link {
+      text-decoration: none;
+      border-color: var(--accent);
+    }
+
+    a.badge-link:hover {
+      color: var(--text-primary);
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }
+
+    /* 3.1 guides */
+    .guides-section {
+      padding: 60px 0 20px;
+    }
+
+    .guides-section h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 12px;
+    }
+
+    .guides-section .intro {
+      text-align: center;
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 0 auto 32px;
+    }
+
+    .guides-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 16px;
+    }
+
+    .guide-card {
+      display: block;
+      padding: 18px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.2s;
+    }
+
+    .guide-card:hover {
+      border-color: var(--accent);
+    }
+
+    .guide-card h3 {
+      font-size: 17px;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+
+    .guide-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    a:focus-visible, .btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     /* Examples Grid */
@@ -259,14 +334,14 @@
 
     .detail-content {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 32px;
       align-items: start;
     }
 
     @media (max-width: 800px) {
       .detail-content {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
@@ -383,6 +458,7 @@
 
     .step-content {
       flex: 1;
+      min-width: 0;
     }
 
     .step-content h3 {
@@ -419,11 +495,13 @@
 <body>
   <header>
     <div class="container header-content">
-      <a href="#" class="logo">SwiftUI for Web</a>
-      <nav>
+      <a href="../" class="logo">SwiftUI for Web</a>
+      <nav aria-label="Site">
         <a href="#examples">Examples</a>
+        <a href="guides/">What’s new in 3.1</a>
+        <a href="playground/">Playground</a>
         <a href="#quickstart">Quick Start</a>
-        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" target="_blank">GitHub</a>
+        <a href="https://github.com/ShawnBaek/SwiftUI-For-Web" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </div>
   </header>
@@ -434,10 +512,15 @@
       <h1>SwiftUI for Web Tutorials</h1>
       <p>Learn to build declarative UIs for the web using the same patterns you love from SwiftUI. Zero dependencies, pure JavaScript.</p>
       <div class="badges">
+        <a class="badge badge-link" href="guides/"><strong>v3.1.0</strong> What’s new</a>
         <div class="badge"><strong>84</strong> Components</div>
         <div class="badge"><strong>0</strong> Dependencies</div>
-        <div class="badge"><strong>~88 KB</strong> Core gzipped</div>
+        <div class="badge"><strong>&lt; 120 KB</strong> gzip budget</div>
         <div class="badge"><strong>6</strong> Example Apps</div>
+      </div>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="playground/">Open the Playground</a>
+        <a class="btn btn-secondary" href="guides/">Read the 3.1 guides</a>
       </div>
     </div>
   </section>
@@ -516,6 +599,25 @@
     </div>
   </section>
 
+  <!-- 3.1 guides -->
+  <section class="guides-section" id="guides">
+    <div class="container">
+      <h2>What’s new in 3.1</h2>
+      <p class="intro">3.1.0 makes every built-in view a descriptor, renders views on the server, hydrates them in the browser, and brings presentations, gestures, transitions and accessibility closer to SwiftUI.</p>
+      <div class="guides-grid">
+        <a class="guide-card" href="guides/static-rendering.html"><h3>Static rendering for SEO</h3><p>renderToString, renderDocument, DocumentMetadata and sitemap.</p></a>
+        <a class="guide-card" href="guides/islands.html"><h3>Islands and hydration</h3><p>mount modes replace and adopt, and whenVisible.</p></a>
+        <a class="guide-card" href="guides/presentations.html"><h3>Presentations</h3><p>sheet, alert, confirmationDialog, fullScreenCover and dismiss.</p></a>
+        <a class="guide-card" href="guides/gestures-animation.html"><h3>Gestures and animation</h3><p>Gesture composition, removal transitions, matchedGeometryEffect.</p></a>
+        <a class="guide-card" href="guides/reactivity-layout.html"><h3>Reactivity and layout</h3><p>Reactive ForEach, Show, ordered modifiers, frame alignment, lazy stacks.</p></a>
+        <a class="guide-card" href="guides/accessibility.html"><h3>Accessibility</h3><p>Native controls and WAI-ARIA patterns with keyboard support.</p></a>
+        <a class="guide-card" href="guides/build.html"><h3>Release build</h3><p>--bundle, --hash and --no-minify.</p></a>
+        <a class="guide-card" href="guides/migration.html"><h3>Migrating from 3.0</h3><p>Removed *View classes and extend* helpers, /performance, Chart.</p></a>
+        <a class="guide-card" href="playground/"><h3>Playground</h3><p>Edit code and see it run, with shareable links.</p></a>
+      </div>
+    </div>
+  </section>
+
   <!-- Detail: Hello World -->
   <section class="detail-section" id="example-helloworld">
     <div class="container">
@@ -575,7 +677,7 @@
           <h3>What you'll learn</h3>
           <ul>
             <li>Creating reactive state with new State(0)</li>
-            <li>Reading and writing state via count.value</li>
+            <li>Passing a State to Text so it updates; writing count.value</li>
             <li>Button with action callbacks</li>
             <li>HStack for horizontal layout</li>
             <li>Styling buttons with background, cornerRadius, padding</li>
@@ -590,7 +692,7 @@
 <span class="keyword">const</span> <span class="function">CounterView</span> = () =>
   <span class="function">VStack</span>({ spacing: <span class="number">24</span> },
     <span class="function">Text</span>(<span class="string">'Counter'</span>).<span class="function">font</span>(Font.title),
-    <span class="function">Text</span>(<span class="function">String</span>(count.value))
+    <span class="function">Text</span>(count) <span class="comment">// the State itself, so the text updates</span>
       .<span class="function">font</span>(Font.<span class="function">system</span>(<span class="number">72</span>, Font.Weight.bold))
       .<span class="function">foregroundColor</span>(Color.blue),
     <span class="function">HStack</span>({ spacing: <span class="number">16</span> },
@@ -655,7 +757,8 @@
 }
 
 <span class="comment">// View uses ForEach for the list</span>
-<span class="function">ForEach</span>(viewModel.filteredTodos, { id: <span class="string">'id'</span> },
+<span class="comment">// A function makes ForEach reactive and keyed</span>
+<span class="function">ForEach</span>(() => viewModel.filteredTodos, { id: <span class="string">'id'</span> },
   (todo) => <span class="function">TodoItemRow</span>(todo, viewModel)
 )</code></pre>
           </div>
@@ -760,8 +863,9 @@
   );
 }
 
-<span class="keyword">const</span> app = <span class="function">App</span>(MainApp).<span class="function">mount</span>(<span class="string">'#root'</span>);
-vm.<span class="function">subscribe</span>(() => app.<span class="function">refresh</span>());</code></pre>
+<span class="function">App</span>(MainApp).<span class="function">mount</span>(<span class="string">'#root'</span>);
+<span class="comment">// Views that read the view model update on their own:</span>
+<span class="comment">// no subscribe() or refresh() call is needed.</span></code></pre>
           </div>
           <div style="margin-top: 16px;">
             <a href="../Examples/Airbnb/" class="btn btn-primary" target="_blank">View Live Demo</a>
@@ -841,7 +945,7 @@ cd SwiftUI-For-Web</code></pre>
           <h3>Start a local server</h3>
           <p>ES modules require a server to work properly.</p>
           <div class="code-panel">
-            <pre><code>python -m http.server 8000
+            <pre><code>python3 serve.py 8000
 <span class="comment"># or</span>
 npx serve .</code></pre>
           </div>

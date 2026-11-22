@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Islands and hydration · SwiftUI for Web 3.1</title>
+  <meta name="description" content="mount modes, adopt hydration and whenVisible.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html" aria-current="page">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Islands and hydration</h1>
+<p class="lead">Keep a page server-rendered and activate SwiftUI for Web only where it is interactive, without a layout
+shift, and without throwing away the server’s DOM.</p>
+
+<h2>Mount modes</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">Call</th><th scope="col">What happens to the host’s markup</th></tr></thead><tbody><tr><td><code>App(view).mount(host)</code></td><td>Cleared, then the view renders into the host.</td></tr><tr><td><code>App(view).mount(host, { mode: 'replace' })</code></td><td>Kept as a static fallback until the view has rendered off-document; then the two swap in one step (<code>replaceChildren</code>), and the host keeps its height until the next frame, so there is no layout shift.</td></tr><tr><td><code>App(view).mount(host, { mode: 'adopt' })</code></td><td>Hydrated: the view renders onto the server’s nodes instead of new ones.</td></tr><tr><td><code>app.unmount()</code></td><td>Releases the app’s handlers, effects, tasks and lifecycle callbacks.</td></tr></tbody></table></div>
+
+<p><code>host</code> is a selector or an element.</p>
+
+<h2 id="adopt">Hydrating server markup with adopt</h2>
+<p>With <code>mode: 'adopt'</code>, element creation during the client’s first render claims the matching element from the
+server markup (<code>renderToString</code> or <code>renderDocument</code>), so effects, delegated handlers, gestures,
+lifecycle callbacks and the element references their closures capture all belong to the server’s nodes.</p>
+<ul>
+  <li>Each element keeps its identity, focus (with a text field’s selection) and scroll offset.</li>
+  <li>A claimed element is emptied and rebuilt by its renderer, so the result is always the client’s tree. Where the markup
+  differs (another tag, or outside the enclosing view’s element) the element is created fresh, and development builds
+  warn at the first difference.</li>
+  <li>Text typed, or a box ticked, in a server-rendered field before hydration is kept when its binding still holds the
+  server’s value, and passed to the binding; otherwise the binding’s value replaces it.</li>
+  <li>Comments and whitespace in the markup don’t matter. Adopting a host that already has a mounted app unmounts that app
+  first (development builds warn).</li>
+</ul>
+<p>This sample puts the markup <code>renderToString</code> produces for the counter into <code>#root</code>, as a server
+would, then adopts it:</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Button, State } from 'swiftui-for-web';
+
+const count = new State(0);
+const Counter = () =&gt;
+  VStack({ spacing: 8 },
+    Text(count),
+    Button('Add one', () =&gt; { count.value += 1; })
+  );
+
+// What renderToString(Counter()) returns, as the server sent it.
+document.getElementById('root').innerHTML =
+  '&lt;div data-view="VStack" style="display: flex; flex-direction: column; align-items: center; gap: 8px;"&gt;&lt;span data-view="Text"&gt;0&lt;/span&gt;&lt;button data-view="Button" style="cursor: pointer; border: none; background: transparent; padding: 0; font: inherit; color: rgba(0, 122, 255, 1);"&gt;Add one&lt;/button&gt;&lt;/div&gt;';
+
+const serverButton = document.querySelector('#root button');
+App(Counter).mount('#root', { mode: 'adopt' });
+
+console.log('Kept the server button:', document.querySelector('#root button') === serverButton);
+serverButton.click(); // the client's handler is bound to the server's node
+console.log('Count after a click:', count.value);
+</code></pre></div>
+
+<p>In an app, the server writes the document with <code>renderDocument(view, { scripts: ['/main.js'] })</code> and
+<code>main.js</code> mounts the same view:</p>
+<div class="sample"><pre data-lang="js" data-title="main.js"><code>// main.js
+import { App } from 'swiftui-for-web';
+import { Site } from './Site.js'; // the same view the server rendered
+
+App(Site).mount('#root', { mode: 'adopt' });
+</code></pre></div>
+
+
+<h2>Islands with whenVisible</h2>
+<p>The <code>swiftui-for-web/islands</code> entry exports <code>whenVisible(host, load, { rootMargin })</code>. It imports no
+framework code itself, so a page whose islands are off-screen loads no framework JavaScript until they come within
+<code>rootMargin</code> (default <code>200px</code>) of the viewport. <code>load</code> runs once, with the host; the call returns a
+function that stops watching. Without <code>IntersectionObserver</code> it loads right away.</p>
+<p>Static controls on the page can drive an island by writing a <code>State</code> that the island module exports: one app
+serves any number of triggers.</p>
+<div class="sample"><pre data-lang="html" data-title="index.html"><code>&lt;script type="importmap"&gt;
+  {
+    "imports": {
+      "swiftui-for-web": "/node_modules/swiftui-for-web/src/index.js",
+      "swiftui-for-web/islands": "/node_modules/swiftui-for-web/src/islands.js"
+    }
+  }
+&lt;/script&gt;
+
+&lt;div id="finder"&gt;&lt;p&gt;Static fallback list…&lt;/p&gt;&lt;/div&gt;
+&lt;button type="button" data-query="swift"&gt;Swift&lt;/button&gt;
+&lt;button type="button" data-query="metal"&gt;Metal&lt;/button&gt;
+
+&lt;script type="module"&gt;
+  import { whenVisible } from 'swiftui-for-web/islands'; // loads no framework code
+
+  whenVisible('#finder', async () =&gt; {
+    const { query } = await import('./finder-island.js');
+    for (const button of document.querySelectorAll('[data-query]')) {
+      button.addEventListener('click', () =&gt; { query.value = button.dataset.query; });
+    }
+  });
+&lt;/script&gt;
+</code></pre></div>
+
+<div class="sample"><pre data-lang="js" data-title="finder-island.js"><code>// finder-island.js
+import { App, VStack, Text, State } from 'swiftui-for-web';
+
+export const query = new State('');   // the page's buttons write this
+
+const Finder = () =&gt;
+  VStack({ alignment: 'leading', spacing: 4 },
+    Text(() =&gt; (query.value ? `Results for “${query.value}”` : 'Pick a topic'))
+  );
+
+App(Finder).mount('#finder', { mode: 'replace' });
+</code></pre></div>
+
+<p>The import map points the package names at the files; adjust the paths to where the framework is served, or import the
+files by path (<code>./src/index.js</code>) as the examples in this repository do. A <code>--bundle</code>
+<a href="build.html">release build</a> puts the island and the framework code it uses into one module.</p>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="static-rendering.html">← Static rendering for SEO</a><a href="presentations.html">Presentations →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

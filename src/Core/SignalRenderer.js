@@ -20,6 +20,7 @@ import { buildingView, DEV_BUILD } from './Dev.js';
 import { nextElementId } from './ElementID.js';
 import { withEnvironment, EnvironmentValues } from '../Data/Environment.js';
 import { render } from './Renderer.js';
+import { hydrate, withoutHydration } from './Hydration.js';
 import { ModifierType } from './ViewDescriptor.js';
 import { releaseTree } from './ElementPool.js';
 import { initDelegation, teardownDelegation } from './EventDelegate.js';
@@ -29,6 +30,13 @@ import {
   cancelAppear
 } from './LifecycleObserver.js';
 import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/Signal.js';
+
+function eachField(nodes, fn) {
+  for (const node of nodes) node.querySelectorAll?.('input:not([type=file]), textarea').forEach(fn);
+}
+
+/** Host → disposer of the view mounted in it. */
+const _mounted = new WeakMap();
 
 /**
  * Mount a view tree into a container with fine-grained reactivity.
@@ -40,27 +48,48 @@ import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/
 export function mount(viewFactory, container, options = {}) {
   let dispose;
 
+  // A host that already holds a mounted view (#39): unmount that view first,
+  // or its effects and the listeners on its nodes would stay live. Adopt
+  // then claims copies of its markup, which carry none of those listeners.
+  const previous = _mounted.get(container);
+  if (previous) {
+    if (DEV_BUILD && options.adopt) console.warn("SwiftUI-For-Web: mount(host, { mode: 'adopt' }) on a host with a mounted app unmounted that app first.");
+    const markup = options.adopt && Array.from(container.childNodes, (node) => node.cloneNode(true));
+    // The copies hold the current field state as their markup.
+    eachField(markup || [], (field) => {
+      field.defaultValue = field.value;
+      field.defaultChecked = field.checked;
+    });
+    previous();
+    if (markup) container.replaceChildren?.(...markup);
+  }
+
   createRoot((d) => {
     dispose = d;
+    _mounted.set(container, d);
 
     const view = typeof viewFactory === 'function' ? buildingView(viewFactory) : viewFactory;
-    const element = render(view);
 
-    if (options.replace && typeof container.replaceChildren === 'function') {
-      // adopt: compare with the server markup and remember focus first.
-      const focusPath = options.adopt ? adoptPrepare(container, element) : null;
-      // Swap the host's static fallback for the view in one step (#39).
-      if (element) container.replaceChildren(element);
-      else container.replaceChildren();
-      if (focusPath) restoreFocus(container, focusPath);
+    let element;
+    if (options.adopt && typeof container.replaceChildren === 'function') {
+      // adopt (#39): hydrate. The view renders onto the server's nodes.
+      element = adoptRender(container, view);
     } else {
-      const oldChild = container.firstChild;
-      if (oldChild) releaseTree(oldChild);
-      container.textContent = '';
-      if (element) container.appendChild(element);
+      element = render(view);
+      if (options.replace && typeof container.replaceChildren === 'function') {
+        // Swap the host's static fallback for the view in one step (#39).
+        if (element) container.replaceChildren(element);
+        else container.replaceChildren();
+      } else {
+        const oldChild = container.firstChild;
+        if (oldChild) releaseTree(oldChild);
+        container.textContent = '';
+        if (element) container.appendChild(element);
+      }
     }
 
     onCleanup(() => {
+      if (_mounted.get(container) === d) _mounted.delete(container);
       if (element && element.parentNode === container) {
         container.removeChild(element);
       }
@@ -124,18 +153,49 @@ function pathTo(container, node) {
   return path;
 }
 
-function adoptPrepare(container, element) {
-  if (DEV_BUILD) {
-    // Compare every top-level node the server rendered with the client's.
-    const serverRoot = { nodeType: 0, childNodes: Array.from(container.childNodes || []) };
-    const clientRoot = { nodeType: 0, childNodes: element ? [element] : [] };
-    const difference = firstDifference(serverRoot, clientRoot);
+/**
+ * Render `view` onto the server markup in `container` (see Hydration.js) and
+ * leave the host holding only the rendered root. In development builds the
+ * client tree is compared with the server markup first, as before.
+ */
+function adoptRender(container, view) {
+  // The comparison needs the markup as the server sent it; hydrating
+  // empties the reused nodes, so compare against a copy.
+  const serverCopy = DEV_BUILD ? Array.from(container.childNodes || [], (node) => node.cloneNode(true)) : null;
+  // As the server sent it: without what the user typed (kept separately, see Hydration.js).
+  eachField(serverCopy || [], (field) => {
+    field.value = field.defaultValue;
+    field.checked = field.defaultChecked;
+  });
+  // Fallback focus target, by position, for a focused node not reused.
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  const focusPath = active && active !== container && container.contains?.(active) ? pathTo(container, active) : null;
+
+  const { element, restore } = hydrate(container, () => render(view));
+
+  if (serverCopy) {
+    const difference = firstDifference({ nodeType: 0, childNodes: serverCopy }, { nodeType: 0, childNodes: element ? [element] : [] });
     if (difference) {
-      console.warn(`SwiftUI-For-Web: mount(host, { mode: 'adopt' }) found client markup that differs from the server markup at ${difference}. Render both from the same state.`);
+      console.warn(`SwiftUI-For-Web: mount(host, { mode: 'adopt' }) found client markup that differs from the server markup at ${difference}. Render both from the same state; the differing nodes were created fresh.`);
     }
   }
-  const active = typeof document !== 'undefined' ? document.activeElement : null;
-  return active && container.contains?.(active) ? pathTo(container, active) : null;
+
+  // The root is usually the server's root, still in place: remove what else
+  // the host holds around it rather than re-inserting it.
+  if (element && element.parentNode === container) {
+    for (let node = container.firstChild; node;) {
+      const next = node.nextSibling;
+      if (node !== element) container.removeChild(node);
+      node = next;
+    }
+  } else if (element) {
+    container.replaceChildren(element);
+  } else {
+    container.replaceChildren();
+  }
+
+  if (!restore() && focusPath) restoreFocus(container, focusPath);
+  return element;
 }
 
 function restoreFocus(container, path) {
@@ -565,7 +625,7 @@ function installPresentation(element, kind, value) {
   createEffect(() => {
     const isPresented = Boolean(readValue(binding));
     if (isPresented && !wasPresented) {
-      present();
+      withoutHydration(present);
     } else if (!isPresented && wasPresented) {
       dismissElement();
       if (focusBeforePresentation?.isConnected) {

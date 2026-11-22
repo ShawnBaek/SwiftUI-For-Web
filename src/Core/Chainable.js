@@ -15,6 +15,14 @@ import {
   createModifier,
   ModifierType
 } from './ViewDescriptor.js';
+import { animationModifier, transitionModifier, matchedGeometryModifier } from '../Animation/Animation.js';
+import {
+  gestureModifier,
+  simultaneousGestureModifier,
+  highPriorityGestureModifier,
+  longPressGestureModifier,
+  dragGestureModifier
+} from '../Gesture/Gesture.js';
 
 /**
  * @param {Object} descriptor - Base descriptor
@@ -39,6 +47,10 @@ export function chainable(descriptor, extras = null) {
 
   const chain = Object.create(null);
   Object.assign(chain, descriptor);
+  // Object.assign skips the non-enumerable creation site that development
+  // builds record (#42), so render errors could not say where a view was
+  // created; keep it.
+  if (descriptor._source) Object.defineProperty(chain, '_source', { value: descriptor._source, enumerable: false });
 
   // Environment (#49)
   chain.environment = (key, value) => add(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] });
@@ -46,15 +58,30 @@ export function chainable(descriptor, extras = null) {
 
   // Layout and style
   chain.padding = (value) => add(ModifierType.PADDING, value);
-  chain.frame = (options) => add(ModifierType.FRAME, options);
+  chain.frame = (options = {}) => add(ModifierType.FRAME, options);
   chain.foregroundColor = (color) => add(ModifierType.FOREGROUND_COLOR, color);
   chain.background = (color) => add(ModifierType.BACKGROUND, color);
   chain.font = (font) => add(ModifierType.FONT, font);
   chain.opacity = (value) => add(ModifierType.OPACITY, value);
   chain.cornerRadius = (radius) => add(ModifierType.CORNER_RADIUS, radius);
   chain.border = (color, width = 1) => add(ModifierType.BORDER, { color, width });
-  chain.shadow = (options) => add(ModifierType.SHADOW, options);
+  chain.shadow = (options = {}) => add(ModifierType.SHADOW, options);
   chain.clipShape = (shape) => add(ModifierType.CLIP_SHAPE, shape);
+  chain.mask = (mask, alignment = 'center') => add(ModifierType.MASK, { shape: mask, alignment });
+  chain.contentShape = (shape, eoFill = false) => add(ModifierType.CONTENT_SHAPE, { shape, eoFill });
+
+  // Animation (src/Animation; the same implementation the legacy View uses)
+  chain.animation = (animation, value) => add(ModifierType.ANIMATION, animationModifier(animation, value));
+  chain.transition = (transition) => add(ModifierType.TRANSITION, transitionModifier(transition));
+  chain.matchedGeometryEffect = (id, namespace, options = {}) =>
+    add(ModifierType.MATCHED_GEOMETRY, matchedGeometryModifier(id, namespace, options));
+
+  // Gestures (src/Gesture)
+  chain.gesture = (gesture, options) => add(ModifierType.GESTURE, gestureModifier(gesture, options));
+  chain.simultaneousGesture = (gesture, options) => add(ModifierType.GESTURE, simultaneousGestureModifier(gesture, options));
+  chain.highPriorityGesture = (gesture, options) => add(ModifierType.GESTURE, highPriorityGestureModifier(gesture, options));
+  chain.onLongPressGesture = (handler, options = {}) => add(ModifierType.GESTURE, longPressGestureModifier(handler, options));
+  chain.onDrag = (onChanged, onEnded) => add(ModifierType.GESTURE, dragGestureModifier(onChanged, onEnded));
 
   // Effects
   chain.colorEffect = (shader, opts) => add(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) });
@@ -94,7 +121,9 @@ export function chainable(descriptor, extras = null) {
 
   chain.modifier = (mod) => add(ModifierType.CUSTOM, mod);
 
-  if (extras) Object.assign(chain, extras({ descriptor, wrap, add, withProps }));
+  // Property descriptors, so a view type can add getters (NavigationStack's
+  // depth).
+  if (extras) Object.defineProperties(chain, Object.getOwnPropertyDescriptors(extras({ descriptor, wrap, add, withProps })));
 
   return Object.freeze(chain);
 }

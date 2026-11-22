@@ -35,19 +35,13 @@ import {
   effect,
 } from '../../src/index.js';
 
-import { VIEW_DESCRIPTOR } from '../../src/Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../src/Core/Renderer.js';
 
 /**
- * Helper function to render either a descriptor or a legacy View
+ * Render a view (every built-in view is a descriptor).
  */
 function renderView(view) {
-  if (view && view.$$typeof === VIEW_DESCRIPTOR) {
-    return renderDescriptor(view);
-  } else if (view && typeof view._render === 'function') {
-    return view._render();
-  }
-  return null;
+  return view ? renderDescriptor(view) : null;
 }
 
 // =============================================================================

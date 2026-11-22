@@ -8,20 +8,26 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 3.0.0-alpha.1
+ * @version 3.1.0
  */
 
 // =============================================================================
 // Core Types
 // =============================================================================
 
-/** Base View class - all UI components extend this */
 /**
  * A reactive source that views and style modifiers accept directly in place
  * of a thunk (#52): `Text(count)`, `.opacity(isVisible)`.
  */
 export type Signal<T> = State<T> | Binding<T>;
 
+/**
+ * A view: what every view function returns, with the shared modifiers.
+ * Built-in views are immutable descriptors (each modifier returns a new
+ * view). As a class, `View` is the deprecated base of user-defined class
+ * views (`class MyView extends View { body() { ... } }`), whose modifiers
+ * mutate and return `this`.
+ */
 export class View {
   /** Apply a custom modifier */
   modifier(mod: ViewModifier): this;
@@ -49,6 +55,18 @@ export class View {
   shadow(options?: ShadowOptions | Signal<ShadowOptions>): this;
   /** Clip to a shape */
   clipShape(shape: Shape): this;
+  /**
+   * Mask the view with a shape (clip-path) or a gradient (mask-image).
+   * SwiftUI's label order is `mask(alignment:_:)`; here the mask comes first.
+   * @see https://developer.apple.com/documentation/swiftui/view/mask(alignment:_:)
+   */
+  mask(mask: Shape | View | 'circle' | 'ellipse' | 'capsule' | 'rectangle', alignment?: string): this;
+  /**
+   * The shape that receives taps. The whole frame becomes hit-testable; a
+   * rounded shape rounds the hit area. A rectangle never clips drawing.
+   * @see https://developer.apple.com/documentation/swiftui/view/contentshape(_:eofill:)
+   */
+  contentShape(shape: Shape | string, eoFill?: boolean): this;
 
   // Event Modifiers
   /** Handle tap/click events */
@@ -116,21 +134,47 @@ export class View {
   accessibilityHint(hint: string | number | View | Signal<string | number>): this;
   accessibilityIdentifier(identifier: string): this;
 
-  // Gesture Modifiers
-  /** Add a gesture recognizer */
-  gesture(gesture: Gesture): this;
-  /** Handle drag gestures */
-  onDrag(handler: (value: DragGestureValue) => void): this;
-  /** Handle long press */
-  onLongPressGesture(minimumDuration?: number, action?: () => void): this;
+  // Gesture Modifiers (listeners are removed when the view is released)
+  /**
+   * Add a gesture recognizer.
+   * @see https://developer.apple.com/documentation/swiftui/view/gesture(_:including:)
+   */
+  gesture(gesture: Gesture, options?: GestureOptions): this;
+  /**
+   * Recognize `gesture` together with this view's own gestures.
+   * @see https://developer.apple.com/documentation/swiftui/view/simultaneousgesture(_:including:)
+   */
+  simultaneousGesture(gesture: Gesture, options?: GestureOptions): this;
+  /**
+   * `gesture` wins over this view's and its subviews' gestures of the same
+   * kind (a tap over taps, a drag over drags).
+   * @see https://developer.apple.com/documentation/swiftui/view/highprioritygesture(_:including:)
+   */
+  highPriorityGesture(gesture: Gesture, options?: GestureOptions): this;
+  /** Handle a drag: `onChanged` while dragging, `onEnded` on release. */
+  onDrag(onChanged?: (value: DragGestureValue) => void, onEnded?: (value: DragGestureValue) => void): this;
+  /**
+   * Run `action` after a long press.
+   * @see https://developer.apple.com/documentation/swiftui/view/onlongpressgesture(minimumduration:maximumdistance:perform:onpressingchanged:)
+   */
+  onLongPressGesture(action: () => void, options?: LongPressGestureOptions): this;
 
   // Animation Modifiers
-  /** Animate changes with a transition */
+  /**
+   * How the view appears when inserted inside `withAnimation`.
+   * @see https://developer.apple.com/documentation/swiftui/view/transition(_:)
+   */
   transition(transition: AnyTransition): this;
-  /** Apply animation to changes */
-  animation(animation: Animation, value?: any): this;
-  /** Match geometry for hero animations */
-  matchedGeometryEffect(id: string, namespace: Namespace): this;
+  /**
+   * Animate this view's style changes (a CSS transition); `null` turns it off.
+   * @see https://developer.apple.com/documentation/swiftui/view/animation(_:value:)
+   */
+  animation(animation?: Animation | null, value?: any): this;
+  /**
+   * Views with the same id in a namespace morph into each other in a View Transition.
+   * @see https://developer.apple.com/documentation/swiftui/view/matchedgeometryeffect(id:in:properties:anchor:issource:)
+   */
+  matchedGeometryEffect(id: string, namespace: Namespace, options?: { isSource?: boolean }): this;
 
   // Shader Effect Modifiers (iOS 17+ in SwiftUI, SVG-filter-backed here)
   /**
@@ -461,7 +505,7 @@ export function Image(source: string | { systemName: string }): View & {
   /** Set image to be resizable */
   resizable(): View;
   /** Set aspect ratio */
-  aspectRatio(ratio?: number, contentMode?: ContentMode): View;
+  aspectRatio(contentMode?: ContentMode): View;
   /** Scale to fit */
   scaledToFit(): View;
   /** Scale to fill */
@@ -470,7 +514,17 @@ export function Image(source: string | { systemName: string }): View & {
   renderingMode(mode: 'original' | 'template'): View;
   /** Set interpolation quality */
   interpolation(quality: 'none' | 'low' | 'medium' | 'high'): View;
+  /** Alt text (a system symbol's aria-label) */
+  accessibilityLabel(text: string): View;
+  /** Called when the image loads */
+  onLoad(handler: (event: Event) => void): View;
+  /** Called when the image fails to load */
+  onError(handler: (event: Event) => void): View;
 };
+export namespace Image {
+  /** A system symbol (SF Symbols name), drawn with a Unicode character */
+  function systemName(name: string): ReturnType<typeof Image>;
+}
 
 /** Content mode for images */
 export const ContentMode: {
@@ -481,7 +535,12 @@ export const ContentMode: {
 export type ContentMode = (typeof ContentMode)[keyof typeof ContentMode];
 
 /** Label with icon and text */
-export function Label(title: string, options: { systemImage?: string; image?: string }): View;
+export function Label(title: string, options: { systemImage?: string; image?: string }): View & {
+  labelStyle(style: LabelStyle): View;
+};
+export function Label(options: { title: () => View; icon?: () => View }): View & {
+  labelStyle(style: LabelStyle): View;
+};
 
 // =============================================================================
 // Controls
@@ -585,7 +644,10 @@ export type DatePickerComponents = (typeof DatePickerComponents)[keyof typeof Da
 export function ColorPicker(label: string, selection: Binding<Color>): View;
 
 /** Dropdown menu */
-export function Menu(label: string | View, content: () => View): View;
+export function Menu(label: string | { label: () => View }, ...items: View[]): View & {
+  /** A tap runs the action; a secondary click (or long press) opens the menu */
+  primaryAction(action: () => void): View;
+};
 
 // =============================================================================
 // Layout
@@ -784,11 +846,24 @@ export function Section(
 // =============================================================================
 
 /** Scrollable container */
+export interface ScrollViewMethods {
+  /** Snap to full pages */
+  pagingEnabled(): View & ScrollViewMethods;
+  /** Snap children to an edge or the center */
+  scrollTargetLayout(alignment?: 'start' | 'center' | 'end'): View & ScrollViewMethods;
+  /** Called with the scroll offset */
+  onScroll(handler: (position: { x: number; y: number; target: HTMLElement }) => void): View & ScrollViewMethods;
+}
 export function ScrollView(
-  options: { axis?: 'vertical' | 'horizontal' | 'both'; showsIndicators?: boolean },
-  ...children: View[]
-): View;
-export function ScrollView(...children: View[]): View;
+  options: {
+    axis?: 'vertical' | 'horizontal' | 'both';
+    showsIndicators?: boolean;
+    bounces?: boolean;
+    onScroll?: (position: { x: number; y: number; target: HTMLElement }) => void;
+  },
+  ...children: Array<View | (() => View)>
+): View & ScrollViewMethods;
+export function ScrollView(...children: Array<View | (() => View)>): View & ScrollViewMethods;
 
 /** Logical grouping (no visual effect) */
 export function Group(...children: View[]): View;
@@ -827,6 +902,8 @@ export function NavigationStack(
     transitionStyle?: 'slide' | 'fade' | 'none';
     /** Transition duration in milliseconds. Default: 300. */
     transitionDuration?: number;
+    /** Values shown above the root, built by `navigationDestination` */
+    path?: NavigationPath;
   }
 ): View & {
   /** Push a view onto the stack */
@@ -912,12 +989,16 @@ export class NavigationPath {
 }
 
 /** Multi-column navigation (iPad/Mac style) */
-export function NavigationSplitView(
-  options: { columnVisibility?: Binding<NavigationSplitViewVisibility> },
-  sidebar: () => View,
-  content?: () => View,
-  detail?: () => View
-): View;
+export function NavigationSplitView(options: {
+  /** Receives `navigate(view)` (show a view in the detail column) and `setSelectedItem(item)` */
+  sidebar: (context: { navigate(view: View): void; setSelectedItem(item: any): void; selectedItem: any }) => View;
+  /** Middle column, shown at 1200px and wider */
+  content?: () => View;
+  detail: () => View;
+  columnVisibility?: NavigationSplitViewVisibility;
+  sidebarWidth?: { min?: number; ideal?: number; max?: number };
+  contentWidth?: { min?: number; ideal?: number; max?: number };
+}): View;
 
 /** Split view visibility options */
 export const NavigationSplitViewVisibility: {
@@ -931,11 +1012,14 @@ export type NavigationSplitViewVisibility = (typeof NavigationSplitViewVisibilit
 
 /** Tab bar navigation */
 export function TabView(
-  options?: { selection?: Binding<any> },
-  ...children: View[]
+  selection: Binding<any> | State<any>,
+  ...tabs: View[]
 ): View & {
-  /** Set tab view style */
-  tabViewStyle(style: TabViewStyle): View;
+  /** Set tab view style; `{ indexDisplayMode: 'never' }` hides the page dots */
+  tabViewStyle(style: TabViewStyle, options?: { indexDisplayMode?: 'automatic' | 'never' }): View;
+};
+export function TabView(...tabs: View[]): View & {
+  tabViewStyle(style: TabViewStyle, options?: { indexDisplayMode?: 'automatic' | 'never' }): View;
 };
 
 /** Tab view style presets */
@@ -1311,7 +1395,9 @@ export class AnyTransition {
 /** Namespace for matched geometry effect */
 export class Namespace {
   constructor();
-  readonly id: symbol;
+  readonly id: string;
+  /** The view-transition-name for `viewId` in this namespace. */
+  name(viewId: string): string;
 }
 
 // =============================================================================
@@ -1324,12 +1410,36 @@ export interface Gesture {
   onEnded(action: (value: any) => void): Gesture;
 }
 
+/**
+ * Which gestures `.gesture(_:including:)` enables.
+ * @see https://developer.apple.com/documentation/swiftui/gesturemask
+ */
+export type GestureMaskValue = 'all' | 'gesture' | 'subviews' | 'none';
+export const GestureMask: {
+  readonly all: 'all';
+  readonly gesture: 'gesture';
+  readonly subviews: 'subviews';
+  readonly none: 'none';
+};
+
+/** Options of `.gesture`, `.simultaneousGesture` and `.highPriorityGesture`. */
+export interface GestureOptions {
+  /** Default `GestureMask.all`. */
+  including?: GestureMaskValue;
+}
+
 /** Tap gesture */
 export function TapGesture(count?: number): Gesture;
 
+/** Long press options; `minimumDuration` is in seconds. */
+export interface LongPressGestureOptions {
+  minimumDuration?: number;
+  maximumDistance?: number;
+}
+
 /** Long press gesture */
-export function LongPressGesture(minimumDuration?: number): Gesture & {
-  onEnded(action: () => void): Gesture;
+export function LongPressGesture(options?: LongPressGestureOptions): Gesture & {
+  onEnded(action: (value: { location: { x: number; y: number } }) => void): Gesture;
 };
 
 /** Drag gesture */
@@ -1344,20 +1454,19 @@ export interface DragGestureValue {
   location: { x: number; y: number };
   startLocation: { x: number; y: number };
   velocity: { width: number; height: number };
-  predictedEndLocation: { x: number; y: number };
-  predictedEndTranslation: { width: number; height: number };
+  time: number;
 }
 
 /** Magnification (pinch) gesture */
-export function MagnificationGesture(): Gesture & {
-  onChanged(action: (scale: number) => void): Gesture;
-  onEnded(action: (scale: number) => void): Gesture;
+export function MagnificationGesture(options?: { minimumScaleDelta?: number }): Gesture & {
+  onChanged(action: (value: { magnification: number; velocity: number }) => void): Gesture;
+  onEnded(action: (value: { magnification: number; velocity: number }) => void): Gesture;
 };
 
 /** Rotation gesture */
-export function RotationGesture(): Gesture & {
-  onChanged(action: (angle: number) => void): Gesture;
-  onEnded(action: (angle: number) => void): Gesture;
+export function RotationGesture(options?: { minimumAngleDelta?: number }): Gesture & {
+  onChanged(action: (value: { rotation: number; velocity: number }) => void): Gesture;
+  onEnded(action: (value: { rotation: number; velocity: number }) => void): Gesture;
 };
 
 // =============================================================================
@@ -1369,9 +1478,11 @@ export function App(content: () => View): {
   /**
    * Mount to a DOM element. `mode: 'replace'` keeps the host's static
    * fallback until the view is ready, swaps them in one step and holds the
-   * host's size meanwhile (no layout shift). `mode: 'adopt'` does the same
-   * for markup from renderDocument, warns in development when the client
-   * tree differs from it, and keeps focus inside the host.
+   * host's size meanwhile (no layout shift). `mode: 'adopt'` hydrates
+   * markup from renderDocument or renderToString: the view renders onto the
+   * server's DOM nodes, keeping their identity, focus and scroll offsets,
+   * creates fresh nodes only where the markup differs, and warns in
+   * development at the first difference.
    */
   mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
   /** Refresh the UI */
@@ -1418,15 +1529,12 @@ export function Empty(): View;
 /** Type-erased view; same as `AnyView(view)` */
 export function Any(view: View): View;
 
-/** Groups several views into one; what `ViewBuilder.buildBlock` returns */
-export class TupleView extends View {
-  constructor(views: View[]);
-}
-
-/** Shows one of two views depending on a condition */
-export class ConditionalContent extends View {
-  constructor(condition: boolean, trueContent: View | null, falseContent?: View | null);
-}
+/** Shows one of two views, chosen when it renders; each may be a function returning it */
+export function ConditionalContent(
+  condition: boolean | (() => boolean),
+  trueContent: View | null | (() => View | null),
+  falseContent?: View | null | (() => View | null)
+): View;
 
 /** Result-builder helpers, mirroring SwiftUI's `@ViewBuilder` */
 export class ViewBuilder {
@@ -1542,49 +1650,10 @@ export default SwiftUI;
 
 // ---------------------------------------------------------------------------
 // Classes and functions behind the public API (#47). They are exported for
-// advanced use and tests; prefer the factory functions (Toggle(...), not
-// new ToggleView(...)). Legacy *View classes are replaced by descriptors in
-// #48 and keep minimal declarations until then.
+// advanced use and tests; prefer the factory functions. Every built-in view
+// is a descriptor (#48); `View` remains only as the deprecated base of
+// user-defined class views.
 // ---------------------------------------------------------------------------
-
-/** Legacy view classes behind the factory functions. */
-export class ColorPickerView extends View {}
-export class DatePickerView extends View {}
-export class DisclosureGroupView extends View {}
-export class DocumentGroupView extends View {}
-export class FormView extends View {}
-export class GeometryReaderView extends View {}
-export class GridRowView extends View {}
-export class GridView extends View {}
-export class GroupView extends View {}
-export class ImageView extends View {}
-export class LabelView extends View {}
-export class LazyHGridView extends View {}
-export class LazyHStackView extends View {}
-export class LazyVGridView extends View {}
-export class LazyVStackView extends View {}
-export class ListView extends View {}
-export class MenuView extends View {}
-export class PickerView extends View {}
-export class ScrollViewView extends View {}
-export class SectionView extends View {}
-export class SettingsView extends View {}
-export class SliderView extends View {}
-export class StepperView extends View {}
-export class TabViewView extends View {}
-export class TextFieldView extends View {}
-export class ToggleView extends View {}
-export class WindowGroupView extends View {}
-/** Base class of the legacy shape views. */
-export class ShapeView extends View {}
-export class CapsuleView extends ShapeView {}
-export class CircleView extends ShapeView {}
-export class EllipseView extends ShapeView {}
-export class PathView extends ShapeView {}
-export class RectangleView extends ShapeView {}
-export class RoundedRectangleView extends ShapeView {}
-export class UnevenRoundedRectangleView extends ShapeView {}
-export class SecureFieldView extends TextFieldView {}
 
 /** A mounted app, returned by `App(...).mount(...)`. */
 export class AppInstance {
@@ -1620,8 +1689,5 @@ export function withTracking<T>(context: object, fn: () => T): T;
 export const SystemIcons: Record<string, string>;
 
 
-/** Install the animation, environment, gesture and navigation-path methods on a class. */
-export function extendViewWithAnimation(ViewClass: Function): void;
+/** Install the scoped `.environment` / `.environmentObject` on a legacy View class. */
 export function extendViewWithEnvironment(ViewClass: Function): void;
-export function extendViewWithGestures(ViewClass: Function): void;
-export function extendNavigationStackWithPath(NavigationStackClass: Function): void;

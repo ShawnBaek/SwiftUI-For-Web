@@ -20,9 +20,12 @@ import {
   isLegacyView,
   ModifierType
 } from './ViewDescriptor.js';
-import { acquireElement, releaseTree } from './ElementPool.js';
+import { acquireElement, releaseTree, onRelease } from './ElementPool.js';
 import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { gestureAllowed } from '../Gesture/Gesture.js';
+import { removeWithTransition } from '../Animation/Animation.js';
+import { isHydrating, hydrationFrame, withoutHydration } from './Hydration.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
 import { applyFrame, withStackAxis, currentStackAxis } from './Frame.js';
@@ -81,6 +84,11 @@ export function registerRenderer(type, renderer) {
  * @returns {HTMLElement} DOM element
  */
 export function render(descriptor) {
+  // mount mode 'adopt' (#39): each view is a frame of the hydrating render.
+  return isHydrating() ? hydrationFrame(() => renderNode(descriptor)) : renderNode(descriptor);
+}
+
+function renderNode(descriptor) {
   // Handle null/undefined
   if (descriptor == null) {
     return document.createComment('empty');
@@ -187,6 +195,22 @@ function renderDescriptorBody(descriptor, renderer) {
   // Store descriptor reference for reconciliation
   element._descriptor = descriptor;
 
+  return outer;
+}
+
+/**
+ * Apply a legacy View's modifiers (descriptor modifiers or `{ apply }`
+ * objects) and bind its reactive ones, as render() does for a descriptor.
+ *
+ * @param {HTMLElement} element
+ * @param {Array} modifiers
+ * @param {string} type - Name for warnings
+ * @returns {HTMLElement} The outermost layer
+ */
+export function applyViewModifiers(element, modifiers, type) {
+  const list = modifiers.filter((modifier) => modifier && (modifier.type || typeof modifier.apply === 'function'));
+  const outer = applyModifiers(element, list);
+  bindReactive(element, { type, props: {}, modifiers: list });
   return outer;
 }
 
@@ -326,20 +350,26 @@ const LAYER_CATEGORY = {
   [ModifierType.CLIP_SHAPE]: 'clip',
   [ModifierType.OPACITY]: 'opacity',
   [ModifierType.SHADOW]: 'shadow',
+  [ModifierType.CONTENT_SHAPE]: 'clip',
+  [ModifierType.MASK]: 'mask',
 };
 
 // For each modifier, the categories already on the layer that force a new
 // layer before it is applied. For example .background(c).padding(8) pads
 // outside the background, and .padding(8).padding(4) adds up.
+// A mask is a clip-path, which also clips the element's own box-shadow,
+// border and background, so anything drawn after a mask goes on a new layer.
 const WRAPS_AFTER = {
-  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow']),
-  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity']),
-  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow']),
-  [ModifierType.BORDER]: new Set(['border', 'clip']),
+  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow', 'mask']),
+  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity', 'mask']),
+  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow', 'mask']),
+  [ModifierType.BORDER]: new Set(['border', 'clip', 'mask']),
   [ModifierType.CORNER_RADIUS]: new Set(['clip']),
   [ModifierType.CLIP_SHAPE]: new Set(['clip']),
   [ModifierType.OPACITY]: new Set(['opacity']),
-  [ModifierType.SHADOW]: new Set(['shadow']),
+  [ModifierType.SHADOW]: new Set(['shadow', 'mask']),
+  [ModifierType.CONTENT_SHAPE]: new Set(['clip']),
+  [ModifierType.MASK]: new Set(['mask']),
 };
 
 // Properties that place an element in its parent. A new layer takes them
@@ -533,8 +563,12 @@ function applyModifier(element, modifier) {
 
     case ModifierType.ON_TAP:
       element.style.cursor = 'pointer';
-      // Use event delegation instead of direct listener
-      delegateEvent(element, 'click', value);
+      // Use event delegation instead of direct listener. A tap is a tap
+      // gesture: a .highPriorityGesture(TapGesture()) on this view or an
+      // ancestor wins over it.
+      delegateEvent(element, 'click', function onTapGesture(event) {
+        if (gestureAllowed(element, 'tap')) value.call(this, event);
+      });
       break;
 
     case ModifierType.ON_APPEAR:
@@ -589,6 +623,25 @@ function applyModifier(element, modifier) {
       applyShaderEffect(element, value, type);
       break;
 
+    // Motion and gestures (src/Animation, src/Gesture). The value carries
+    // the shared implementation; whatever it returns to undo (gesture
+    // listeners, a pending transition frame) is released with the element
+    // and with the current owner.
+    case ModifierType.ANIMATION:
+    case ModifierType.TRANSITION:
+    case ModifierType.MATCHED_GEOMETRY:
+    case ModifierType.GESTURE:
+      ownElementResource(element, value.apply(element));
+      break;
+
+    case ModifierType.MASK:
+      applyMask(element, value);
+      break;
+
+    case ModifierType.CONTENT_SHAPE:
+      applyContentShape(element, value);
+      break;
+
     case ModifierType.CUSTOM:
       if (typeof value === 'function') {
         value(element);
@@ -636,14 +689,30 @@ function showTopTitle() {
   if (!top) baseTitle = null;
 }
 
-// Views are attached after they render: check the order again then.
+// Views are attached after they render: check the order again then. An
+// entry whose view is still not in the document (attached later from a
+// frame, a timer or after an await) is checked again when it appears, through
+// the shared lifecycle observer.
 function queueTitleCheck() {
   if (titleCheckQueued) return;
   titleCheckQueued = true;
   queueMicrotask(() => {
     titleCheckQueued = false;
-    if (titleStack.length) showTopTitle();
+    if (!titleStack.length) return;
+    showTopTitle();
+    for (const entry of titleStack) watchTitleAttach(entry);
   });
+}
+
+function watchTitleAttach(entry) {
+  const element = entry.element;
+  if (entry.onAttach || !element || element.isConnected !== false) return;
+  if (typeof MutationObserver !== 'function') return;
+  entry.onAttach = () => {
+    entry.onAttach = null;
+    if (titleStack.includes(entry)) showTopTitle();
+  };
+  onAppear(element, entry.onAttach);
 }
 
 function applyNavigationTitle(element, value) {
@@ -655,7 +724,7 @@ function applyNavigationTitle(element, value) {
     return;
   }
   if (titleStack.length === 0) baseTitle = document.title;
-  const entry = { text: '', element };
+  const entry = { text: '', element, onAttach: null };
   titleStack.push(entry);
   if (isSignalValue(value)) {
     createEffect(() => {
@@ -670,6 +739,10 @@ function applyNavigationTitle(element, value) {
   onCleanup(() => {
     const index = titleStack.indexOf(entry);
     if (index !== -1) titleStack.splice(index, 1);
+    if (entry.onAttach) {
+      cancelAppear(element, entry.onAttach);
+      entry.onAttach = null;
+    }
     showTopTitle();
   });
 }
@@ -761,34 +834,87 @@ function applyShadow(element, value) {
 }
 
 /**
+ * Tie a cleanup function to an element: it runs once, when the element is
+ * released to the pool or when the current owner is disposed, whichever
+ * comes first.
+ */
+function ownElementResource(element, dispose) {
+  if (typeof dispose !== 'function') return;
+  let done = false;
+  const once = () => {
+    if (done) return;
+    done = true;
+    dispose();
+  };
+  onRelease(element, once);
+  if (getOwner()) onCleanup(once);
+}
+
+// The lower-case shape name of a shape value: 'circle', 'roundedrectangle',
+// … from a string or a shape descriptor's type.
+function shapeName(value) {
+  return String(typeof value === 'string' ? value : value?.type ?? '').toLowerCase();
+}
+
+// A RoundedRectangle's radius.
+function cornerRadiusOf(value) {
+  const radius = value?.props?.cornerRadius ?? value?.cornerRadius;
+  return typeof radius === 'number' ? radius : 10;
+}
+
+// The CSS clip-path for a shape, or null when it isn't a known shape.
+function shapeClipPath(value) {
+  switch (shapeName(value)) {
+    case 'circle': return 'circle(50%)';
+    case 'ellipse': return 'ellipse(50% 50%)';
+    case 'capsule': return 'inset(0 round 9999px)';
+    case 'roundedrectangle': return `inset(0 round ${cornerRadiusOf(value)}px)`;
+    case 'rectangle': return 'inset(0)';
+    default: return null;
+  }
+}
+
+/**
+ * .mask(_:alignment:) (SwiftUI: mask(alignment:_:)). A shape masks with a
+ * clip-path; a gradient masks with its alpha through mask-image.
+ * @see https://developer.apple.com/documentation/swiftui/view/mask(alignment:_:)
+ */
+function applyMask(element, { shape, alignment }) {
+  const clipPath = shapeClipPath(shape);
+  if (clipPath) {
+    element.style.clipPath = clipPath;
+    return;
+  }
+  const gradient = shape && typeof shape.css === 'function' ? shape.css() : null;
+  if (typeof gradient === 'string' && gradient) {
+    element.style.maskImage = gradient;
+    element.style.webkitMaskImage = gradient;
+    const position = String(alignment ?? 'center').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+      .replace('leading', 'left').replace('trailing', 'right');
+    element.style.maskPosition = position;
+    element.style.maskRepeat = 'no-repeat';
+  }
+}
+
+/**
+ * .contentShape(_:eoFill:): the shape that receives taps. The whole box is
+ * hit-testable (even where it draws nothing); a rounded shape rounds the hit
+ * area like clipShape does, as the legacy View modifier did. A rectangle
+ * doesn't clip: in SwiftUI contentShape never changes what is drawn.
+ * @see https://developer.apple.com/documentation/swiftui/view/contentshape(_:eofill:)
+ */
+function applyContentShape(element, { shape }) {
+  element.style.pointerEvents = 'auto';
+  const name = shapeName(shape);
+  if (name && name !== 'rectangle') applyClipShape(element, shape);
+}
+
+/**
  * Apply clip shape modifier
  */
 function applyClipShape(element, value) {
-  const shapeName = typeof value === 'string' ? value : value?.type || value?.constructor?.name;
-
-  switch (shapeName?.toLowerCase?.() || shapeName) {
-    case 'circle':
-    case 'circleview':
-      element.style.borderRadius = '50%';
-      break;
-    case 'capsule':
-    case 'capsuleview':
-      element.style.borderRadius = '9999px';
-      break;
-    case 'roundedrectangle':
-    case 'roundedrectangleview':
-      const radius = value?.cornerRadius ?? value?._cornerRadius ?? 10;
-      element.style.borderRadius = `${radius}px`;
-      break;
-    case 'rectangle':
-    case 'rectangleview':
-      element.style.borderRadius = '0';
-      break;
-    case 'ellipse':
-    case 'ellipseview':
-      element.style.borderRadius = '50%';
-      break;
-  }
+  const radius = { circle: '50%', ellipse: '50%', capsule: '9999px', rectangle: '0', roundedrectangle: `${cornerRadiusOf(value)}px` }[shapeName(value)];
+  if (radius) element.style.borderRadius = radius;
   element.style.overflow = 'hidden';
 }
 
@@ -845,7 +971,8 @@ function getShaderDefsRoot() {
 export function applyShaderToElement(element, shader) {
   if (!shader || !shader.id || typeof shader._populate !== 'function') return;
 
-  if (!_mountedShaderFilters.has(shader.id)) {
+  // The shared defs live outside the view tree: never server nodes.
+  if (!_mountedShaderFilters.has(shader.id)) withoutHydration(() => {
     const defs = getShaderDefsRoot();
     if (defs) {
       const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -860,7 +987,7 @@ export function applyShaderToElement(element, shader) {
       defs.appendChild(filter);
       _mountedShaderFilters.add(shader.id);
     }
-  }
+  });
 
   // Compose: append this filter to whatever the element already has so
   // chained .colorEffect().layerEffect() builds "url(#a) url(#b)".
@@ -1130,49 +1257,6 @@ function applyButtonStyle(element, style) {
   }
 }
 
-// Image
-registerRenderer('Image', (props) => {
-  const element = acquireElement('img');
-  element.src = props.source || props.src || '';
-  element.alt = props.alt || '';
-
-  if (props.resizable) {
-    element.style.maxWidth = '100%';
-    element.style.height = 'auto';
-  }
-
-  return element;
-});
-
-// Group
-registerRenderer('Group', (props, children) => {
-  const element = acquireElement('div');
-  element.appendChild(renderChildren(children));
-  return element;
-});
-
-// ScrollView
-registerRenderer('ScrollView', (props, children) => {
-  const element = acquireElement('div');
-  element.style.overflow = 'auto';
-
-  if (props.axis === 'horizontal' || props.axes?.includes?.('horizontal')) {
-    element.style.overflowX = 'auto';
-    element.style.overflowY = 'hidden';
-  } else if (props.axis === 'vertical' || props.axes?.includes?.('vertical')) {
-    element.style.overflowX = 'hidden';
-    element.style.overflowY = 'auto';
-  }
-
-  if (props.showsIndicators === false) {
-    element.style.scrollbarWidth = 'none';
-    element.style.msOverflowStyle = 'none';
-  }
-
-  element.appendChild(renderChildren(children));
-  return element;
-});
-
 // ForEach
 registerRenderer('ForEach', (props, children) => {
   const fragment = document.createDocumentFragment();
@@ -1195,6 +1279,18 @@ registerRenderer('ForEach', (props, children) => {
 // signal owner — the SignalRenderer's mount() establishes that root.
 // ---------------------------------------------------------------------------
 
+// Remove a view's node: its effects are already disposed. A view with a
+// .transition stays in the document while the removal animation runs
+// (removeWithTransition); otherwise it goes now.
+function removeNode(node) {
+  if (!node) return;
+  const release = () => {
+    if (node.parentNode) node.parentNode.removeChild(node);
+    releaseTree(node);
+  };
+  if (!removeWithTransition(node, release)) release();
+}
+
 // Show — reactive conditional branch
 registerRenderer('Show', (props) => {
   const { when, then: thenView, else: elseView } = props;
@@ -1212,10 +1308,7 @@ registerRenderer('Show', (props) => {
     lastBranch = branch;
 
     if (currentDispose) { currentDispose(); currentDispose = null; }
-    if (currentNode && currentNode.parentNode) {
-      currentNode.parentNode.removeChild(currentNode);
-    }
-    if (currentNode) releaseTree(currentNode);
+    removeNode(currentNode);
     currentNode = null;
 
     const view = truthy ? thenView : elseView;
@@ -1290,10 +1383,7 @@ registerRenderer('For', (props) => {
     for (const [key, entry] of rows) {
       if (!seen.has(key)) {
         entry.dispose();
-        if (entry.node && entry.node.parentNode) {
-          entry.node.parentNode.removeChild(entry.node);
-        }
-        if (entry.node) releaseTree(entry.node);
+        removeNode(entry.node);
         rows.delete(key);
       }
     }

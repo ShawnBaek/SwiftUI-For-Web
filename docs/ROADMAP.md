@@ -1,6 +1,6 @@
 # Roadmap
 
-This page records the current state (as of 2.0.0-alpha.1), the goals, and the
+This page records the current state (as of 3.1.0), the goals, and the
 planned order of work. The live checklist is the tracking issue
 [#43](https://github.com/ShawnBaek/SwiftUI-For-Web/issues/43). Update this file
 whenever a phase completes or a goal changes.
@@ -50,7 +50,7 @@ whenever a phase completes or a goal changes.
 |---|---|---|
 | Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed by the #44 PR. | #44 |
 | Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR (only elements created by `acquireElement` are pooled). ~~The lifecycle observer rescans every registered element on each mutation batch.~~ Fixed for #57: a batch walks only the subtrees it added or removed. | #45, #46, #57 |
-| Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
+| Model | ~~Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing.~~ Fixed: every built-in view is a descriptor; `View` is a deprecated adapter for user class views. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
 | Semantics | Modifier order is ignored, a second handler for the same event replaces the first, and `frame(maxWidth: 'infinity')` produces invalid CSS. | #50 |
 | Packaging | ~~The `./core` entry fails to load, and `./src/*` exposes internals.~~ Fixed. `index.d.ts` is now checked against the runtime, but 86 runtime exports are still undeclared, and performance internals are still exported from the main entry. | #47 |

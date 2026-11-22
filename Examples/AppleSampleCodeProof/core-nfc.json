@@ -1,0 +1,75 @@
+{
+  "source": {
+    "repository": "AppleSampleCode",
+    "renderer": "_scripts/render_html_site.py",
+    "markdown": "Core NFC/README.md",
+    "output": "_site/Core NFC/index.html",
+    "commit": "7bdd9a01"
+  },
+  "site": {
+    "name": "Apple Sample Code",
+    "url": "https://applesamplecode.com",
+    "creatorURL": "https://shawnbaek.com",
+    "licenseURL": "https://developer.apple.com/support/downloads/terms/apple-sample-code/Apple-Sample-Code-License.pdf",
+    "frameworkURL": "https://github.com/ShawnBaek/SwiftUI-For-Web",
+    "visitorCounterEndpoint": "https://mc774j3mvizmbfbzesqyeyrbsi0ugetj.lambda-url.us-east-2.on.aws/",
+    "footerNotice": "Independent study material. Apple sample code and documentation remain subject to their original ownership and license terms. The viewer includes only files cited by each Source Map; complete archives and source trees are not published."
+  },
+  "page": {
+    "kind": "collection",
+    "kindLabel": "Collection",
+    "module": "Core NFC",
+    "title": "Core NFC sample architecture",
+    "path": "/Core%20NFC/",
+    "anchor": "core-nfc-sample-architecture",
+    "intro": ["Source-backed, high-level architecture notes for Apple sample-code pages grouped in the ", { "strong": "Core NFC" }, " folder."],
+    "facts": [
+      ["Catalog module label: ", { "code": "Core NFC" }],
+      ["Coverage: ", { "strong": "2 / 2" }, " sample pages documented"],
+      ["Source policy: archive hashes and extracted-tree references are verified locally before analysis"]
+    ],
+    "samples": [
+      {
+        "title": "Building an NFC Tag-Reader App",
+        "href": "Building%20an%20NFC%20Tag-Reader%20App.html",
+        "platforms": "iOS, iPadOS, Mac Catalyst",
+        "architecture": ["A Swift sample with the source-visible chain ", { "code": "AppDelegate" }, " → ", { "code": "MessagesTableViewController" }, " → ", { "code": "CoreNFC APIs" }, "."],
+        "patterns": "View-controller organization, Delegate or data-source callbacks"
+      },
+      {
+        "title": "Creating NFC Tags from Your iPhone",
+        "href": "Creating%20NFC%20Tags%20from%20Your%20iPhone.html",
+        "platforms": "iOS, iPadOS, Mac Catalyst",
+        "architecture": ["A Swift sample bundle with entry-bearing project variants ", { "code": "FishTagCreator" }, ", ", { "code": "FishTagReader" }, ", each leading to CoreNFC APIs."],
+        "patterns": "View-controller organization, Delegate or data-source callbacks"
+      }
+    ],
+    "signals": [
+      {
+        "title": "Recurring documented patterns",
+        "anchor": "recurring-documented-patterns",
+        "columns": ["Pattern label", "Sample documents"],
+        "rows": [[["View-controller organization"], "2"], [["Delegate or data-source callbacks"], "2"]]
+      },
+      {
+        "title": "Type-role naming evidence",
+        "anchor": "type-role-naming-evidence",
+        "note": "Counts below are declaration-name suffixes, not inferred patterns.",
+        "columns": ["Role suffix", "Distinct declarations across samples"],
+        "rows": [[[{ "code": "Controller" }], "6"], [[{ "code": "Delegate" }], "2"]]
+      },
+      {
+        "title": "Swift access-control evidence",
+        "anchor": "swift-access-control-evidence",
+        "note": "These are declaration occurrences in scanned Swift source, including implicit internal declarations.",
+        "columns": ["Access level", "Occurrences"],
+        "rows": [[[{ "code": "implicit internal" }], "147"], [[{ "code": "public" }], "1"]]
+      }
+    ],
+    "references": [
+      { "title": "Complete Apple sample-code catalog", "href": "../_catalog/SAMPLE-CODE-CATALOG.html" },
+      { "title": "Documentation format", "href": "../_analysis/TEMPLATE.html" }
+    ],
+    "generatedNote": "Generated from the verified local catalog and completed Markdown documents."
+  }
+}

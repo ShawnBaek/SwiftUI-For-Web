@@ -87,10 +87,11 @@ function renderWithTitle(content) {
 export function renderDocument(content, options = {}) {
   const view = resolveView(content);
   const rendered = renderWithTitle(view);
-  let metadata = DocumentMetadata.from(options.metadata ?? view?._metadata ?? null);
+  const scene = view?.type === 'WindowGroup' ? view.props : {};
+  let metadata = DocumentMetadata.from(options.metadata ?? scene.metadata ?? null);
   // A missing metadata title comes from .navigationTitle(_:), then from the
   // WindowGroup's title.
-  const fallbackTitle = rendered.title ?? view?._title ?? null;
+  const fallbackTitle = rendered.title ?? scene.title ?? null;
   if (fallbackTitle && (!metadata || metadata.title === null)) {
     metadata = metadata ? metadata.merging({ title: fallbackTitle }) : new DocumentMetadata({ title: fallbackTitle });
   }

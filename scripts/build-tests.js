@@ -4,7 +4,9 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { minifyJavaScript } from './minify.js';
+import { bundleModules } from './bundle.js';
 
 const root = process.cwd();
 const builder = path.join(root, 'scripts', 'build.js');
@@ -123,6 +125,243 @@ function testMinifier() {
   for (const [input, expected] of cases) {
     assert.equal(minifyJavaScript(input), expected, `minified ${JSON.stringify(input)}`);
   }
+}
+
+// #41 --bundle fixture: every import/export form, a live binding, a
+// namespace import, default exports, re-exports, a cycle, name collisions
+// (including a literal `p$1`), shadowing, class and function names, a
+// dynamic import with a dynamic-only dependency, and import.meta.url.
+const bundleFixture = {
+  'index.html': '<!doctype html><script type="module" src="./main.js"></script>\n',
+  'data.json': '{"ok":true}\n',
+  'log.js': 'export const log = [];\n',
+  'side.js': "import { log } from './log.js';\nlog.push('side');\n",
+  'counter.js': `export let count = 0;
+export function increment() { count += 1; return count; }
+const name = 'counter';
+const p = 'counter p';
+export function counterName() { return name; }
+export function counterP() { return p; }
+export const arrow = () => 'counter arrow';
+`,
+  'util.js': `const name = 'util';
+export function label() { return name; }
+export function helper() { return 'util helper'; }
+export const arrow = () => 'util arrow';
+export default function () { return 'anonymous default'; }
+`,
+  'shapes.js': `export default class Shape { static kind = Shape.name; area() { return 0; } }
+export class Square extends Shape { constructor(side) { super(); this.side = side; } area() { return this.side ** 2; } }
+export const { p, q: r } = { p: 'shapes p', q: 'shapes q' };
+`,
+  'widget-a.js': `export class Widget { static self = Widget; static make() { return new Widget(); } }
+export function helper() { return 'widget helper'; }
+`,
+  'widget-b.js': `import { Widget as Other } from './widget-a.js';
+export class Widget { get kind() { return 'b'; } static other() { return Other.name + (Other === Widget ? ' same' : ' other'); } }
+export default () => 'default arrow';
+`,
+  'reexport.js': `export * from './counter.js';
+export { label as utilLabel, default as utilDefault } from './util.js';
+export * as shapes from './shapes.js';
+import { helper } from './widget-a.js';
+export { helper as widgetHelper };
+`,
+  'cycle-a.js': `import { log } from './log.js';
+import { b } from './cycle-b.js';
+log.push('cycle-a');
+export const a = 'a';
+export function fromA() { return \`a calls \${b()}\`; }
+`,
+  'cycle-b.js': `import { log } from './log.js';
+import { a, fromA } from './cycle-a.js';
+log.push(\`cycle-b sees fromA as \${typeof fromA}\`);
+let early;
+try { early = a; } catch (error) { early = error.constructor.name; }
+log.push(\`cycle-b reads a: \${early}\`);
+export function b() { return \`b sees \${a}\`; }
+`,
+  'shadow.js': `import { count, increment, count as total } from './counter.js';
+export function capture() { const count = 'local'; return [count, total]; }
+import * as counter from './counter.js';
+export function shadowedParam(count) { return count * 10; }
+export function shorthand() { return { count, counter: counter.count }; }
+export function blockShadow() { let result; { const increment = () => 'local'; result = increment(); } return result; }
+export function catchShadow() { try { throw 7; } catch (count) { return count; } }
+export function keys() { const o = { increment: 1, count: 2 }; return [o.increment, o.count, typeof increment]; }
+export function nested() { var count = 'var'; function inner() { return count; } return inner(); }
+export class Holder { count = count; increment() { return 'method'; } static count = 'static'; }
+`,
+  'lazy.js': `import { count } from './counter.js';
+import { extra } from './lazy-dep.js';
+export const value = \`lazy sees count \${count}\`;
+export { extra };
+`,
+  'lazy-dep.js': "import { log } from './log.js';\nlog.push('lazy-dep');\nexport const extra = 'extra';\n",
+  'main.js': `import './side.js';
+import { log } from './log.js';
+import { count, increment, utilLabel, utilDefault, shapes, widgetHelper, counterName, counterP } from './reexport.js';
+import * as counterNamespace from './counter.js';
+import Shape, { Square, p, r } from './shapes.js';
+import { Widget as WidgetA, helper } from './widget-a.js';
+import defaultArrow, { Widget as WidgetB } from './widget-b.js';
+import { helper as utilHelper, arrow as utilArrow } from './util.js';
+import { arrow as counterArrow } from './counter.js';
+import { fromA } from './cycle-a.js';
+import * as shadow from './shadow.js';
+
+const name = 'main';
+const p$1 = 'literal p$1';
+let label = 'main label';
+
+const rejects = (write) => { try { write(); return 'allowed'; } catch (error) { return error.constructor.name; } };
+
+export async function run() {
+  const before = count;
+  increment();
+  const after = count;
+  const lazy = await import('./lazy.js');
+  const lazyAgain = await import('./lazy.js');
+  return {
+    log: [...log],
+    live: [before, after, counterNamespace.count],
+    namespace: [Object.keys(counterNamespace), rejects(() => { counterNamespace.count = 5; }), rejects(() => { counterNamespace.extra = 1; }), counterNamespace[Symbol.toStringTag], Object.keys(shapes), shapes.default === Shape, counterNamespace.count],
+    collisions: [name, counterName(), utilLabel(), label, p, r, p$1, counterP()],
+    defaults: [utilDefault(), utilDefault.name, defaultArrow(), defaultArrow.name, Shape.name, Shape.kind, new Square(3).area(), new Square(1) instanceof Shape],
+    classes: [WidgetA.name, WidgetB.name, WidgetA.self === WidgetA, WidgetA.make() instanceof WidgetA, new WidgetB().kind, new WidgetA().constructor.name, WidgetB.other()],
+    functions: [helper(), helper.name, utilHelper(), utilHelper.name, widgetHelper === helper, utilArrow.name, counterArrow.name, utilArrow(), counterArrow()],
+    cycle: fromA(),
+    shadow: [shadow.capture(), shadow.shadowedParam(2), shadow.shorthand(), shadow.blockShadow(), shadow.catchShadow(), shadow.keys(), shadow.nested(), new shadow.Holder().count, shadow.Holder.count, new shadow.Holder().increment()],
+    dynamic: [lazy.value, lazy.extra, lazy === lazyAgain, rejects(() => { lazy.value = 1; }), Object.keys(lazy)],
+    // --hash renames data.json to data.<hash>.json and rewrites the URL.
+    meta: [new URL('./data.json', import.meta.url).pathname.split('/').pop().replace(/\\.[0-9a-f]{10}\\./, '.'), import.meta.url.endsWith('/main.js')],
+  };
+}
+export { count as liveCount };
+`,
+};
+
+// Import a module in a fresh Node process, call its run() and return the
+// JSON of the result together with its exported names.
+function runModule(file) {
+  const script = `const m = await import(${JSON.stringify(pathToFileURL(file).href)});
+const result = await m.run();
+// The bundle also exports _$-prefixed bindings for its chunks.
+console.log(JSON.stringify({ exports: Object.keys(m).filter((name) => !name.startsWith('_$')), liveCount: m.liveCount, result }));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, `running ${file} failed:\n${result.stderr}`);
+  return result.stdout;
+}
+
+async function readTree(dir) {
+  const files = {};
+  for (const file of (await filesUnder(dir)).sort()) files[path.relative(dir, file)] = await readFile(file, 'utf8');
+  return files;
+}
+
+async function testBundle(tempRoot, fixtureRoot) {
+  // HelloWorld and Netflix: one bundle, no other module, index.html loads it.
+  for (const example of ['HelloWorld', 'Netflix']) {
+    const out = path.join(tempRoot, `${example}-bundle`);
+    run(['--entry', `Examples/${example}/index.html`, '--out-dir', out, '--bundle'], `${example} bundle build`);
+    const emittedJS = (await filesUnder(out)).filter((file) => file.endsWith('.js')).map((file) => path.relative(out, file));
+    assert.deepEqual(emittedJS, ['bundle.js'], `${example}: expected only bundle.js, got ${emittedJS.join(', ')}`);
+    const html = await readFile(path.join(out, 'index.html'), 'utf8');
+    const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
+    assert.deepEqual(scripts, ['./bundle.js'], `${example}: index.html does not load the bundle`);
+    for (const [, href] of html.matchAll(/rel="modulepreload" href="([^"]+)"/g)) {
+      assert.ok(await exists(path.join(out, href)), `${example}: modulepreload of a missing file ${href}`);
+    }
+    const report = JSON.parse(await readFile(path.join(out, 'build-report.json'), 'utf8'));
+    assert.equal(report.bundle.file, 'bundle.js');
+    assert.deepEqual(report.bundle.chunks, []);
+    assert.ok(report.bundle.modules.includes(`Examples/${example}/main.js`) && report.bundle.modules.includes('src/runtime.js'), `${example}: report lacks bundled modules`);
+    assert.ok(report.retainedFiles.includes('src/Core/Renderer.js'), `${example}: bundled modules are not reported as retained`);
+    assert.deepEqual(report.outputFiles.map(({ file }) => file).filter((file) => file.endsWith('.js')), ['bundle.js']);
+    assert.equal(report.sizes.raw, report.outputFiles.reduce((sum, { raw }) => sum + raw, 0));
+    await checkSyntax(out);
+  }
+
+  // Deterministic: building twice gives byte-identical output, also hashed.
+  const first = path.join(tempRoot, 'HelloWorld-bundle');
+  const second = path.join(tempRoot, 'HelloWorld-bundle-again');
+  run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', second, '--bundle'], 'second bundle build');
+  assert.deepEqual(await readTree(second), await readTree(first), 'bundle output is not deterministic');
+  const hashed = path.join(tempRoot, 'HelloWorld-bundle-hashed');
+  const hashedAgain = path.join(tempRoot, 'HelloWorld-bundle-hashed-again');
+  run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', hashed, '--bundle', '--hash'], 'hashed bundle build');
+  run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', hashedAgain, '--bundle', '--hash'], 'second hashed bundle build');
+  assert.deepEqual(await readTree(hashedAgain), await readTree(hashed), 'hashed bundle output is not deterministic');
+  const hashedManifest = JSON.parse(await readFile(path.join(hashed, 'manifest.json'), 'utf8'));
+  assert.match(hashedManifest['bundle.js'], /^bundle\.[0-9a-f]{10}\.js$/, 'bundle.js was not content-hashed');
+  assert.ok((await readFile(path.join(hashed, 'index.html'), 'utf8')).includes(`src="./${hashedManifest['bundle.js']}"`), 'index.html does not load the hashed bundle');
+  assert.equal(JSON.parse(await readFile(path.join(hashed, 'build-report.json'), 'utf8')).bundle.file, hashedManifest['bundle.js']);
+
+  // The fixture app: the bundle (and its chunk) must compute exactly what
+  // the unbundled modules compute.
+  const app = path.join(fixtureRoot, 'bundle-app');
+  await mkdir(app, { recursive: true });
+  for (const [name, content] of Object.entries(bundleFixture)) await writeFile(path.join(app, name), content);
+  const expected = runModule(path.join(app, 'main.js'));
+  const parsed = JSON.parse(expected);
+  assert.deepEqual(parsed.result.live, [0, 1, 1], 'fixture sanity: live binding');
+  assert.equal(parsed.result.log[2], 'cycle-b reads a: ReferenceError', 'fixture sanity: cycle TDZ');
+  const entry = path.relative(root, path.join(app, 'index.html'));
+  for (const extra of [[], ['--no-minify'], ['--hash']]) {
+    const out = path.join(tempRoot, `bundle-app${extra.join('')}`);
+    run(['--entry', entry, '--out-dir', out, '--bundle', ...extra], `fixture bundle build ${extra.join(' ')}`);
+    await writeFile(path.join(out, 'package.json'), '{ "type": "module" }\n');
+    const report = JSON.parse(await readFile(path.join(out, 'build-report.json'), 'utf8'));
+    assert.equal(report.bundle.chunks.length, 1, 'expected one dynamic chunk');
+    const prefix = path.relative(root, app).split(path.sep).join('/');
+    assert.deepEqual(report.bundle.chunks[0].modules, [`${prefix}/lazy-dep.js`, `${prefix}/lazy.js`]);
+    assert.ok(report.bundle.renamedBindings >= 6, 'expected the colliding bindings to be renamed');
+    const emittedJS = (await filesUnder(out)).filter((file) => file.endsWith('.js')).map((file) => path.relative(out, file)).sort();
+    assert.deepEqual(emittedJS, [report.bundle.chunks[0].file, report.bundle.file].sort(), 'expected one bundle plus one chunk');
+    assert.equal(runModule(path.join(out, report.bundle.file)), expected, `bundled fixture ${extra.join(' ')} differs from the unbundled modules`);
+    await checkSyntax(out);
+  }
+  const fixtureFirst = path.join(tempRoot, 'bundle-app');
+  const fixtureAgain = path.join(tempRoot, 'bundle-app-again');
+  run(['--entry', entry, '--out-dir', fixtureAgain, '--bundle'], 'second fixture bundle build');
+  await writeFile(path.join(fixtureAgain, 'package.json'), '{ "type": "module" }\n');
+  assert.deepEqual(await readTree(fixtureAgain), await readTree(fixtureFirst), 'fixture bundle is not deterministic');
+
+  // The unit suite, bundled: run-tests.js loads the framework only through
+  // import(), so every module lands in a chunk. Rename every top-level
+  // binding to stress the scope analysis, minify, and run it. Only the
+  // tests that assert a stack frame names run-tests.js may fail.
+  const suiteOut = path.join(tempRoot, 'bundled-suite');
+  await mkdir(suiteOut, { recursive: true });
+  const idFile = (id) => id.split('\0')[0];
+  const suite = await bundleModules({
+    entries: [path.join(root, 'run-tests.js')],
+    load: (id) => readFile(idFile(id), 'utf8'),
+    resolve: async (specifier, importer) => {
+      if (!specifier.startsWith('.')) return null;
+      const [pathname, query] = specifier.split('?');
+      const file = path.resolve(path.dirname(idFile(importer)), pathname);
+      return query ? `${file}\0?${query}` : file;
+    },
+    relative: (id) => path.relative(root, idFile(id)).split(path.sep).join('/') + (id.split('\0')[1] || ''),
+    renameAll: true,
+  });
+  assert.ok(suite.files.length > 1 && suite.renamed > 300, 'the bundled suite should be split into chunks with renamed bindings');
+  for (const file of suite.files) await writeFile(path.join(suiteOut, file.name), minifyJavaScript(file.code));
+  await writeFile(path.join(suiteOut, 'package.json'), '{ "type": "module" }\n');
+  const unbundled = spawnSync(process.execPath, ['run-tests.js'], { cwd: root, encoding: 'utf8' });
+  const bundled = spawnSync(process.execPath, ['bundle.js'], { cwd: suiteOut, encoding: 'utf8' });
+  const tally = (output) => {
+    const match = output.match(/Results: (\d+) passed, (\d+) failed/);
+    assert.ok(match, `no test summary in:\n${output.slice(-2000)}`);
+    return { passed: Number(match[1]), failed: Number(match[2]), failures: [...output.matchAll(/✗ (.+)/g)].map((m) => m[1]) };
+  };
+  const before = tally(unbundled.stdout);
+  const after = tally(bundled.stdout + bundled.stderr);
+  assert.equal(before.failed, 0, 'the unbundled unit suite fails');
+  assert.equal(after.passed + after.failed, before.passed, 'the bundled suite ran a different number of tests');
+  const unexpected = after.failures.filter((name) => !/creation site|per call site/.test(name));
+  assert.deepEqual(unexpected, [], 'bundled unit tests failed');
 }
 
 async function main() {
@@ -260,6 +499,8 @@ async function main() {
     const fixtureHTML = await readFile(path.join(hashFixtureOut, 'index.html'), 'utf8');
     assert.ok(fixtureHTML.includes(`rel="modulepreload" href="./${hashedOf('dep.js')}"`), 'no modulepreload when src comes before type');
     assert.ok(fixtureHTML.includes(`rel="modulepreload" href="./${hashedOf('rootdep.js')}"`), 'no modulepreload for a root-relative import');
+
+    await testBundle(tempRoot, fixtureRoot);
 
     // Library mode must remain usable without reading or deleting repository dist/.
     run(['--out-dir', path.join(tempRoot, 'library')], 'library build');

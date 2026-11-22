@@ -8,10 +8,8 @@
  * path.append('detail');
  * path.append({ id: 123, title: 'Item' });
  *
- * NavigationStack({ path: path },
- *   HomeView()
- * )
- * .navigationDestination('detail', (value) => DetailView(value))
+ * NavigationStack(HomeView(), { path })
+ *   .navigationDestination('string', (value) => DetailView(value))
  *
  * @example
  * // Pop navigation
@@ -21,8 +19,6 @@
  * // Reset to root
  * path.clear();
  */
-
-import { ObservableObject, Published } from '../../Data/ObservableObject.js';
 
 /**
  * NavigationPath - Manages navigation state
@@ -217,43 +213,6 @@ export class NavigationDestination {
   build(value) {
     return this._destination(value);
   }
-}
-
-/**
- * Extend NavigationStack to support NavigationPath
- * This should be called after NavigationStack is imported
- */
-export function extendNavigationStackWithPath(NavigationStackClass) {
-  const originalRender = NavigationStackClass.prototype._render;
-
-  NavigationStackClass.prototype._render = function () {
-    // If using NavigationPath, sync with it
-    if (this._options?.path instanceof NavigationPath) {
-      const navPath = this._options.path;
-
-      // Subscribe to path changes
-      navPath.subscribe((path) => {
-        // Update navigation based on path
-        this._currentPath = path;
-        if (this._element) {
-          this.rerender();
-        }
-      });
-    }
-
-    return originalRender.call(this);
-  };
-
-  /**
-   * Add navigationDestination modifier
-   */
-  NavigationStackClass.prototype.navigationDestination = function (dataType, destination) {
-    if (!this._destinations) {
-      this._destinations = [];
-    }
-    this._destinations.push(new NavigationDestination(dataType, destination));
-    return this;
-  };
 }
 
 export default NavigationPath;

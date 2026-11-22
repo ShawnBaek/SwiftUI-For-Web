@@ -4,136 +4,65 @@
  * Matches SwiftUI's Slider view for selecting values within a range.
  *
  * @example
- * Slider($value, { in: 0...100 })
+ * Slider($value, { in: [0, 100] })
  *
  * @example
- * Slider($value, { in: 0...100, step: 5 }, {
+ * Slider($value, { in: [0, 100], step: 5 }, {
  *   label: () => Text('Volume'),
  *   minimumValueLabel: () => Text('0'),
  *   maximumValueLabel: () => Text('100')
  * })
  */
 
-import { defineControl } from '../../Core/LegacyControl.js';
-import { View } from '../../Core/View.js';
-import { Color } from '../../Graphic/Color.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
 
+// Slider's own modifiers (#48: everything else comes from the shared table).
+const sliderModifiers = ({ withProps }) => ({
+  tint: (color) => withProps({ tint: color }),
+});
+
 /**
- * Slider view class
+ * Slider - range input bound to a number
+ *
+ * @param {Binding} valueBinding - Binding to the value
+ * @param {Object} [options] - { in: [min, max], min, max, step, onEditingChanged }
+ * @param {Object} [labels] - { label, minimumValueLabel, maximumValueLabel } builders
+ * @returns {Object} Chainable view descriptor
  */
-export class SliderView extends View {
-  constructor(valueBinding, options = {}, labels = {}) {
-    super();
+export function Slider(valueBinding, options = {}, labels = {}) {
+  return chainable(createDescriptor('Slider', {
+    value: valueBinding,
+    min: options.in?.[0] ?? options.min ?? 0,
+    max: options.in?.[1] ?? options.max ?? 1,
+    step: options.step ?? null,
+    onEditingChanged: options.onEditingChanged ?? null,
+    label: labels.label ?? null,
+    minimumValueLabel: labels.minimumValueLabel ?? null,
+    maximumValueLabel: labels.maximumValueLabel ?? null,
+    tint: null,
+  }), sliderModifiers);
+}
 
-    this._valueBinding = valueBinding;
-    this._min = options.in?.[0] ?? options.min ?? 0;
-    this._max = options.in?.[1] ?? options.max ?? 1;
-    this._step = options.step ?? null;
-    this._onEditingChanged = options.onEditingChanged ?? null;
+function readValue(binding) {
+  return binding?.value ?? binding?.wrappedValue ?? 0;
+}
 
-    this._label = labels.label ?? null;
-    this._minimumValueLabel = labels.minimumValueLabel ?? null;
-    this._maximumValueLabel = labels.maximumValueLabel ?? null;
+function writeValue(binding, value) {
+  if (!binding) return;
+  if ('value' in binding) binding.value = value;
+  else if ('wrappedValue' in binding) binding.wrappedValue = value;
+}
 
-    this._tint = null;
-  }
+function appendLabel(container, builder) {
+  if (!builder) return;
+  const view = builder();
+  if (isView(view)) container.appendChild(renderLabelView(view));
+}
 
-  /**
-   * Set the tint color for the slider track
-   * @param {Object|string} color - Tint color
-   * @returns {SliderView} Returns this for chaining
-   */
-  tint(color) {
-    this._tint = color;
-    return this;
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'slider';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.gap = '8px';
-    container.style.width = '100%';
-
-    // Minimum value label
-    if (this._minimumValueLabel) {
-      const minLabel = this._minimumValueLabel();
-      if (minLabel instanceof View) {
-        container.appendChild(minLabel._render());
-      }
-    }
-
-    // Create the slider input
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(this._min);
-    input.max = String(this._max);
-    if (this._step !== null) {
-      input.step = String(this._step);
-    }
-
-    // Read initial value (untracked — we install a tracked effect below).
-    const currentValue = untrack(
-      () => this._valueBinding?.value ?? this._valueBinding?.wrappedValue ?? 0,
-    );
-    input.value = String(currentValue);
-
-    // Style the slider
-    input.style.flex = '1';
-    input.style.height = '4px';
-    input.style.appearance = 'none';
-    input.style.background = 'rgba(120, 120, 128, 0.2)';
-    input.style.borderRadius = '2px';
-    input.style.cursor = 'pointer';
-
-    // Apply tint color for filled portion
-    const tintColor = this._tint
-      ? (typeof this._tint.rgba === 'function' ? this._tint.rgba() : this._tint)
-      : 'rgba(0, 122, 255, 1)';
-
-    // Update the track fill
-    const updateTrackFill = (value) => {
-      const percent = ((value - this._min) / (this._max - this._min)) * 100;
-      input.style.background = `linear-gradient(to right, ${tintColor} 0%, ${tintColor} ${percent}%, rgba(120, 120, 128, 0.2) ${percent}%, rgba(120, 120, 128, 0.2) 100%)`;
-    };
-
-    // Reactive sync: keep input.value + track fill aligned with the binding
-    // when it changes from any source (user drag OR external write).
-    createEffect(() => {
-      const v = this._valueBinding?.value ?? this._valueBinding?.wrappedValue ?? 0;
-      const desired = String(v);
-      if (input.value !== desired) input.value = desired;
-      updateTrackFill(v);
-    });
-
-    // Handle value changes — write the binding (untracked); the effect
-    // above re-syncs the track fill.
-    input.addEventListener('input', (e) => {
-      const newValue = parseFloat(e.target.value);
-      untrack(() => {
-        if (this._valueBinding) {
-          if ('value' in this._valueBinding) {
-            this._valueBinding.value = newValue;
-          } else if ('wrappedValue' in this._valueBinding) {
-            this._valueBinding.wrappedValue = newValue;
-          }
-        }
-      });
-    });
-
-    // Handle editing changed
-    if (this._onEditingChanged) {
-      input.addEventListener('mousedown', () => this._onEditingChanged(true));
-      input.addEventListener('mouseup', () => this._onEditingChanged(false));
-      input.addEventListener('touchstart', () => this._onEditingChanged(true));
-      input.addEventListener('touchend', () => this._onEditingChanged(false));
-    }
-
-    // Add custom thumb styles via CSS
-    const style = document.createElement('style');
-    style.textContent = `
+const THUMB_CSS = `
       input[type="range"]::-webkit-slider-thumb {
         appearance: none;
         width: 28px;
@@ -153,29 +82,72 @@ export class SliderView extends View {
         box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05);
       }
     `;
-    container.appendChild(style);
-    container.appendChild(input);
 
-    // Maximum value label
-    if (this._maximumValueLabel) {
-      const maxLabel = this._maximumValueLabel();
-      if (maxLabel instanceof View) {
-        container.appendChild(maxLabel._render());
-      }
-    }
+registerRenderer('Slider', (props) => {
+  const { value: binding, min, max, step, onEditingChanged, tint } = props;
+  const container = document.createElement('div');
+  container.dataset.view = 'slider';
+  container.style.display = 'flex';
+  container.style.alignItems = 'center';
+  container.style.gap = '8px';
+  container.style.width = '100%';
 
-    return this._applyModifiers(container);
+  appendLabel(container, props.minimumValueLabel);
+
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = String(min);
+  input.max = String(max);
+  if (step !== null) input.step = String(step);
+
+  // Initial value, untracked; the effect below tracks the binding.
+  input.value = String(untrack(() => readValue(binding)));
+
+  input.style.flex = '1';
+  input.style.height = '4px';
+  input.style.appearance = 'none';
+  input.style.background = 'rgba(120, 120, 128, 0.2)';
+  input.style.borderRadius = '2px';
+  input.style.cursor = 'pointer';
+
+  const tintColor = tint
+    ? (typeof tint.rgba === 'function' ? tint.rgba() : tint)
+    : 'rgba(0, 122, 255, 1)';
+
+  const updateTrackFill = (v) => {
+    const percent = ((v - min) / (max - min)) * 100;
+    input.style.background = `linear-gradient(to right, ${tintColor} 0%, ${tintColor} ${percent}%, rgba(120, 120, 128, 0.2) ${percent}%, rgba(120, 120, 128, 0.2) 100%)`;
+  };
+
+  // Keep input.value and the track fill aligned with the binding when it
+  // changes from any source (a drag or a write elsewhere).
+  createEffect(() => {
+    const v = readValue(binding);
+    const desired = String(v);
+    if (input.value !== desired) input.value = desired;
+    updateTrackFill(v);
+  });
+
+  input.addEventListener('input', (e) => {
+    const newValue = parseFloat(e.target.value);
+    untrack(() => writeValue(binding, newValue));
+  });
+
+  if (onEditingChanged) {
+    input.addEventListener('mousedown', () => onEditingChanged(true));
+    input.addEventListener('mouseup', () => onEditingChanged(false));
+    input.addEventListener('touchstart', () => onEditingChanged(true));
+    input.addEventListener('touchend', () => onEditingChanged(false));
   }
-}
 
-/**
- * Factory function for Slider
- */
-// A view descriptor rendered by SliderView (#48).
-const makeSlider = defineControl('Slider', SliderView, ['tint']);
+  const style = document.createElement('style');
+  style.textContent = THUMB_CSS;
+  container.appendChild(style);
+  container.appendChild(input);
 
-export function Slider(valueBinding, options = {}, labels = {}) {
-  return makeSlider(valueBinding, options, labels);
-}
+  appendLabel(container, props.maximumValueLabel);
+
+  return container;
+});
 
 export default Slider;

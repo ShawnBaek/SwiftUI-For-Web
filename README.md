@@ -8,13 +8,13 @@ If you know SwiftUI, you already know this framework. Same component names (`VSt
 
 Under the hood, view bodies run **once at mount**. State changes execute only the small effect closures bound to the affected DOM nodes — no virtual DOM, no diff, no patches. Closer in spirit to Solid than to React.
 
-[![Version](https://img.shields.io/badge/version-2.0.0--alpha.1-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
 [![Animation](https://img.shields.io/badge/animation%20engine-native%20browser-2ea44f.svg)](#animation-engine-native-browser-under-the-hood)
 [![Bundle](https://img.shields.io/badge/gzipped-~93KB-brightgreen.svg)](#bundle-size)
 
-> **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
+> **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Playground](https://shawnbaek.github.io/SwiftUI-For-Web/docs/playground/)** · **[3.1 guides](https://shawnbaek.github.io/SwiftUI-For-Web/docs/guides/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
 
 ---
 
@@ -57,6 +57,26 @@ App(() =>
 Mount once, mutate freely. The `Text(() => …)` thunk subscribes to whatever signals it reads. When `count.value++` runs, the framework re-executes only that one closure and updates that one text node — nothing else in the tree re-runs.
 
 No `npm install`, no bundler, no JSX. Save as `index.html` + `main.js`, serve with any static server, done.
+
+### New in 3.1.0
+
+- **One view model.** Every built-in view, from `Text` to `List`,
+  `NavigationStack` and the shapes, is a descriptor with the same modifier
+  table; the `*View` classes are gone. See the
+  [CHANGELOG](CHANGELOG.md#breaking) for migration notes.
+- **Static rendering and hydration.** `swiftui-for-web/server` renders views
+  to HTML in Node (`renderToString`, `renderDocument`, `sitemap`), and
+  `mount(host, { mode: 'adopt' })` hydrates that markup in place.
+- **SwiftUI behaviour, closer.** Ordered modifier layers, gesture composition,
+  removal transitions, scoped `.environment`, `.task`, keyed reactive
+  `ForEach`, and presentations (`.sheet`, `.alert`, `.confirmationDialog`,
+  `.fullScreenCover`) on one controller.
+- **Accessibility.** `Toggle`, `Picker`, `TabView`, `Menu`, `List` selection
+  and `DisclosureGroup` follow the WAI-ARIA patterns, with keyboard support.
+- **Release build.** `--bundle`, `--hash` and `modulepreload`, within a
+  120 KB gzip budget.
+- **Reliable cold loads.** `serve.py` no longer resets connections on a cold
+  first load, and reports a module that fails to load instead of a blank page.
 
 ### New in 2.0.0-alpha.1
 
@@ -147,6 +167,13 @@ python3 serve.py 8000
 Open `http://localhost:8000/Examples/Counter/`. Development uses the checked-in
 browser modules directly: no package installation, bundler, transpiler, or IDE.
 
+A page loads dozens of modules at once on a cold load. Serve them with a server
+that accepts many connections: `serve.py` does, and it shows an error on the
+page if a module fails to load. `python3 -m http.server` resets
+connections under that load, and one failed module leaves the page blank until a
+reload. In production, serve the optional release build (`--bundle` makes one
+file) or use an HTTP/2 host.
+
 Use named imports so an optional production build can retain only the framework
 modules your app references:
 
@@ -175,6 +202,26 @@ so modules download in parallel. Add `--hash` to give every emitted file a
 content-hashed name (`main.3fa2b1c4d5.js`, references rewritten) and write
 `manifest.json` mapping source paths to hashed ones, for long-lived caching.
 `--no-minify` keeps the output readable.
+
+Add `--bundle` to scope-hoist the page's module scripts and everything they
+import statically into one ES module, `bundle.js` (`bundle.<hash>.js` with
+`--hash`), and point `index.html` at it:
+
+```bash
+node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir dist/hello-world --bundle --hash
+```
+
+The builder parses every module, resolves its scopes, and concatenates the
+modules in ES module evaluation order. A top-level name is renamed only where
+it would collide, and only the references that resolve to it change, so live
+bindings (`export let`), hoisting, cycles, namespace imports (frozen objects
+with getters), class and function names behave as they do between separate
+modules. Modules reached only through `import('./x.js')` go into `chunk-*.js`
+files loaded on demand. The output is deterministic, and `build-report.json`
+lists the bundled modules and chunks. Limitations: top-level `await` and
+`eval` are rejected; stack traces (and the development warnings that read
+them) point into the bundle; a dynamic chunk's dependencies run before its
+own modules rather than interleaved with them.
 
 ---
 
@@ -322,6 +369,10 @@ and views that wait for an animation frame or a ResizeObserver
 (`GeometryReader`, `ViewThatFits`) render empty until the client mounts. `DocumentMetadata` is a web-only API: SwiftUI has
 no document `<head>`.
 
+[`Examples/AppleSampleCodeProof`](Examples/AppleSampleCodeProof/) renders a
+real AppleSampleCode page this way and tests it against the site's Python
+renderer, on metadata, headings, links, landmarks and visible text.
+
 ## Islands on a static page
 
 Keep the page server-rendered and activate SwiftUI-For-Web only where it is
@@ -351,11 +402,19 @@ App(() => FinderView(query)).mount('#finder', { mode: 'replace' });
 - `mount(host, { mode: 'replace' })` keeps the fallback markup until the view
   is rendered, swaps them in one step and holds the host's height until the
   next frame, so activation causes no layout shift.
-- `mount(host, { mode: 'adopt' })` takes over markup from
-  `renderDocument`/`renderToString`: it swaps in the client tree the same
-  way, keeps focus inside the host, and in development warns at the first
-  place where the client tree differs from the server markup. It doesn't
-  reuse the server's nodes (no hydration yet).
+- `mount(host, { mode: 'adopt' })` hydrates markup from
+  `renderDocument`/`renderToString`: the view renders onto the server's DOM
+  nodes instead of new ones, so each element keeps its identity, focus (with
+  a field's selection) and scroll offset, and the effects, handlers,
+  gestures and lifecycle callbacks bind to those nodes. Where the markup
+  differs from the client tree, the differing elements are created fresh
+  (the result is always the client's tree), and development builds warn at
+  the first difference. Comments and whitespace in the markup don't matter.
+  Text typed (or a box ticked) in a server-rendered field before hydration
+  is kept when its binding still holds the server's value, and passed to
+  the binding; otherwise the binding's value replaces it. Adopting a host
+  that already has a mounted app unmounts that app first (development
+  builds warn) and claims copies of its markup.
 - `unmount()` releases the island's handlers, effects, tasks and lifecycle
   callbacks.
 - Static controls drive the island by writing a `State` the island module
@@ -504,7 +563,6 @@ src/
 │   ├── EventDelegate.js   Single root listener per event type, WeakMap
 │   ├── LifecycleObserver  Shared MutationObserver for onAppear/onDisappear
 │   ├── ViewDescriptor.js  Frozen descriptor objects, FNV-1a hashing
-│   └── ChangeTracker.js   Debug-mode change logs (legacy View only)
 ├── Data/                  State, Binding, ObservableObject, StateObject,
 │                          Observable, Environment, EnvironmentObject —
 │                          all wired into Signal's tracking via lazy
@@ -689,7 +747,7 @@ Issues and PRs welcome. Read [AGENTS.md](AGENTS.md) first: it covers the princip
 Before opening a PR, run these with nothing to install:
 
 1. `node run-tests.js` and `node scripts/build-tests.js`.
-2. Serve the repo (`python3 -m http.server 8000`) and open `http://localhost:8000/Tests/TestRunner.html`.
+2. Serve the repo (`python3 serve.py 8000`) and open `http://localhost:8000/Tests/TestRunner.html`.
 3. Optionally, the Playwright specs in `Tests/e2e` and `Tests/visual`. They are never required.
 
 ---
