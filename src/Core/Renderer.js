@@ -23,6 +23,7 @@ import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
+import { applyFrame } from './Frame.js';
 import { State } from '../Data/State.js';
 import { Binding } from '../Data/Binding.js';
 
@@ -484,18 +485,6 @@ function applyPadding(element, value) {
 /**
  * Apply frame modifier
  */
-function applyFrame(element, value) {
-  if (value.width !== undefined) {
-    element.style.width = typeof value.width === 'number' ? `${value.width}px` : value.width;
-  }
-  if (value.height !== undefined) {
-    element.style.height = typeof value.height === 'number' ? `${value.height}px` : value.height;
-  }
-  if (value.minWidth !== undefined) element.style.minWidth = `${value.minWidth}px`;
-  if (value.maxWidth !== undefined) element.style.maxWidth = `${value.maxWidth}px`;
-  if (value.minHeight !== undefined) element.style.minHeight = `${value.minHeight}px`;
-  if (value.maxHeight !== undefined) element.style.maxHeight = `${value.maxHeight}px`;
-}
 
 /**
  * Apply foreground color modifier

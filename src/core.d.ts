@@ -158,10 +158,12 @@ export interface ViewModifier {
 export interface FrameOptions {
   width?: number | string;
   height?: number | string;
-  minWidth?: number;
-  maxWidth?: number | 'infinity';
-  minHeight?: number;
-  maxHeight?: number | 'infinity';
+  minWidth?: number | string;
+  /** `Infinity` (or `'infinity'`) fills the available width, like SwiftUI's `.infinity` */
+  maxWidth?: number | string;
+  minHeight?: number | string;
+  /** `Infinity` (or `'infinity'`) fills the available height */
+  maxHeight?: number | string;
   alignment?: Alignment;
 }
 

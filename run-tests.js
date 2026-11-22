@@ -604,6 +604,29 @@ async function runTests() {
         teardown();
       });
 
+      // #50: frame(maxWidth: .infinity) fills the available space.
+      it('frame(maxWidth: Infinity) fills the width instead of emitting infinitypx', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          ModifierText('A').frame({ maxWidth: Infinity }),
+          ModifierText('B').frame({ maxWidth: 'infinity', maxHeight: Infinity }),
+          ModifierText('C').frame({ width: 80, maxWidth: Infinity, minWidth: '4rem' }),
+          ModifierText('D').frame({ maxWidth: 200 })
+        ));
+        const [a, b, c, d] = root.children[0].children;
+        expect(a.style.width).toBe('100%');
+        expect(a.style.maxWidth).toBe('none');
+        expect(b.style.width).toBe('100%');
+        expect(b.style.height).toBe('100%');
+        expect(b.style.maxHeight).toBe('none');
+        expect(c.style.width).toBe('80px');
+        expect(c.style.minWidth).toBe('4rem');
+        expect(d.style.maxWidth).toBe('200px');
+        for (const el of [a, b, c, d]) {
+          expect(String(el.style.maxWidth).includes('infinity')).toBe(false);
+        }
+        teardown();
+      });
+
       it('Text(state.value) stays a static snapshot', () => {
         const count = new State(1);
         const { root, teardown } = mountInRoot(() => VStack(ModifierText(count.value)));
