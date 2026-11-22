@@ -342,6 +342,10 @@ and views that wait for an animation frame or a ResizeObserver
 (`GeometryReader`, `ViewThatFits`) render empty until the client mounts. `DocumentMetadata` is a web-only API: SwiftUI has
 no document `<head>`.
 
+[`Examples/AppleSampleCodeProof`](Examples/AppleSampleCodeProof/) renders a
+real AppleSampleCode page this way and tests it against the site's Python
+renderer, on metadata, headings, links, landmarks and visible text.
+
 ## Islands on a static page
 
 Keep the page server-rendered and activate SwiftUI-For-Web only where it is

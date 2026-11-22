@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Source-backed architecture analysis for Core NFC sample architecture">
+  <meta name="docc-page-kind" content="collection">
+  <link rel="canonical" href="https://applesamplecode.com/Core%20NFC/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Apple Sample Code">
+  <meta property="og:title" content="Core NFC sample architecture — Apple Sample Code">
+  <meta property="og:description" content="Source-backed architecture analysis for Core NFC sample architecture">
+  <meta property="og:url" content="https://applesamplecode.com/Core%20NFC/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Core NFC sample architecture — Apple Sample Code">
+  <meta name="twitter:description" content="Source-backed architecture analysis for Core NFC sample architecture">
+  <title>Core NFC sample architecture — Apple Sample Code</title>
+  <link rel="icon" type="image/svg+xml" href="../_assets/favicon.svg?v=6c1ce97da43e">
+  <link rel="stylesheet" href="../_assets/site.css?v=7f83044661f1">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://applesamplecode.com/"},{"@type":"ListItem","position":2,"name":"Frameworks","item":"https://applesamplecode.com/FRAMEWORKS.html"},{"@type":"ListItem","position":3,"name":"Core NFC sample architecture","item":"https://applesamplecode.com/Core%20NFC/"}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="site-brand" href="../index.html" aria-label="Apple Sample Code home">Apple Sample Code</a>
+      <nav class="site-nav" aria-label="Primary"><ul><li><a href="../index.html#swiftui-sample-explorer-heading">Explore</a></li><li><a href="../PATTERNS.html">Patterns</a></li><li><a href="../FRAMEWORKS.html">Frameworks</a></li><li><a href="../MCP.html">MCP</a></li><li><a href="../ABOUT.html">About</a></li></ul></nav>
+      <form class="site-search" role="search" action="../index.html" method="get">
+        <label class="visually-hidden" for="site-search-input">Search sample analyses</label>
+        <input id="site-search-input" type="search" name="q" placeholder="Search samples" autocomplete="off" spellcheck="false" required>
+      </form>
+    </div>
+  </header>
+  <div class="page-shell">
+    <div class="documentation-layout">
+      <aside class="documentation-sidebar" aria-label="Documentation navigation">
+        <div class="sidebar-search">
+          <span class="sidebar-section-label">Explore</span>
+          <a class="sidebar-search-link" href="../index.html#swiftui-sample-explorer-heading">Search samples</a>
+        </div>
+        <section class="sidebar-context" aria-labelledby="sidebar-context-label">
+          <span id="sidebar-context-label" class="sidebar-section-label">Framework</span>
+          <div class="sidebar-context-value"><a href="index.html" aria-current="page">Core NFC</a></div>
+        </section>
+        <details class="page-toc" open>
+          <summary>On this page</summary>
+          <nav aria-label="On this page">
+            <ol>
+          <li><a href="#samples">Samples</a></li>
+          <li><a href="#cross-sample-signals">Cross-sample signals</a></li>
+          <li><a href="#references">References</a></li>
+            </ol>
+          </nav>
+        </details>
+        <details class="sidebar-samples">
+          <summary>2 samples in Core NFC</summary>
+          <ul><li><a href="Building%20an%20NFC%20Tag-Reader%20App.html">Building an NFC Tag-Reader App</a></li><li><a href="Creating%20NFC%20Tags%20from%20Your%20iPhone.html">Creating NFC Tags from Your iPhone</a></li></ul>
+        </details>
+      </aside>
+      <div class="documentation-content">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="../index.html">Home</a></li><li><a href="../FRAMEWORKS.html">Frameworks</a></li><li aria-current="page">Core NFC</li></ol></nav>
+        <main id="main-content">
+          <article class="prose" data-page-kind="collection">
+        <div class="page-meta" aria-label="Page metadata"><span class="page-kind" data-page-kind="collection">Collection</span></div>
+
+<h1 id="core-nfc-sample-architecture">Core NFC sample architecture</h1>
+<p>Source-backed, high-level architecture notes for Apple sample-code pages grouped in the <strong>Core NFC</strong> folder.</p>
+<ul>
+<li>Catalog module label: <code>Core NFC</code></li>
+<li>Coverage: <strong>2 / 2</strong> sample pages documented</li>
+<li>Source policy: archive hashes and extracted-tree references are verified locally before analysis</li>
+</ul>
+<h2 id="samples">Samples</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Sample</th>
+<th>Platforms</th>
+<th>High-level architecture</th>
+<th>Documented patterns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="Building%20an%20NFC%20Tag-Reader%20App.html">Building an NFC Tag-Reader App</a></td>
+<td>iOS, iPadOS, Mac Catalyst</td>
+<td>A Swift sample with the source-visible chain <code>AppDelegate</code> → <code>MessagesTableViewController</code> → <code>CoreNFC APIs</code>.</td>
+<td>View-controller organization, Delegate or data-source callbacks</td>
+</tr>
+<tr>
+<td><a href="Creating%20NFC%20Tags%20from%20Your%20iPhone.html">Creating NFC Tags from Your iPhone</a></td>
+<td>iOS, iPadOS, Mac Catalyst</td>
+<td>A Swift sample bundle with entry-bearing project variants <code>FishTagCreator</code>, <code>FishTagReader</code>, each leading to CoreNFC APIs.</td>
+<td>View-controller organization, Delegate or data-source callbacks</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cross-sample-signals">Cross-sample signals</h2>
+<h3 id="recurring-documented-patterns">Recurring documented patterns</h3>
+<table>
+<thead>
+<tr>
+<th>Pattern label</th>
+<th style="text-align: right;">Sample documents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View-controller organization</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td>Delegate or data-source callbacks</td>
+<td style="text-align: right;">2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="type-role-naming-evidence">Type-role naming evidence</h3>
+<p>Counts below are declaration-name suffixes, not inferred patterns.</p>
+<table>
+<thead>
+<tr>
+<th>Role suffix</th>
+<th style="text-align: right;">Distinct declarations across samples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Controller</code></td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr>
+<td><code>Delegate</code></td>
+<td style="text-align: right;">2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="swift-access-control-evidence">Swift access-control evidence</h3>
+<p>These are declaration occurrences in scanned Swift source, including implicit internal declarations.</p>
+<table>
+<thead>
+<tr>
+<th>Access level</th>
+<th style="text-align: right;">Occurrences</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>implicit internal</code></td>
+<td style="text-align: right;">147</td>
+</tr>
+<tr>
+<td><code>public</code></td>
+<td style="text-align: right;">1</td>
+</tr>
+</tbody>
+</table>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="../_catalog/SAMPLE-CODE-CATALOG.html">Complete Apple sample-code catalog</a></li>
+<li><a href="../_analysis/TEMPLATE.html">Documentation format</a></li>
+</ul>
+<p>Generated from the verified local catalog and completed Markdown documents.</p>
+
+          </article>
+        </main>
+      </div>
+    </div>
+  </div>
+  <footer class="site-footer">
+    <div class="site-footer-content">
+      <p>Independent study material. Apple sample code and documentation remain subject to their original ownership and license terms. The viewer includes only files cited by each Source Map; complete archives and source trees are not published.</p>
+      <div class="site-footer-links">
+        <a class="creator-credit" href="https://shawnbaek.com">Created by Shawn Baek</a>
+        <a href="https://developer.apple.com/support/downloads/terms/apple-sample-code/Apple-Sample-Code-License.pdf">Apple Sample Code License</a>
+        <a class="swiftui-for-web-credit" href="https://github.com/ShawnBaek/SwiftUI-For-Web">Built with SwiftUI for Web</a>
+        <a href="#main-content">Back to top</a>
+      </div>
+    </div>
+    <dl class="visitor-counter" data-visitor-counter data-endpoint="https://mc774j3mvizmbfbzesqyeyrbsi0ugetj.lambda-url.us-east-2.on.aws/" aria-label="Site visits" aria-busy="true">
+      <div><dt>Today</dt><dd data-visit-count="today">—</dd></div>
+      <div><dt>This month</dt><dd data-visit-count="thisMonth">—</dd></div>
+      <div><dt>All time</dt><dd data-visit-count="allTime">—</dd></div>
+    </dl>
+  </footer>
+  <script type="module" src="../_assets/visitor-counter.js?v=500363770745"></script>
+</body>
+</html>

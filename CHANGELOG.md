@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- AppleSampleCode proof case (Refs #40): `Examples/AppleSampleCodeProof`
+  renders AppleSampleCode's Core NFC framework collection page with
+  `renderDocument`, and `Tests/Server/AppleSampleCodeProofTests.js` checks
+  it against the Python renderer's output for the same page: metadata,
+  JSON-LD, headings, links, landmarks, lists, tables and all 293 visible
+  words match.
 - `mount(host, { mode: 'adopt' })` now hydrates (#39): the view renders onto
   the server's DOM nodes instead of swapping in a new tree. While the client
   render runs, element creation (`acquireElement`, `document.createElement`,
