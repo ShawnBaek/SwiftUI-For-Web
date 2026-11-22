@@ -16,7 +16,7 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR, isDescriptor } from '../../Core/ViewDescriptor.js';
+import { VIEW_DESCRIPTOR, isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
 
 /**
@@ -67,6 +67,7 @@ export class ListView extends View {
         this._rowBuilder = args[1];
       } else if (typeof args[1] === 'object' && typeof args[2] === 'function') {
         this._idKeyPath = args[1].id ?? 'id';
+        this._selection = args[1].selection ?? null;
         this._rowBuilder = args[2];
       }
     } else if (typeof args[0] === 'object' && !Array.isArray(args[0]) && !(args[0] instanceof View) && !isDescriptor(args[0])) {
@@ -143,6 +144,7 @@ export class ListView extends View {
     const el = document.createElement('div');
     el.dataset.view = 'list';
     el.setAttribute('role', 'list');
+    this._selectableRows = [];
 
     // Apply list styles
     const styles = this._getListStyleCSS();
@@ -153,7 +155,7 @@ export class ListView extends View {
       // Data-driven list
       for (const item of this._data) {
         const rowContent = this._rowBuilder(item);
-        const row = this._createListRow(rowContent, item);
+        const row = this._createListRow(rowContent, item, item?.[this._idKeyPath]);
         el.appendChild(row);
       }
     } else {
@@ -181,22 +183,153 @@ export class ListView extends View {
               }
             }
           } else {
-            // Regular child - wrap in a list row
-            const row = this._createListRow(rendered, null);
+            // Regular child - wrap in a list row. A child tagged with
+            // .tag(_:) is selectable by that value, as in SwiftUI.
+            const row = this._createListRow(rendered, null, this._getTag(child));
             el.appendChild(row);
           }
         }
       }
     }
 
+    if (this._selection && this._selectableRows.length > 0) {
+      this._installSelection(el);
+    }
+
     return this._applyModifiers(el);
+  }
+
+  /**
+   * The value of a child's last `.tag(_:)`, or undefined.
+   * @private
+   */
+  _getTag(child) {
+    if (isDescriptor(child)) {
+      for (let i = child.modifiers.length - 1; i >= 0; i--) {
+        if (child.modifiers[i].type === ModifierType.TAG) return child.modifiers[i].value;
+      }
+      return undefined;
+    }
+    return child instanceof View ? (child._tag ?? undefined) : undefined;
+  }
+
+  /** @private */
+  _readSelection() {
+    const selection = this._selection;
+    if (!selection) return null;
+    return 'value' in selection ? selection.value : selection.wrappedValue;
+  }
+
+  /** @private */
+  _writeSelection(value) {
+    const selection = this._selection;
+    if ('value' in selection) selection.value = value;
+    else selection.wrappedValue = value;
+  }
+
+  /** @private */
+  _isSelected(id) {
+    const value = this._readSelection();
+    return value instanceof Set ? value.has(id) : value === id;
+  }
+
+  /**
+   * Select a row: replace the selection, or toggle membership when the
+   * selection is a Set (multiple selection).
+   * @private
+   */
+  _selectRow(id) {
+    const value = this._readSelection();
+    if (value instanceof Set) {
+      const next = new Set(value);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      this._writeSelection(next);
+    } else {
+      this._writeSelection(id);
+    }
+    this._syncSelection();
+  }
+
+  /** @private */
+  _syncSelection() {
+    for (const { row, id } of this._selectableRows) {
+      const selected = this._isSelected(id);
+      row.setAttribute('aria-selected', selected ? 'true' : 'false');
+      row.style.backgroundColor = selected ? 'rgba(0, 122, 255, 0.1)' : 'white';
+    }
+  }
+
+  /**
+   * #51: a selectable list is a WAI-ARIA listbox. Rows are options with
+   * aria-selected and a roving tabindex; ↑/↓, Home and End move focus and
+   * Space selects the focused row.
+   * @private
+   */
+  _installSelection(el) {
+    const rows = this._selectableRows;
+    el.setAttribute('role', 'listbox');
+    if (this._readSelection() instanceof Set) el.setAttribute('aria-multiselectable', 'true');
+    let focusIndex = rows.findIndex(({ id }) => this._isSelected(id));
+    if (focusIndex === -1) focusIndex = 0;
+    rows.forEach(({ row }, index) => {
+      row.setAttribute('role', 'option');
+      row.tabIndex = index === focusIndex ? 0 : -1;
+    });
+    // A listbox may only own options: a row with no id is an option that
+    // can't be selected.
+    for (const row of el.children) {
+      if (row.getAttribute('role') === 'listitem') {
+        row.setAttribute('role', 'option');
+        row.setAttribute('aria-disabled', 'true');
+      }
+    }
+    this._syncSelection();
+
+    const moveFocus = (index) => {
+      rows.forEach(({ row }, i) => { row.tabIndex = i === index ? 0 : -1; });
+      rows[index].row.focus?.();
+    };
+
+    rows.forEach(({ row, id }, index) => {
+      row.addEventListener('keydown', (event) => {
+        // Keys typed in a control inside the row belong to that control.
+        if (event.target && event.target !== row) return;
+        const last = rows.length - 1;
+        switch (event.key) {
+          case 'ArrowDown':
+            moveFocus(Math.min(index + 1, last));
+            break;
+          case 'ArrowUp':
+            moveFocus(Math.max(index - 1, 0));
+            break;
+          case 'Home':
+            moveFocus(0);
+            break;
+          case 'End':
+            moveFocus(last);
+            break;
+          case ' ':
+          case 'Spacebar':
+            this._selectRow(id);
+            break;
+          default:
+            return;
+        }
+        event.preventDefault?.();
+      });
+      row.addEventListener('click', () => {
+        rows.forEach(({ row: other }, i) => { other.tabIndex = i === index ? 0 : -1; });
+        this._selectRow(id);
+      });
+    });
   }
 
   /**
    * Create a list row wrapper
    * @private
    */
-  _createListRow(content, item) {
+  _createListRow(content, item, id) {
     const row = document.createElement('div');
     row.dataset.listRow = 'true';
     row.setAttribute('role', 'listitem');
@@ -214,21 +347,15 @@ export class ListView extends View {
       row.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
     });
     row.addEventListener('mouseleave', () => {
-      const isSelected = this._selection && item && this._selection.value === item[this._idKeyPath];
+      const isSelected = selectable && this._isSelected(id);
       row.style.backgroundColor = isSelected ? 'rgba(0, 122, 255, 0.1)' : 'white';
     });
 
-    // Selection handling
-    if (this._selection && item) {
+    // Selection: wired up in _installSelection once every row exists.
+    const selectable = Boolean(this._selection) && id !== undefined && id !== null;
+    if (selectable) {
       row.style.cursor = 'pointer';
-      row.addEventListener('click', () => {
-        this._selection.value = item[this._idKeyPath];
-      });
-
-      // Check if selected
-      if (this._selection.value === item[this._idKeyPath]) {
-        row.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-      }
+      this._selectableRows.push({ row, id });
     }
 
     // Append content

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- `List` selection works and is accessible (#51). A selectable list is a
+  WAI-ARIA `listbox` whose rows are `option`s with `aria-selected` and a
+  roving `tabindex`; ↑/↓, Home and End move focus and Space (or a click)
+  selects. A `Set` selection toggles rows and sets `aria-multiselectable`.
+  Selection used to do nothing: `List(data, { selection }, row)` ignored the
+  binding, and `List({ selection }, …children)` had no row ids. Rows now take
+  their id from the data's id key path, or from a child's `.tag(_:)`.
+- `TabView` follow-ups (#51): when the selection matches no tab, the first
+  tab keeps the Tab stop. The page-style `TabView` follows the tabs pattern
+  too: its page dots are `<button role="tab">`s ("Page 2 of 3") with
+  `aria-selected`, `aria-controls` and a roving `tabindex` in a `tablist`
+  (←/→ wrapping, Home, End), each page is a `tabpanel`, and off-screen pages
+  are `inert` and `aria-hidden`. It also renders view-descriptor pages now.
 - `NavigationLink` is a native element (#51): a `<button type="button">`, or
   an `<a href>` when it is given `{ url }`, so it is focusable and Enter
   activates it. A plain click on a URL link navigates in place; a modified

@@ -682,12 +682,17 @@ export type VerticalAlignment = (typeof VerticalAlignment)[keyof typeof Vertical
 // =============================================================================
 
 /** Scrollable list of items */
+export function List<T>(data: T[], options: ListOptions & { id?: string }, rowContent: (item: T) => View): View & {
+  /** Set list style */
+  listStyle(style: ListStyle): View;
+};
 export function List(options: ListOptions | View, ...children: View[]): View & {
   /** Set list style */
   listStyle(style: ListStyle): View;
 };
 
 export interface ListOptions {
+  /** Selected row id, or a Set of ids for multiple selection. Rows are ids from the data, or `.tag(_:)` values of children. */
   selection?: Binding<any>;
 }
 

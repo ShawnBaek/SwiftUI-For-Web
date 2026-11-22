@@ -78,6 +78,15 @@ export const TabViewStyle = {
 };
 
 let tabViewCount = 0;
+/**
+ * Give the first tab the Tab stop when no tab is selected (#51), so the
+ * tablist stays reachable from the keyboard.
+ */
+function ensureTabStop(tabList) {
+  const tabs = Array.from(tabList.children);
+  if (tabs.length > 0 && !tabs.some((tab) => tab.tabIndex === 0)) tabs[0].tabIndex = 0;
+}
+
 function nextTabViewId() {
   tabViewCount += 1;
   return `swiftui-tabview-${tabViewCount}`;
@@ -276,6 +285,9 @@ export class TabViewView extends View {
       }
     });
 
+    // With no tab matching the selection, keep the tablist reachable by Tab.
+    ensureTabStop(tabBar);
+
     container.appendChild(contentArea);
     container.appendChild(tabBar);
 
@@ -313,6 +325,7 @@ export class TabViewView extends View {
       tabButton.tabIndex = isSelected ? 0 : -1;
       if (isSelected && tabButton.id) contentArea.setAttribute('aria-labelledby', tabButton.id);
     });
+    ensureTabStop(tabBar);
   }
 
   /**
@@ -334,29 +347,36 @@ export class TabViewView extends View {
     pagesContainer.style.transition = 'transform 0.3s ease';
     pagesContainer.style.willChange = 'transform';
 
+    // #51: the page indicator is a WAI-ARIA tablist. Each dot is a tab that
+    // controls its page (a tabpanel). Off-screen pages are inert and hidden
+    // from assistive technology, so Tab never lands on content you can't see.
+    const tabIdBase = nextTabViewId();
+    const count = this._tabs.length;
+    // With the indicator hidden there are no tabs, so the pages are plain
+    // regions (still inert when off-screen).
+    const showsIndicator = this._pageIndicatorVisibility !== 'never';
     const currentSelection = this._getSelection();
-    let selectedIndex = 0;
+    let selectedIndex = this._tabs.findIndex((tab, index) => getTag(tab, index) === currentSelection);
+    if (selectedIndex === -1) selectedIndex = 0;
 
-    this._tabs.forEach((tab, index) => {
-      const tag = getTag(tab, index);
-      if (tag === currentSelection) {
-        selectedIndex = index;
-      }
-
+    const pages = this._tabs.map((tab, index) => {
       const page = document.createElement('div');
+      page.id = `${tabIdBase}-panel-${index}`;
+      if (showsIndicator) page.setAttribute('role', 'tabpanel');
       page.style.flexShrink = '0';
       page.style.width = '100%';
       page.style.height = '100%';
       page.style.overflow = 'auto';
-      page.appendChild(tab._render());
+      const rendered = renderTab(tab);
+      if (rendered) page.appendChild(rendered);
       pagesContainer.appendChild(page);
+      return page;
     });
 
-    // Set initial position
-    pagesContainer.style.transform = `translateX(-${selectedIndex * 100}%)`;
-
-    // Page indicator dots
     const pageIndicator = document.createElement('div');
+    pageIndicator.dataset.tabviewPart = 'pageindicator';
+    pageIndicator.setAttribute('role', 'tablist');
+    pageIndicator.setAttribute('aria-label', 'Pages');
     pageIndicator.style.position = 'absolute';
     pageIndicator.style.bottom = '20px';
     pageIndicator.style.left = '50%';
@@ -364,75 +384,80 @@ export class TabViewView extends View {
     pageIndicator.style.display = 'flex';
     pageIndicator.style.gap = '8px';
 
-    this._tabs.forEach((_, index) => {
-      const dot = document.createElement('div');
+    const dots = this._tabs.map((_, index) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.id = `${tabIdBase}-tab-${index}`;
+      dot.setAttribute('role', 'tab');
+      dot.setAttribute('aria-controls', pages[index].id);
+      dot.setAttribute('aria-label', `Page ${index + 1} of ${count}`);
+      if (showsIndicator) pages[index].setAttribute('aria-labelledby', dot.id);
       dot.style.width = '8px';
       dot.style.height = '8px';
+      dot.style.padding = '0';
+      dot.style.border = 'none';
       dot.style.borderRadius = '50%';
-      dot.style.backgroundColor = index === selectedIndex
-        ? 'rgba(0, 0, 0, 0.8)'
-        : 'rgba(0, 0, 0, 0.3)';
       dot.style.transition = 'background-color 0.2s ease';
       dot.style.cursor = 'pointer';
-
-      dot.addEventListener('click', () => {
-        const tag = getTag(this._tabs[index], index);
-        this._setSelection(tag);
-        pagesContainer.style.transform = `translateX(-${index * 100}%)`;
-
-        // Update dots
-        Array.from(pageIndicator.children).forEach((d, i) => {
-          d.style.backgroundColor = i === index
-            ? 'rgba(0, 0, 0, 0.8)'
-            : 'rgba(0, 0, 0, 0.3)';
-        });
-      });
-
+      dot.addEventListener('click', () => goTo(index));
       pageIndicator.appendChild(dot);
+      return dot;
     });
 
+    const show = (index) => {
+      pagesContainer.style.transform = `translateX(-${index * 100}%)`;
+      pages.forEach((page, i) => {
+        const hidden = i !== index;
+        page.inert = hidden;
+        if (hidden) page.setAttribute('aria-hidden', 'true');
+        else page.removeAttribute('aria-hidden');
+      });
+      dots.forEach((dot, i) => {
+        const selected = i === index;
+        dot.setAttribute('aria-selected', selected ? 'true' : 'false');
+        dot.tabIndex = selected ? 0 : -1;
+        dot.style.backgroundColor = selected ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.3)';
+      });
+    };
+
+    const goTo = (index) => {
+      selectedIndex = index;
+      this._setSelection(getTag(this._tabs[index], index));
+      show(index);
+    };
+
+    pageIndicator.addEventListener('keydown', (e) => {
+      if (count === 0) return;
+      const current = dots.indexOf(document.activeElement);
+      const from = current < 0 ? selectedIndex : current;
+      let next = -1;
+      if (e.key === 'ArrowRight') next = (from + 1) % count;
+      else if (e.key === 'ArrowLeft') next = (from - 1 + count) % count;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = count - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      goTo(next);
+      dots[next].focus();
+    });
+
+    if (count > 0) show(selectedIndex);
+
     container.appendChild(pagesContainer);
-    if (this._pageIndicatorVisibility !== 'never') {
-      container.appendChild(pageIndicator);
-    }
+    if (showsIndicator) container.appendChild(pageIndicator);
 
     // Touch handling for swiping
     let touchStartX = 0;
-    let touchEndX = 0;
 
     container.addEventListener('touchstart', (e) => {
       touchStartX = e.touches[0].clientX;
     });
 
     container.addEventListener('touchend', (e) => {
-      touchEndX = e.changedTouches[0].clientX;
-      const diff = touchStartX - touchEndX;
-
-      if (Math.abs(diff) > 50) {
-        const currentIdx = this._tabs.findIndex((tab, i) =>
-          getTag(tab, i) === this._getSelection()
-        );
-
-        let newIndex;
-        if (diff > 0 && currentIdx < this._tabs.length - 1) {
-          newIndex = currentIdx + 1;
-        } else if (diff < 0 && currentIdx > 0) {
-          newIndex = currentIdx - 1;
-        } else {
-          return;
-        }
-
-        const tag = getTag(this._tabs[newIndex], newIndex);
-        this._setSelection(tag);
-        pagesContainer.style.transform = `translateX(-${newIndex * 100}%)`;
-
-        // Update dots
-        Array.from(pageIndicator.children).forEach((d, i) => {
-          d.style.backgroundColor = i === newIndex
-            ? 'rgba(0, 0, 0, 0.8)'
-            : 'rgba(0, 0, 0, 0.3)';
-        });
-      }
+      const diff = touchStartX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) <= 50) return;
+      if (diff > 0 && selectedIndex < count - 1) goTo(selectedIndex + 1);
+      else if (diff < 0 && selectedIndex > 0) goTo(selectedIndex - 1);
     });
 
     return this._applyModifiers(container);

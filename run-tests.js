@@ -374,11 +374,12 @@ async function runTests() {
     const { Font: SignalFont } = await import('./src/Graphic/Font.js');
     const { Show } = await import('./src/View/ControlFlow/Show.js');
     const { For } = await import('./src/View/ControlFlow/For.js');
-    const { TabView } = await import('./src/View/Navigation/TabView.js');
+    const { TabView, TabViewStyle } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
     const { Picker, PickerStyle } = await import('./src/View/Control/Picker.js');
+    const { List: A11yList } = await import('./src/View/List/List.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
     const focusRingControls = {
@@ -768,6 +769,78 @@ async function runTests() {
         root.remove();
       });
 
+      it('TabView keeps the first tab as the Tab stop when the selection matches no tab', () => {
+        const selection = new State('missing');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(selection, ModifierText('One'), ModifierText('Two'))).mount(root);
+        const tabBar = root.children[0].children.find((child) => child.dataset.tabviewPart === 'tabbar');
+        expect(tabBar.children.map((tab) => tab.tabIndex)).toEqual([0, -1]);
+        expect(tabBar.children.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('page-style TabView exposes its page dots as tabs controlling inert-when-hidden panels', () => {
+        const selection = new State(1);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(selection, ModifierText('One'), ModifierText('Two'), ModifierText('Three'))
+          .tabViewStyle(TabViewStyle.page)).mount(root);
+        const container = root.children[0];
+        const pages = container.children[0].children;
+        const indicator = container.children.find((child) => child.dataset.tabviewPart === 'pageindicator');
+        const dots = indicator.children;
+        expect(indicator.getAttribute('role')).toBe('tablist');
+        expect(dots.map((dot) => dot.getAttribute('role'))).toEqual(['tab', 'tab', 'tab']);
+        expect(dots[0].tagName).toBe('BUTTON');
+        expect(dots[0].getAttribute('aria-label')).toBe('Page 1 of 3');
+        expect(pages.map((page) => page.getAttribute('role'))).toEqual(['tabpanel', 'tabpanel', 'tabpanel']);
+        expect(dots[1].getAttribute('aria-controls')).toBe(pages[1].id);
+        expect(pages[1].getAttribute('aria-labelledby')).toBe(dots[1].id);
+        expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false']);
+        expect(dots.map((dot) => dot.tabIndex)).toEqual([-1, 0, -1]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([true, false, true]);
+        expect(pages[0].getAttribute('aria-hidden')).toBe('true');
+        const key = (name) => { const event = new MockEvent('keydown'); event.key = name; indicator.dispatchEvent(event); return event; };
+        expect(key('ArrowRight').defaultPrevented).toBe(true);
+        expect(selection.value).toBe(2);
+        expect(dots.map((dot) => dot.tabIndex)).toEqual([-1, -1, 0]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([true, true, false]);
+        dots[0].click();
+        expect(selection.value).toBe(0);
+        expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('a selectable List makes untagged rows disabled options, and a page TabView without dots has no tab roles', () => {
+        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two')).tabViewStyle(TabViewStyle.page);
+        hiddenDots._pageIndicatorVisibility = 'never';
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          A11yList({ selection: new State('a').binding }, ModifierText('A').tag('a'), ModifierText('Header')),
+          hiddenDots
+        )).mount(root);
+        const lists = [];
+        const find = (node) => { if (node.dataset?.view === 'list') lists.push(node); (node.children || []).forEach(find); };
+        find(root);
+        const rows = lists[0].children;
+        expect(rows.map((row) => row.getAttribute('role'))).toEqual(['option', 'option']);
+        expect(rows[1].getAttribute('aria-disabled')).toBe('true');
+        let pager = null;
+        const findPager = (node) => { if (!pager && node.dataset?.style === 'page') pager = node; (node.children || []).forEach(findPager); };
+        findPager(root);
+        expect(pager.children.length).toBe(1);
+        const pages = pager.children[0].children;
+        expect(pages.map((page) => page.getAttribute('role'))).toEqual([null, null]);
+        expect(pages.map((page) => page.getAttribute('aria-labelledby'))).toEqual([null, null]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([false, true]);
+        app.unmount();
+        root.remove();
+      });
+
       it('TabView selects tabs by their .tag(_:) values', () => {
         const selection = new State('settings');
         const root = document.createElement('div');
@@ -988,6 +1061,76 @@ async function runTests() {
         find(root);
         expect(group.children.map((radio) => radio.tabIndex)).toEqual([0, -1]);
         expect(group.children.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      // #51: a selectable List is a listbox with aria-selected, arrows and Space.
+      it('selectable List is a listbox: aria-selected, roving tabindex, arrow keys and Space', () => {
+        const selected = new State(2);
+        const items = [{ id: 1, name: 'One' }, { id: 2, name: 'Two' }, { id: 3, name: 'Three' }];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => A11yList(items, { selection: selected.binding }, (item) => ModifierText(item.name))).mount(root);
+        let list = null;
+        const find = (node) => { if (!list && node.dataset?.view === 'list') list = node; (node.children || []).forEach(find); };
+        find(root);
+        const rows = list.children;
+        const key = (row, name) => { const event = new MockEvent('keydown'); event.key = name; row.dispatchEvent(event); return event; };
+        const ariaSelected = () => rows.map((row) => row.getAttribute('aria-selected'));
+        expect(list.getAttribute('role')).toBe('listbox');
+        expect(rows.map((row) => row.getAttribute('role'))).toEqual(['option', 'option', 'option']);
+        expect(ariaSelected()).toEqual(['false', 'true', 'false']);
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, 0, -1]);
+        // Arrows move focus only; Space selects the focused row.
+        expect(key(rows[1], 'ArrowDown').defaultPrevented).toBe(true);
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, -1, 0]);
+        expect(selected.value).toBe(2);
+        expect(key(rows[2], ' ').defaultPrevented).toBe(true);
+        expect(selected.value).toBe(3);
+        expect(ariaSelected()).toEqual(['false', 'false', 'true']);
+        key(rows[2], 'Home');
+        expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+        key(rows[0], 'ArrowUp');
+        expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+        key(rows[0], 'End');
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, -1, 0]);
+        rows[0].click();
+        expect(selected.value).toBe(1);
+        expect(ariaSelected()).toEqual(['true', 'false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('List selects tagged children, toggles a Set selection and stays a list without selection', () => {
+        const picked = new State(new Set(['b']));
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          A11yList({ selection: picked.binding }, ModifierText('A').tag('a'), ModifierText('B').tag('b')),
+          A11yList(ModifierText('Plain'))
+        )).mount(root);
+        const lists = [];
+        const find = (node) => { if (node.dataset?.view === 'list') lists.push(node); (node.children || []).forEach(find); };
+        find(root);
+        const [multi, plain] = lists;
+        expect(multi.getAttribute('role')).toBe('listbox');
+        expect(multi.getAttribute('aria-multiselectable')).toBe('true');
+        expect(multi.children.map((row) => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+        multi.children[0].click();
+        expect([...picked.value].sort()).toEqual(['a', 'b']);
+        const event = new MockEvent('keydown'); event.key = ' ';
+        multi.children[1].dispatchEvent(event);
+        expect([...picked.value]).toEqual(['a']);
+        expect(multi.children.map((row) => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+        // Keys typed in a control inside a row are left to that control.
+        const inner = new MockEvent('keydown', { target: { tagName: 'INPUT' } }); inner.key = ' ';
+        multi.children[0].dispatchEvent(inner);
+        expect(inner.defaultPrevented).toBe(false);
+        expect([...picked.value]).toEqual(['a']);
+        expect(plain.getAttribute('role')).toBe('list');
+        expect(plain.children[0].getAttribute('role')).toBe('listitem');
+        expect(plain.children[0].getAttribute('aria-selected')).toBe(null);
         app.unmount();
         root.remove();
       });
