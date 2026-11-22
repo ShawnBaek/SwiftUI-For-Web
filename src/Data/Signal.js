@@ -349,6 +349,10 @@ export function createRoot(fn) {
     pure: false,
     execute: null,
     isRoot: true,
+    // Where this root was created. Used only by readContext, so scoped
+    // context (environment values) reaches content that Show, For and owned
+    // slots render in their own roots. Disposal never follows it.
+    contextParent: currentOwner,
   };
 
   const dispose = () => disposeComputation(root);
@@ -361,10 +365,6 @@ export function createRoot(fn) {
   }
 }
 
-/**
- * Get the current owner (computation or root). Useful for effects that
- * need to attach disposable resources to a longer-lived scope.
- */
 /**
  * Run `fn` under a child owner that carries context entries (a Map), such as
  * scoped environment values (#49). The owner is disposed with its parent, and
@@ -388,6 +388,9 @@ export function runWithContext(entries, fn) {
     pure: false,
     execute: null,
     context: entries,
+    // With no reactive owner above, nothing would dispose this owner, so it
+    // must not make the render look owned (getOwner() stays null).
+    unowned: !parent || parent.unowned === true,
   };
   if (parent) parent.children.push(owner);
   return runWithOwner(owner, fn);
@@ -402,7 +405,7 @@ const CONTEXT_NOT_FOUND = Object.freeze({ found: false, value: undefined });
  * @returns {{ found: boolean, value: * }}
  */
 export function readContext(key) {
-  for (let owner = currentOwner; owner; owner = owner.owner) {
+  for (let owner = currentOwner; owner; owner = owner.owner || owner.contextParent) {
     if (owner.context && owner.context.has(key)) {
       return { found: true, value: owner.context.get(key) };
     }
@@ -410,7 +413,14 @@ export function readContext(key) {
   return CONTEXT_NOT_FOUND;
 }
 
+/**
+ * Get the current owner (computation or root). Useful for effects that
+ * need to attach disposable resources to a longer-lived scope.
+ */
 export function getOwner() {
+  // A context owner created with no reactive owner above it carries context
+  // only: the render is still unowned (#49).
+  if (currentOwner && currentOwner.unowned) return null;
   return currentOwner;
 }
 

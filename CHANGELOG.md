@@ -9,7 +9,9 @@
   ones. `Text`, the stacks and `Button` gain both modifiers; legacy views
   scope their own render. Values are read at render time (thunks, effects,
   content rendered by the view). `environmentObject` still registers the
-  object app-wide as a fallback for reads outside any render.
+  object app-wide as a fallback for reads outside any render. Scoped values
+  reach content in `Show`, `For`, `TabView` and `NavigationStack`. A plain
+  scoped value is fixed for that render; pass a `State` to make readers update.
 - `frame(maxWidth: Infinity)` and `frame(maxHeight: Infinity)` (or the string
   `'infinity'`) fill the available space, like SwiftUI's `.infinity`. They
   used to emit `infinitypx`, which CSS ignores (#50). Frame lengths also

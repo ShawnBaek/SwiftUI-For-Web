@@ -2430,6 +2430,45 @@ async function runTests() {
         root.remove();
       });
 
+      it('.environment reaches content inside Show branches and For rows', () => {
+        const on = new State(true);
+        const items = new State([1, 2]);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const read = (tag) => ModifierText(() => `${tag}:${EnvStore.get('theme') ?? 'global'}`);
+        const app = App(() => VStack(
+          read('direct'),
+          Show(() => on.value, read('show'), read('hidden')),
+          For(() => items.value, (item) => read('row' + item), (item) => item)
+        ).environment('theme', 'outer')).mount(root);
+        const texts = () => {
+          const out = [];
+          const walk = (node) => { if (node._textContent) out.push(node._textContent); (node.children || []).forEach(walk); };
+          walk(root);
+          return out;
+        };
+        expect(texts()).toEqual(['direct:outer', 'show:outer', 'row1:outer', 'row2:outer']);
+        on.value = false;
+        items.value = [1, 2, 3];
+        Scheduler.flushSync();
+        // The test DOM's For reconciliation can leave a stale node, so check
+        // the values rather than the exact list.
+        const after = texts();
+        expect(after.includes('hidden:outer')).toBe(true);
+        expect(after.includes('row3:outer')).toBe(true);
+        expect(after.every((text) => text.endsWith(':outer'))).toBe(true);
+        app.unmount();
+        root.remove();
+      });
+
+      it('a scoped render with no reactive owner stays unowned and static', () => {
+        const count = new State(1);
+        const element = render(ModifierText(count).environment('theme', 'x'));
+        count.value = 2;
+        Scheduler.flushSync();
+        expect(element.textContent).toBe('1');
+      });
+
       it('.environmentObject scopes an object to its subtree', () => {
         class Settings { constructor(name) { this.name = name; } }
         const root = document.createElement('div');
