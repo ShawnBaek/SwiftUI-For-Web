@@ -708,6 +708,8 @@ async function runTests() {
     // mount must be as reactive as content rendered at mount.
     const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
     const { registerRenderer } = await import('./src/Core/Renderer.js');
+    // False when these tests run against the optimized build (build-tests).
+    const { DEV_BUILD } = await import('./src/Core/Dev.js');
     const { untrack } = await import('./src/Data/Signal.js');
     const { clearPools } = await import('./src/Core/ElementPool.js');
     const { createDescriptor } = await import('./src/Core/ViewDescriptor.js');
@@ -935,8 +937,10 @@ async function runTests() {
         }
         expect(Boolean(caught)).toBe(true);
         expect(caught.message.includes('BoomView failed to render: renderer exploded')).toBe(true);
-        expect(caught.message.includes('created at')).toBe(true);
-        expect(caught.message.includes('run-tests.js')).toBe(true);
+        if (DEV_BUILD) {
+          expect(caught.message.includes('created at')).toBe(true);
+          expect(caught.message.includes('run-tests.js')).toBe(true);
+        }
         expect(caught.cause.message).toBe('renderer exploded');
         let modifierError = null;
         try {
@@ -949,6 +953,7 @@ async function runTests() {
 
       // #52: in development, an untracked State read while building a view warns.
       it('warns once per call site when State.value is read untracked while building a view', () => {
+        if (!DEV_BUILD) return; // compiled out of the optimized build
         const warnings = [];
         const originalWarn = console.warn;
         console.warn = (message) => warnings.push(String(message));

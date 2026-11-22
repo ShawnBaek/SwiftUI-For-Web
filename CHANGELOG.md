@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Release build (#41): a token-aware JavaScript minifier
+  (`scripts/minify.js`) copies strings, template literals with nested
+  `${…}` and regular-expression literals verbatim, removes comments, and
+  keeps a line break wherever whitespace contained one, so automatic
+  semicolon insertion is unchanged. The old minifier mistook a quote or
+  `//` inside a regex for a string or comment. `--no-minify` keeps files
+  readable (still tree-shaken). `scripts/build-tests.js` now runs the unit
+  suite against the optimized library as a gate.
 - Progressive activation (#39): `App(view).mount(host, { mode: 'replace' })`
   keeps the host's static fallback until the view is rendered off-document,
   swaps them in one step (`replaceChildren`) and holds the host's height

@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promise
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { minifyJavaScript } from './minify.js';
 
 const root = process.cwd();
 const builder = path.join(root, 'scripts', 'build.js');
@@ -94,10 +95,48 @@ async function checkSyntax(outDir) {
   }
 }
 
+// #41: the minifier keeps strings, templates and regex literals verbatim,
+// and keeps line breaks where automatic semicolon insertion needs them.
+function testMinifier() {
+  const cases = [
+    // Regex literals containing quotes, slashes, comment markers and classes.
+    ['const a = s.replace(/"/g, \'&quot;\');', 'const a=s.replace(/"/g,\'&quot;\');\n'],
+    ['const b = /\\/\\/ x/.test(y); // comment', 'const b=/\\/\\/ x/.test(y);\n'],
+    ['const c = /[/*]/;', 'const c=/[/*]/;\n'],
+    ['return /a b/g.test(x)', 'return/a b/g.test(x)\n'],
+    // Division stays division.
+    ['const d = (a) / 2 / b;', 'const d=(a)/2/b;\n'],
+    ['const e = i++ / 2;', 'const e=i++/2;\n'],
+    // Nested templates with strings, backticks and braces.
+    ['const f = `a ${x ? `in ${"q}"}` : \'}\'} b`;', 'const f=`a ${x?`in ${"q}"}`:\'}\'} b`;\n'],
+    // Comment markers inside strings survive.
+    ['const g = "/* not */ // kept";', 'const g="/* not */ // kept";\n'],
+    // ASI: a line break between statements is kept.
+    ['let h = a\n(b)', 'let h=a\n(b)\n'],
+    ['x = 1\n/re/.test(y)', 'x=1\n/re/.test(y)\n'],
+    // Tokens that would merge keep a space.
+    ['a + +b; c - -d; let q = 1 .toString();', 'a+ +b;c- -d;let q=1 .toString();\n'],
+    ['const n = 1.5e-3 + 0x1F;', 'const n=1.5e-3+0x1F;\n'],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(minifyJavaScript(input), expected, `minified ${JSON.stringify(input)}`);
+  }
+}
+
 async function main() {
+  testMinifier();
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'swiftui-for-web-build-'));
   const fixtureRoot = await mkdtemp(path.join(root, '.build-test-'));
   try {
+    // Gate (#41): the optimized library passes the same unit tests as the
+    // source. run-tests.js imports ./src/..., so run a copy inside the build.
+    const libraryOut = path.join(tempRoot, 'library');
+    run(['--out-dir', libraryOut], 'library build');
+    await writeFile(path.join(libraryOut, 'run-tests.js'), await readFile(path.join(root, 'run-tests.js'), 'utf8'));
+    await writeFile(path.join(libraryOut, 'package.json'), '{ "type": "module" }\n');
+    const unit = spawnSync(process.execPath, ['run-tests.js'], { cwd: libraryOut, encoding: 'utf8' });
+    assert.equal(unit.status, 0, `unit tests failed against the optimized build:\n${(unit.stdout + unit.stderr).split('\n').filter((line) => line.includes('✗') || line.includes('Error')).slice(0, 20).join('\n')}`);
+
     const appOut = path.join(tempRoot, 'hello-world');
     run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', appOut], 'entry build');
 

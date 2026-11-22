@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { minifyJavaScript } from './minify.js';
 import { gzipSync } from 'node:zlib';
 import { mkdir, rm, readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,6 +18,7 @@ function parseArguments(argv) {
     entry: null,
     outDir: path.join(root, 'dist'),
     configuration: 'release',
+    minify: true,
   };
 
   for (let index = 0; index < argv.length; index++) {
@@ -27,6 +29,8 @@ function parseArguments(argv) {
       options.outDir = path.resolve(root, requireValue(argv, ++index, argument));
     } else if (argument === '--configuration') {
       options.configuration = requireValue(argv, ++index, argument);
+    } else if (argument === '--no-minify') {
+      options.minify = false;
     } else if (argument === '--help' || argument === '-h') {
       printHelp();
       process.exit(0);
@@ -66,6 +70,7 @@ Options:
   --entry <file>            Build one application from its HTML entry
   --out-dir <directory>     Output directory (default: dist)
   --configuration release  Production configuration
+  --no-minify               Keep files unminified (still tree-shaken)
   --help                    Show this help`);
 }
 
@@ -128,78 +133,6 @@ function stripBlockComment(input, start) {
   return end === -1 ? input.length : end + 2;
 }
 
-function needsSpace(a, b) {
-  if (!a || !b) return false;
-  return /[$_\p{L}\p{N}]/u.test(a) && /[$_\p{L}\p{N}]/u.test(b);
-}
-
-function minifyJavaScript(source) {
-  let out = '';
-  let index = 0;
-  let quote = null;
-  let templateDepth = 0;
-  let pendingSpace = false;
-
-  while (index < source.length) {
-    const character = source[index];
-    const next = source[index + 1];
-
-    if (quote) {
-      out += character;
-      if (character === '\\') {
-        out += next ?? '';
-        index += 2;
-        continue;
-      }
-      if (quote === '`' && character === '$' && next === '{') {
-        templateDepth++;
-        out += next;
-        index += 2;
-        continue;
-      }
-      if (quote === '`' && character === '}' && templateDepth > 0) templateDepth--;
-      if (character === quote && templateDepth === 0) quote = null;
-      index++;
-      continue;
-    }
-
-    if (character === '"' || character === '\'' || character === '`') {
-      if (pendingSpace && needsSpace(out[out.length - 1], character)) out += ' ';
-      pendingSpace = false;
-      quote = character;
-      out += character;
-      index++;
-      continue;
-    }
-
-    if (character === '/' && next === '*') {
-      index = stripBlockComment(source, index);
-      pendingSpace = true;
-      continue;
-    }
-
-    if (character === '/' && next === '/') {
-      index = source.indexOf('\n', index + 2);
-      if (index === -1) break;
-      pendingSpace = true;
-      continue;
-    }
-
-    if (/\s/.test(character)) {
-      pendingSpace = true;
-      index++;
-      continue;
-    }
-
-    if (pendingSpace && needsSpace(out[out.length - 1], character)) out += ' ';
-    pendingSpace = false;
-    out += character;
-    index++;
-  }
-
-  return out.trim() + '\n';
-}
-
 function minifyCSS(source) {
   let out = '';
   let index = 0;
@@ -257,8 +190,10 @@ function keepCSSSpace(previous, next) {
   return !structural.test(previous) && !structural.test(next);
 }
 
+let minifyEnabled = true;
+
 function minify(source, file) {
-  if (file.endsWith('.d.ts')) return source;
+  if (file.endsWith('.d.ts') || !minifyEnabled) return source;
   return file.endsWith('.css')
     ? minifyCSS(source)
     : minifyJavaScript(source);
@@ -803,6 +738,7 @@ function formatBytes(bytes) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
+  minifyEnabled = options.minify;
   if (options.entry) {
     await buildApplication(options.entry, options.outDir);
   } else {
