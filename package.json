@@ -44,7 +44,7 @@
     "test:package": "node scripts/check-package.js",
     "test:build": "node scripts/build-tests.js",
     "build": "node scripts/build.js",
-    "size": "node scripts/size.js dist",
+    "size": "node scripts/size.js dist --budget-gzip-kb 120",
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",

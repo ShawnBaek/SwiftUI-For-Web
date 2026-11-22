@@ -58,5 +58,7 @@ jobs:
       - name: Production build
         run: node scripts/build.js
 
-      - name: Bundle size report
-        run: node scripts/size.js dist
+      # Fails when the gzipped dist/ total grows past the budget (#53). Raise
+      # the budget deliberately, in the PR that needs it.
+      - name: Bundle size budget
+        run: node scripts/size.js dist --budget-gzip-kb 120

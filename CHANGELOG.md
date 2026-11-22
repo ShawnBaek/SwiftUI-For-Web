@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Size budget (#53): `npm run size` and CI fail when the gzipped `dist/`
+  total passes 120 KB (`node scripts/size.js dist --budget-gzip-kb 120`).
+- GitHub Pages publishes only the site (#53): `index.html`, `README.md`,
+  `AGENTS.md`, `docs/`, `Examples/` and the `src/` the examples import, not
+  the whole repository.
 - Render errors name the view (#42): an error thrown while rendering a view
   or applying one of its modifiers is rethrown as
   `SwiftUI-For-Web: Text.padding() failed to render: …`, with the original

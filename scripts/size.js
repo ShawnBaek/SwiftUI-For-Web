@@ -3,7 +3,16 @@ import { gzipSync } from 'node:zlib';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-const targets = process.argv.slice(2);
+// Usage: node scripts/size.js [paths...] [--budget-gzip-kb N]
+// With a budget, exit 1 when the gzipped total exceeds it (#53).
+const args = process.argv.slice(2);
+const budgetIndex = args.indexOf('--budget-gzip-kb');
+const budgetKB = budgetIndex === -1 ? null : Number(args[budgetIndex + 1]);
+if (budgetIndex !== -1 && !(budgetKB > 0)) {
+  console.error('size: --budget-gzip-kb needs a positive number');
+  process.exit(2);
+}
+const targets = budgetIndex === -1 ? args : args.filter((_, i) => i !== budgetIndex && i !== budgetIndex + 1);
 
 async function collect(target) {
   const info = await stat(target);
@@ -47,6 +56,15 @@ async function main() {
 
   console.log('-'.repeat(70));
   console.log('Total'.padEnd(48), format(rawTotal).padStart(10), format(gzipTotal).padStart(10));
+
+  if (budgetKB !== null) {
+    const usedKB = gzipTotal / 1024;
+    if (usedKB > budgetKB) {
+      console.error(`Size budget exceeded: ${usedKB.toFixed(1)} KB gzipped > ${budgetKB} KB budget`);
+      process.exit(1);
+    }
+    console.log(`Size budget: ${usedKB.toFixed(1)} KB of ${budgetKB} KB gzipped`);
+  }
 }
 
 main().catch((error) => {

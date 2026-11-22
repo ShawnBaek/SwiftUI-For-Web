@@ -217,7 +217,9 @@ those with the real signature by hand. Don't add names to
 - Animate `transform` and `opacity`. Hide animated elements with
   `visibility: hidden` and `pointer-events: none`, not `display: none`.
 - Benchmarks must measure in-place updates, not full remounts. Report size from
-  `node scripts/size.js` after a release build.
+  `node scripts/size.js` after a release build. `npm run size` and CI fail when
+  the gzipped `dist/` total passes the budget (`--budget-gzip-kb`, 120 KB);
+  raise it deliberately in the PR that needs it.
 
 ---
 

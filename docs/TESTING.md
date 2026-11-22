@@ -33,7 +33,7 @@
 | Package checks | `node scripts/check-package.js`: every `exports` entry loads, `./core` matches `.`, and `index.d.ts` matches the runtime | Node ≥ 20.6 |
 | Release-build tests | `node scripts/build-tests.js` | Node ≥ 20 |
 | All four Node commands | `npm test` | Node ≥ 20.6 |
-| Everything (Node commands, browser tests, production build, size report) | `npm run validate` | Node ≥ 20.6 and a Chromium-family browser |
+| Everything (Node commands, browser tests, production build, size budget) | `npm run validate` | Node ≥ 20.6 and a Chromium-family browser |
 | Optional e2e/visual | `Tests/e2e`, `Tests/visual` with Playwright | Optional only |
 
 CI runs all of the above except the optional Playwright specs (#53), with no
