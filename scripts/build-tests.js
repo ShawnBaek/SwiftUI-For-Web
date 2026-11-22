@@ -243,7 +243,8 @@ async function main() {
     await writeFile(path.join(hashFixture, 'style.css'), 'body { background: url(img/bg.png); }\n');
     await writeFile(path.join(hashFixture, 'main.js'),
       "import './dep.js';\nexport const data = new URL('data.json', import.meta.url);\n");
-    await writeFile(path.join(hashFixture, 'dep.js'), 'export const dep = 1;\n');
+    await writeFile(path.join(hashFixture, 'dep.js'), `import '/${path.relative(root, hashFixture).split(path.sep).join('/')}/rootdep.js';\nexport const dep = 1;\n`);
+    await writeFile(path.join(hashFixture, 'rootdep.js'), 'export const rootdep = 1;\n');
     await writeFile(path.join(hashFixture, 'data.json'), '{"ok":true}\n');
     await writeFile(path.join(hashFixture, 'img', 'bg.png'), Buffer.from([137, 80, 78, 71]));
     const hashFixtureOut = path.join(tempRoot, 'hash-app');
@@ -258,6 +259,7 @@ async function main() {
     assert.ok(hashedMainJS.includes(path.basename(hashedOf('dep.js'))), 'the import of dep.js was not rewritten');
     const fixtureHTML = await readFile(path.join(hashFixtureOut, 'index.html'), 'utf8');
     assert.ok(fixtureHTML.includes(`rel="modulepreload" href="./${hashedOf('dep.js')}"`), 'no modulepreload when src comes before type');
+    assert.ok(fixtureHTML.includes(`rel="modulepreload" href="./${hashedOf('rootdep.js')}"`), 'no modulepreload for a root-relative import');
 
     // Library mode must remain usable without reading or deleting repository dist/.
     run(['--out-dir', path.join(tempRoot, 'library')], 'library build');

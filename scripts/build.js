@@ -892,8 +892,14 @@ async function addModulePreloads(outDir, nameMap) {
       continue;
     }
     for (const record of scanStaticModules(source)) {
-      if (record.keyword === 'dynamic-import' || !/^\.{1,2}\//.test(record.specifier)) continue;
-      const target = toPosix(path.join(path.dirname(file), stripQuery(record.specifier)));
+      if (record.keyword === 'dynamic-import') continue;
+      const specifier = record.specifier;
+      // Relative (./, ../) and root-relative (/x.js) imports; bare package
+      // names and URLs are not part of this build.
+      if (!/^\.{1,2}\//.test(specifier) && !(specifier.startsWith('/') && !specifier.startsWith('//'))) continue;
+      const target = specifier.startsWith('/')
+        ? toPosix(path.normalize(stripQuery(specifier).slice(1)))
+        : toPosix(path.join(path.dirname(file), stripQuery(specifier)));
       if (seen.has(target)) continue;
       seen.add(target);
       preload.push(target);
