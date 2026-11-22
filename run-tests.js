@@ -391,6 +391,8 @@ async function runTests() {
     const { List: A11yList } = await import('./src/View/List/List.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
+    const { Button: MenuButton } = await import('./src/View/Control/Button.js');
+    const { Divider: MenuDivider } = await import('./src/Layout/Divider.js');
     const focusRingControls = {
       Slider: (await import('./src/View/Control/Slider.js')).Slider,
       DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
@@ -3336,6 +3338,62 @@ async function runTests() {
         expect(trigger.getAttribute('aria-expanded')).toBe('true');
         expect(menu.inert).toBe(false);
         expect(menu.getAttribute('aria-hidden')).toBe(null);
+      });
+
+      // #48: Menu items given as descriptors (Button, Divider) render and act.
+      it('Menu renders descriptor Button and Divider items and runs the action', () => {
+        const hadListener = typeof document.addEventListener === 'function';
+        if (!hadListener) document.addEventListener = () => {};
+        const calls = [];
+        let element;
+        try {
+          element = A11yMenu('Actions',
+            MenuButton('Copy', () => calls.push('copy')),
+            MenuDivider(),
+            MenuButton('Delete', () => calls.push('delete')).disabled()
+          )._render();
+        } finally {
+          if (!hadListener) delete document.addEventListener;
+        }
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const menu = find(element, (node) => node.dataset?.menuPart === 'dropdown');
+        const roles = menu.children.map((item) => item.getAttribute('role'));
+        expect(roles).toEqual(['menuitem', 'separator', 'menuitem']);
+        expect(menu.children[0].textContent).toBe('Copy');
+        expect(menu.children[2].getAttribute('aria-disabled')).toBe('true');
+        // No nested <button> inside a menu item.
+        expect(find(menu.children[0], (node) => node.tagName === 'BUTTON') || null).toBe(null);
+        menu.children[0].click();
+        menu.children[2].click();
+        expect(calls).toEqual(['copy']);
+      });
+
+      // #48: DisclosureGroup follows outside writes to its binding.
+      it('DisclosureGroup follows writes to isExpanded and renders descriptor content', () => {
+        const expanded = new State(false);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const previousRAF = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (fn) => fn();
+        try {
+          const app = App(() => A11yDisclosureGroup(expanded.binding, { label: 'More' }, ModifierText('Hidden detail'))).mount(root);
+          const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+          const header = find(root, (node) => node.getAttribute?.('aria-expanded') !== null && node.getAttribute?.('aria-expanded') !== undefined);
+          const detail = find(root, (node) => node._textContent === 'Hidden detail');
+          expect(Boolean(detail)).toBe(true);
+          expect(header.getAttribute('aria-expanded')).toBe('false');
+          expanded.value = true;
+          Scheduler.flushSync();
+          expect(header.getAttribute('aria-expanded')).toBe('true');
+          header.click();
+          Scheduler.flushSync();
+          expect(expanded.value).toBe(false);
+          expect(header.getAttribute('aria-expanded')).toBe('false');
+          app.unmount();
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+          root.remove();
+        }
       });
 
       it('form controls leave the focus ring to :focus-visible', () => {

@@ -20,6 +20,16 @@
 
 import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { createEffect, getOwner } from '../../Data/Signal.js';
+
+// A child or label that is a legacy View or a view descriptor (#48).
+function renderContent(view) {
+  if (view instanceof View) return view._render();
+  if (isDescriptor(view)) return renderDescriptor(view);
+  return null;
+}
 import { Color } from '../../Graphic/Color.js';
 
 function nextDisclosureId() {
@@ -125,9 +135,12 @@ export class DisclosureGroupView extends View {
     // Label
     const labelContainer = document.createElement('span');
     if (this._label) {
-      const labelView = this._label();
-      if (labelView instanceof View) {
-        labelContainer.appendChild(labelView._render());
+      // The label is a builder function, a view, or plain text.
+      const label = typeof this._label === 'function' ? this._label() : this._label;
+      if (typeof label === 'string') labelContainer.textContent = label;
+      else {
+        const rendered = renderContent(label);
+        if (rendered) labelContainer.appendChild(rendered);
       }
     } else if (this._labelText) {
       labelContainer.textContent = this._labelText;
@@ -166,45 +179,56 @@ export class DisclosureGroupView extends View {
     const contentWrapper = document.createElement('div');
     contentWrapper.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
 
-    this._children.forEach((child, index) => {
-      if (child instanceof View) {
-        const row = document.createElement('div');
-        row.style.padding = '11px 16px';
-
-        if (index > 0) {
-          row.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
-        }
-
-        row.appendChild(child._render());
-        contentWrapper.appendChild(row);
+    let rowIndex = 0;
+    this._children.forEach((child) => {
+      const rendered = renderContent(child);
+      if (!rendered) return;
+      const row = document.createElement('div');
+      row.style.padding = '11px 16px';
+      if (rowIndex > 0) {
+        row.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
       }
+      rowIndex++;
+      row.appendChild(rendered);
+      contentWrapper.appendChild(row);
     });
 
     content.appendChild(contentWrapper);
+
+    // Show an expanded state, animating the height.
+    let shown = isExpanded;
+    const show = (expanded) => {
+      if (expanded === shown) return;
+      shown = expanded;
+      applyExpandedState(expanded);
+      chevron.style.transform = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+      if (expanded) {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        setTimeout(() => {
+          if (shown) content.style.maxHeight = 'none';
+        }, 300);
+      } else {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+          if (!shown) content.style.maxHeight = '0';
+        });
+      }
+    };
 
     // Toggle handler
     header.addEventListener('click', () => {
       const newExpanded = !this._getExpanded();
       this._setExpanded(newExpanded);
-      applyExpandedState(newExpanded);
-
-      // Animate
-      chevron.style.transform = newExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
-
-      if (newExpanded) {
-        // Expand
-        content.style.maxHeight = content.scrollHeight + 'px';
-        setTimeout(() => {
-          content.style.maxHeight = 'none';
-        }, 300);
-      } else {
-        // Collapse
-        content.style.maxHeight = content.scrollHeight + 'px';
-        requestAnimationFrame(() => {
-          content.style.maxHeight = '0';
-        });
-      }
+      show(newExpanded);
     });
+
+    // Follow writes to the isExpanded binding made elsewhere (#48), such as
+    // an "Expand all" button. Needs a reactive owner (the App mount has one).
+    if (this._isExpanded && getOwner()) {
+      createEffect(() => {
+        show(Boolean(this._getExpanded()));
+      });
+    }
 
     container.appendChild(header);
     container.appendChild(content);

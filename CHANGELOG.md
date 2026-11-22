@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `Menu` renders view-descriptor items (#48): `Button(...)` items run their
+  action and close the menu (a disabled one is `aria-disabled`), and
+  `Divider()` is a separator. They were silently dropped, because the
+  item code only handled `ButtonView`/`DividerView` classes that no longer
+  exist; that dead code is gone.
+- `DisclosureGroup` follows writes to its `isExpanded` binding made elsewhere
+  (an "Expand all" button, for example), renders view-descriptor content and
+  labels, and accepts a plain string or a view as `label` (#48).
 - Modifier order has SwiftUI meaning for descriptor views (#50). Modifiers
   apply in declaration order, and a modifier whose meaning depends on an
   earlier one gets its own wrapper layer: `.background(c).padding(8)` pads

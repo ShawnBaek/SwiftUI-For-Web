@@ -24,6 +24,8 @@
 
 import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { Color } from '../../Graphic/Color.js';
 
 function nextMenuId() {
@@ -150,62 +152,60 @@ export class MenuView extends View {
     // Focusable items, in order, for the menu keyboard pattern.
     const items = [];
 
-    // Render menu items
-    this._content.forEach((item, index) => {
-      if (item instanceof View) {
-        const menuItem = document.createElement('div');
-        menuItem.dataset.menuItem = 'true';
-        menuItem.setAttribute('role', 'menuitem');
+    // Render menu items: Button items run their action and close the menu,
+    // Divider items are separators, anything else renders as an item. Items
+    // are view descriptors (Button(...), Divider()) or legacy Views (#48).
+    this._content.forEach((item) => {
+      const descriptor = isDescriptor(item) ? item : null;
+      if (!descriptor && !(item instanceof View)) return;
+      const menuItem = document.createElement('div');
+      menuItem.dataset.menuItem = 'true';
 
-        // Check if it's a divider
-        if (item.constructor.name === 'DividerView') {
-          menuItem.setAttribute('role', 'separator');
-          menuItem.style.height = '1px';
-          menuItem.style.backgroundColor = 'rgba(60, 60, 67, 0.1)';
-          menuItem.style.margin = '6px 0';
-        } else {
-          // Roving focus: items are reachable with the arrow keys, not Tab.
-          menuItem.tabIndex = -1;
-          items.push(menuItem);
-          menuItem.style.padding = '10px 12px';
-          menuItem.style.borderRadius = '8px';
-          menuItem.style.cursor = 'pointer';
-          menuItem.style.transition = 'background-color 0.1s ease';
-          menuItem.style.display = 'flex';
-          menuItem.style.alignItems = 'center';
-          menuItem.style.gap = '10px';
-
-          menuItem.addEventListener('mouseenter', () => {
-            menuItem.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-          });
-          menuItem.addEventListener('mouseleave', () => {
-            menuItem.style.backgroundColor = 'transparent';
-          });
-
-          // Render the item content
-          const rendered = item._render();
-
-          // If it's a button, extract and wrap the click handler
-          if (item.constructor.name === 'ButtonView' && item._action) {
-            const originalAction = item._action;
-            menuItem.addEventListener('click', (e) => {
-              e.stopPropagation();
-              this._closeMenu(dropdown, trigger);
-              originalAction();
-            });
-            menuItem.textContent = rendered.textContent;
-
-            // Preserve color if set
-            if (rendered.style.color) {
-              menuItem.style.color = rendered.style.color;
-            }
-          } else {
-            menuItem.appendChild(rendered);
-          }
-        }
-
+      if (descriptor?.type === 'Divider') {
+        menuItem.setAttribute('role', 'separator');
+        menuItem.style.height = '1px';
+        menuItem.style.backgroundColor = 'rgba(60, 60, 67, 0.1)';
+        menuItem.style.margin = '6px 0';
         dropdown.appendChild(menuItem);
+        return;
       }
+
+      menuItem.setAttribute('role', 'menuitem');
+      // Roving focus: items are reachable with the arrow keys, not Tab.
+      menuItem.tabIndex = -1;
+      items.push(menuItem);
+      menuItem.style.padding = '10px 12px';
+      menuItem.style.borderRadius = '8px';
+      menuItem.style.cursor = 'pointer';
+      menuItem.style.transition = 'background-color 0.1s ease';
+      menuItem.style.display = 'flex';
+      menuItem.style.alignItems = 'center';
+      menuItem.style.gap = '10px';
+
+      menuItem.addEventListener('mouseenter', () => {
+        menuItem.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+      });
+      menuItem.addEventListener('mouseleave', () => {
+        menuItem.style.backgroundColor = 'transparent';
+      });
+
+      if (descriptor?.type === 'Button') {
+        // Render the label, not a nested <button>: the menu item is the control.
+        const { label, action, isDisabled } = descriptor.props;
+        if (typeof label === 'string') menuItem.textContent = label;
+        else if (label) menuItem.appendChild(renderDescriptor(label));
+        if (isDisabled) menuItem.setAttribute('aria-disabled', 'true');
+        menuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (isDisabled) return;
+          this._closeMenu(dropdown, trigger);
+          action?.();
+        });
+      } else {
+        menuItem.appendChild(descriptor ? renderDescriptor(descriptor) : item._render());
+      }
+
+      dropdown.appendChild(menuItem);
     });
 
     // Toggle menu
