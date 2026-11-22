@@ -123,13 +123,17 @@ function bindReactive(element, descriptor) {
 
   if (!getOwner()) {
     if (hasThunk) element.textContent = String(untrack(thunk) ?? '');
-    // A task needs no effect unless its id is reactive: it still starts when
-    // the element appears and is cancelled when the element disappears.
+    // A task without an id needs no effect: it still starts when the element
+    // appears and is cancelled when the element disappears. A task with an id
+    // needs an owner to restart when the id changes, so warn like any other
+    // reactive modifier.
     let needsOwner = hasThunk;
     for (let i = 0; i < descriptor.modifiers.length; i++) {
       const modifier = descriptor.modifiers[i];
-      if (modifier.type === ModifierType.TASK) installReactiveModifier(element, modifier);
-      else if (isReactiveModifier(modifier)) needsOwner = true;
+      if (modifier.type === ModifierType.TASK) {
+        installReactiveModifier(element, modifier);
+        if (taskHasID(modifier)) needsOwner = true;
+      } else if (isReactiveModifier(modifier)) needsOwner = true;
     }
     if (needsOwner) warnUnownedRender(descriptor.type);
     return;
@@ -151,6 +155,18 @@ function isReactiveModifier(modifier) {
     || modifier.type === ModifierType.TASK
     || modifier.type === ModifierType.SEARCHABLE
     || modifier.type === ModifierType.SHEET;
+}
+
+/**
+ * Whether a TASK modifier was given an id, as in `.task({ id }, action)`.
+ * Only such a task needs a reactive owner (to restart when the id changes).
+ *
+ * @param {Object} modifier - A TASK modifier
+ * @returns {boolean}
+ */
+export function taskHasID(modifier) {
+  const options = modifier?.value?.optionsOrAction;
+  return typeof options === 'object' && options !== null && 'id' in options;
 }
 
 let warnedUnownedRender = false;

@@ -13,7 +13,7 @@
       "default": "./src/index.js"
     },
     "./core": {
-      "types": "./src/index.d.ts",
+      "types": "./src/core.d.ts",
       "import": "./src/core.js",
       "default": "./src/core.js"
     },
