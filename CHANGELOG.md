@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Legacy containers render view descriptors (#48): `NavigationStack(VStack(…))`,
+  descriptor screens pushed onto it, descriptor `NavigationLink` labels, and
+  descriptor content in `WindowGroup` and `Settings` used to render nothing.
+- `Text(…).tag(value)` exists, and `Picker` keeps descriptor options such as
+  `Text('Vanilla').tag('vanilla')` instead of dropping them (#48).
 - Importing the library no longer needs a browser (#49). The environment
   store creates its system defaults (color scheme, locale, reduced motion,
   layout direction, size classes, `openURL`) on first use instead of at

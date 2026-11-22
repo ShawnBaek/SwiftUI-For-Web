@@ -20,6 +20,8 @@
  */
 
 import { View } from '../../Core/View.js';
+import { isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { Color } from '../../Graphic/Color.js';
 
 /**
@@ -72,10 +74,31 @@ export class PickerView extends View {
   }
 
   /**
+   * Whether an option is a view: a legacy View or a view descriptor such as
+   * `Text('A').tag('a')` (#48).
+   * @private
+   */
+  _isOption(option) {
+    return option instanceof View || isDescriptor(option);
+  }
+
+  /** @private */
+  _renderOption(option) {
+    return isDescriptor(option) ? renderDescriptor(option) : option._render();
+  }
+
+  /**
    * Get the tag value from a view
    * @private
    */
   _getTag(view) {
+    if (isDescriptor(view)) {
+      // The last .tag(_:) wins, as in SwiftUI (#48).
+      for (let i = view.modifiers.length - 1; i >= 0; i--) {
+        if (view.modifiers[i].type === ModifierType.TAG) return view.modifiers[i].value;
+      }
+      return null;
+    }
     return view._tag ?? null;
   }
 
@@ -154,13 +177,13 @@ export class PickerView extends View {
     // Add options
     const currentSelection = this._getSelection();
     for (const option of this._options) {
-      if (option instanceof View) {
+      if (this._isOption(option)) {
         const opt = document.createElement('option');
         const tag = this._getTag(option);
         opt.value = tag ?? '';
 
         // Get text content from view
-        const rendered = option._render();
+        const rendered = this._renderOption(option);
         opt.textContent = rendered.textContent || tag || '';
 
         if (tag === currentSelection) {
@@ -197,7 +220,7 @@ export class PickerView extends View {
     const currentSelection = this._getSelection();
 
     for (const option of this._options) {
-      if (option instanceof View) {
+      if (this._isOption(option)) {
         const segment = document.createElement('button');
         segment.style.padding = '6px 12px';
         segment.style.border = 'none';
@@ -208,7 +231,7 @@ export class PickerView extends View {
         segment.style.transition = 'all 0.2s ease';
 
         const tag = this._getTag(option);
-        const rendered = option._render();
+        const rendered = this._renderOption(option);
         segment.textContent = rendered.textContent || tag || '';
 
         if (tag === currentSelection) {
@@ -285,7 +308,7 @@ export class PickerView extends View {
     let selectedIndex = 0;
 
     this._options.forEach((option, index) => {
-      if (option instanceof View) {
+      if (this._isOption(option)) {
         const item = document.createElement('div');
         item.style.height = '34px';
         item.style.display = 'flex';
@@ -295,7 +318,7 @@ export class PickerView extends View {
         item.style.cursor = 'pointer';
 
         const tag = this._getTag(option);
-        const rendered = option._render();
+        const rendered = this._renderOption(option);
         item.textContent = rendered.textContent || tag || '';
 
         if (tag === currentSelection) {
@@ -324,7 +347,7 @@ export class PickerView extends View {
       const scrollCenter = scroll.scrollTop + scroll.clientHeight / 2 - 58;
       const itemHeight = 34;
       const index = Math.round(scrollCenter / itemHeight);
-      if (this._options[index] instanceof View) {
+      if (this._isOption(this._options[index])) {
         const tag = this._getTag(this._options[index]);
         this._setSelection(tag);
       }
@@ -350,7 +373,7 @@ export class PickerView extends View {
     const currentSelection = this._getSelection();
 
     for (const option of this._options) {
-      if (option instanceof View) {
+      if (this._isOption(option)) {
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.alignItems = 'center';
@@ -360,7 +383,7 @@ export class PickerView extends View {
         row.style.transition = 'background-color 0.15s ease';
 
         const tag = this._getTag(option);
-        const rendered = option._render();
+        const rendered = this._renderOption(option);
 
         // Checkmark for selected item
         const checkmark = document.createElement('span');

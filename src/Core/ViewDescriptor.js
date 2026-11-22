@@ -381,6 +381,9 @@ export const ModifierType = {
   COLOR_EFFECT: 'colorEffect',
   DISTORTION_EFFECT: 'distortionEffect',
   LAYER_EFFECT: 'layerEffect',
+  // Identifies a view inside a Picker or TabView, like SwiftUI's .tag(_:).
+  // It carries data only and renders nothing.
+  TAG: 'tag',
   CUSTOM: 'custom'
 };
 

@@ -65,6 +65,7 @@ function chainable(descriptor) {
   chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
   chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
   chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
+  chain.tag = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.TAG, value)));
   chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
   chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
   chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
