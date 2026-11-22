@@ -228,7 +228,7 @@ those with the real signature by hand. Don't add names to
 - [ ] Zero new dependencies; still runs with no install or build
 - [ ] Public API name and labels match SwiftUI (doc URL: ___), or the change is listed in ARCHITECTURE.md § 5
 - [ ] Failing test written first; tests assert behavior on the live path
-- [ ] `npm test` passes (unit, DOM-free suites, package checks, builder), and `node scripts/run-browser-tests.js` passes
+- [ ] `npm run validate` passes (unit, DOM-free suites, package checks, builder, browser tests, production build and size report)
 - [ ] New views are descriptors with `acquireElement`; reactive props bound in the renderer under an owner
 - [ ] Listed in src/exports.js (and src/core-exports.js unless Charts) and typed in src/core.d.ts
 - [ ] Docs updated: ARCHITECTURE invariant status / ROADMAP / README as needed

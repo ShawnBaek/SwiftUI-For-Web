@@ -562,6 +562,7 @@ does not perform unsafe statement deletion or identifier mangling.
 The required local and CI loop uses Node built-ins only:
 
 ```bash
+npm run validate                   # everything below: npm test, browser tests, build, size
 npm test                           # the four commands below
 node run-tests.js                  # unit tests on a DOM mock
 node scripts/run-node-suites.js    # the Tests/** suites that need no DOM

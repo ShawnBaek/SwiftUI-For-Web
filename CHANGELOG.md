@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `npm run validate` runs every local check in one command: `npm test`, the
+  browser tests, the production build and the size report (#42).
 - `TabView` selects tabs by a descriptor's `.tag(_:)` value, everywhere it
   reads a tag (#48).
 - The menu-style `Picker` keeps a number tag as a number when the user picks
