@@ -171,7 +171,6 @@ export class PickerView extends View {
     select.style.backgroundColor = 'white';
     select.style.color = 'rgba(0, 122, 255, 1)';
     select.style.cursor = 'pointer';
-    select.style.outline = 'none';
     select.style.minWidth = '120px';
 
     // Add options

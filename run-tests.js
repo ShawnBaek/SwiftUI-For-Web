@@ -379,6 +379,11 @@ async function runTests() {
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
     const { Picker } = await import('./src/View/Control/Picker.js');
+    const focusRingControls = {
+      Slider: (await import('./src/View/Control/Slider.js')).Slider,
+      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
+      TextField: (await import('./src/View/Control/TextField.js')).TextField,
+    };
     const { Stepper } = await import('./src/View/Control/Stepper.js');
 
     // Test State
@@ -2874,6 +2879,21 @@ async function runTests() {
       });
 
       // #51: the switch is a native button with role="switch".
+      // #51: no control suppresses the :focus-visible ring with inline styles.
+      it('form controls leave the focus ring to :focus-visible', () => {
+        const { Slider, DatePicker, TextField } = focusRingControls;
+        const all = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => all(c, out)); return out; };
+        const rendered = [
+          Slider(new State(0.5).binding)._render(),
+          DatePicker('Date', new State(new Date(0)).binding)._render(),
+          TextField('Name', new State('').binding).textFieldStyle('plain')._render(),
+          Picker('Pick', new State('a').binding, ModifierText('A').tag('a'))._render(),
+        ];
+        for (const root of rendered) {
+          for (const node of all(root)) expect(node.style?.outline || '').toBe('');
+        }
+      });
+
       it('renders the switch as a labelled button with role switch and aria-checked', () => {
         const state = new State(false);
         const element = Toggle('Wi-Fi', state.binding)._render();
