@@ -739,6 +739,35 @@ async function runTests() {
         teardown();
       });
 
+      // #51: tab bar follows the WAI-ARIA tabs pattern.
+      it('TabView exposes tablist, tab and tabpanel roles that follow the selection', () => {
+        const selection = new State(0);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(selection, ModifierText('One'), ModifierText('Two'))).mount(root);
+        const parts = root.children[0].children;
+        const tabBar = parts.find((child) => child.dataset.tabviewPart === 'tabbar');
+        const panel = parts.find((child) => child.dataset.tabviewPart === 'content');
+        const [first, second] = tabBar.children;
+        expect(tabBar.getAttribute('role')).toBe('tablist');
+        expect(panel.getAttribute('role')).toBe('tabpanel');
+        expect(first.getAttribute('role')).toBe('tab');
+        expect(first.getAttribute('aria-selected')).toBe('true');
+        expect(second.getAttribute('aria-selected')).toBe('false');
+        expect(first.tabIndex).toBe(0);
+        expect(second.tabIndex).toBe(-1);
+        expect(first.getAttribute('aria-controls')).toBe(panel.id);
+        expect(panel.getAttribute('aria-labelledby')).toBe(first.id);
+        second.click();
+        expect(second.getAttribute('aria-selected')).toBe('true');
+        expect(first.getAttribute('aria-selected')).toBe('false');
+        expect(second.tabIndex).toBe(0);
+        expect(first.tabIndex).toBe(-1);
+        expect(panel.getAttribute('aria-labelledby')).toBe(second.id);
+        app.unmount();
+        root.remove();
+      });
+
       it('TabView selects tabs by their .tag(_:) values', () => {
         const selection = new State('settings');
         const root = document.createElement('div');

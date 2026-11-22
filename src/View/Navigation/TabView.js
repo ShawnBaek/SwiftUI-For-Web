@@ -77,6 +77,12 @@ export const TabViewStyle = {
   tabBar: 'tabBar'      // Bottom tab bar (default)
 };
 
+let tabViewCount = 0;
+function nextTabViewId() {
+  tabViewCount += 1;
+  return `swiftui-tabview-${tabViewCount}`;
+}
+
 /**
  * TabView view class
  */
@@ -173,6 +179,28 @@ export class TabViewView extends View {
     // Tab bar
     const tabBar = document.createElement('div');
     tabBar.dataset.tabviewPart = 'tabbar';
+
+    // #51: WAI-ARIA tabs pattern. The tab bar is a tablist, each button a tab
+    // with aria-selected and roving tabindex, and the content area a tabpanel
+    // labelled by the selected tab.
+    const tabIdBase = nextTabViewId();
+    contentArea.id = `${tabIdBase}-panel`;
+    contentArea.setAttribute('role', 'tabpanel');
+    tabBar.setAttribute('role', 'tablist');
+    tabBar.addEventListener('keydown', (e) => {
+      const tabs = Array.from(tabBar.children);
+      const current = tabs.indexOf(document.activeElement);
+      if (current < 0 || tabs.length === 0) return;
+      let next = -1;
+      if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      tabs[next].focus();
+      tabs[next].click();
+    });
     tabBar.style.display = 'flex';
     tabBar.style.justifyContent = 'space-around';
     tabBar.style.alignItems = 'center';
@@ -191,6 +219,13 @@ export class TabViewView extends View {
 
       // Tab button
       const tabButton = document.createElement('button');
+      tabButton.type = 'button';
+      tabButton.id = `${tabIdBase}-tab-${index}`;
+      tabButton.setAttribute('role', 'tab');
+      tabButton.setAttribute('aria-controls', contentArea.id);
+      tabButton.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      tabButton.tabIndex = isSelected ? 0 : -1;
+      if (isSelected) contentArea.setAttribute('aria-labelledby', tabButton.id);
       tabButton.style.display = 'flex';
       tabButton.style.flexDirection = 'column';
       tabButton.style.alignItems = 'center';
@@ -274,6 +309,9 @@ export class TabViewView extends View {
       const tag = this._tabs[index] ? getTag(this._tabs[index], index) : index;
       const isSelected = tag === newSelection;
       tabButton.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
+      tabButton.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      tabButton.tabIndex = isSelected ? 0 : -1;
+      if (isSelected && tabButton.id) contentArea.setAttribute('aria-labelledby', tabButton.id);
     });
   }
 
