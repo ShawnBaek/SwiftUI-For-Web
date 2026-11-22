@@ -580,7 +580,7 @@ function applyModifier(element, modifier) {
       break;
 
     case ModifierType.NAVIGATION_TITLE:
-      applyNavigationTitle(value);
+      applyNavigationTitle(element, value);
       break;
 
     case ModifierType.COLOR_EFFECT:
@@ -612,14 +612,41 @@ function applyModifier(element, modifier) {
 // falls back to the one below, or to the page's own title.
 const titleStack = [];
 let baseTitle = null;
+let titleCheckQueued = false;
+
+// The entry whose view is last in document order among the views on the
+// page: an inner view comes after its ancestors, and a detail column after
+// its sidebar, so the most specific title wins whatever order the views
+// rendered in. Entries whose views aren't in the document yet (or a DOM
+// without compareDocumentPosition) fall back to the latest shown.
+function topTitleEntry() {
+  let top = null;
+  for (const entry of titleStack) {
+    const element = entry.element;
+    if (!element?.isConnected || typeof element.compareDocumentPosition !== 'function') continue;
+    // DOCUMENT_POSITION_FOLLOWING (4): element comes after top.
+    if (!top || (top.element.compareDocumentPosition(element) & 4)) top = entry;
+  }
+  return top ?? titleStack[titleStack.length - 1] ?? null;
+}
 
 function showTopTitle() {
-  const top = titleStack[titleStack.length - 1];
+  const top = topTitleEntry();
   document.title = top ? top.text : (baseTitle ?? '');
   if (!top) baseTitle = null;
 }
 
-function applyNavigationTitle(value) {
+// Views are attached after they render: check the order again then.
+function queueTitleCheck() {
+  if (titleCheckQueued) return;
+  titleCheckQueued = true;
+  queueMicrotask(() => {
+    titleCheckQueued = false;
+    if (titleStack.length) showTopTitle();
+  });
+}
+
+function applyNavigationTitle(element, value) {
   if (typeof document === 'undefined') return;
   const owner = getOwner();
   if (!owner) {
@@ -628,7 +655,7 @@ function applyNavigationTitle(value) {
     return;
   }
   if (titleStack.length === 0) baseTitle = document.title;
-  const entry = { text: '' };
+  const entry = { text: '', element };
   titleStack.push(entry);
   if (isSignalValue(value)) {
     createEffect(() => {
@@ -636,9 +663,10 @@ function applyNavigationTitle(value) {
       if (titleStack.includes(entry)) showTopTitle();
     });
   } else {
-    entry.text = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+    entry.text = String(value ?? '');
     showTopTitle();
   }
+  queueTitleCheck();
   onCleanup(() => {
     const index = titleStack.indexOf(entry);
     if (index !== -1) titleStack.splice(index, 1);
