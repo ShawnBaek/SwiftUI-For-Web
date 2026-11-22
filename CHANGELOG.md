@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Security: `NavigationLink`'s `url` accepts only relative URLs and
+  `http:`, `https:`, `mailto:` and `tel:`. A `javascript:`, `data:` or other
+  scheme (including ones disguised with whitespace or case) is dropped with
+  a warning and the link renders as a button, so a URL built from user data
+  can't run script.
+- `ScrollView`, `LazyVStack`, `LazyHStack`, `Grid`, `Form`, `ViewThatFits`,
+  `WindowGroup` and `DisclosureGroup` keep a view descriptor passed as their
+  first argument (`ScrollView(VStack(…))`); they used to read it as options
+  and render nothing. `LazyVStack`, `LazyHStack` and `ViewThatFits` also
+  render descriptor children.
 - Release build (#41): application builds add `<link rel="modulepreload">`
   for every module the page's scripts import statically. `--hash` renames
   each emitted file to `name.<hash>.ext` (the hash covers the file and

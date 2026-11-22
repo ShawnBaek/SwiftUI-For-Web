@@ -16,6 +16,7 @@
  * )
  */
 
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
@@ -54,14 +55,14 @@ export class SectionView extends View {
     this._children = [];
 
     // Parse arguments
-    if (typeof optionsOrChildren === 'object' && !(optionsOrChildren instanceof View) && !Array.isArray(optionsOrChildren)) {
+    if (typeof optionsOrChildren === 'object' && !(optionsOrChildren instanceof View) && !isDescriptor(optionsOrChildren) && !Array.isArray(optionsOrChildren)) {
       // Section({ header, footer }, children...)
       this._header = optionsOrChildren.header ?? null;
       this._footer = optionsOrChildren.footer ?? null;
       this._children = children.flat();
     } else {
       // Section(children...)
-      if (optionsOrChildren instanceof View) {
+      if (optionsOrChildren instanceof View || isDescriptor(optionsOrChildren)) {
         this._children = [optionsOrChildren, ...children].flat();
       } else if (Array.isArray(optionsOrChildren)) {
         this._children = optionsOrChildren.flat();

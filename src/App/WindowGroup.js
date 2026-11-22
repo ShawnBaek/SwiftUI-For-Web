@@ -62,7 +62,7 @@ export class WindowGroupView extends View {
       // WindowGroup('Title', content)
       this._title = args[0];
       this._content = args[1];
-    } else if (typeof args[0] === 'object' && !(args[0] instanceof View)) {
+    } else if (typeof args[0] === 'object' && !(args[0] instanceof View) && !isDescriptor(args[0])) {
       // WindowGroup({ id, title }, content)
       const options = args[0];
       this._id = options.id ?? null;

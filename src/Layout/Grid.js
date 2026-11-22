@@ -23,6 +23,7 @@
  * )
  */
 
+import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { View } from '../Core/View.js';
 import { Alignment } from './Alignment.js';
 import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
@@ -163,7 +164,7 @@ export class GridView extends View {
     super();
 
     // Handle case where first arg is a child, not options
-    if (options instanceof View || Array.isArray(options)) {
+    if (options instanceof View || isDescriptor(options) || Array.isArray(options)) {
       children = [options, ...children];
       options = {};
     }

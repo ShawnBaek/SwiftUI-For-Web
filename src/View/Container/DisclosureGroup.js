@@ -63,7 +63,7 @@ export class DisclosureGroupView extends View {
       } else {
         this._children = args.slice(1).flat();
       }
-    } else if (typeof args[0] === 'object' && !(args[0] instanceof View)) {
+    } else if (typeof args[0] === 'object' && !(args[0] instanceof View) && !isDescriptor(args[0])) {
       // DisclosureGroup({ label }, children...)
       this._label = args[0].label ?? null;
       this._children = args.slice(1).flat();

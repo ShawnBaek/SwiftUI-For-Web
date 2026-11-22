@@ -36,7 +36,14 @@
  * )
  */
 
+import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { View } from '../Core/View.js';
+import { render as renderDescriptor } from '../Core/Renderer.js';
+
+// A child that is a legacy View or a view descriptor.
+function renderAny(child) {
+  return isDescriptor(child) ? renderDescriptor(child) : child._render();
+}
 
 /**
  * Axis constraint for ViewThatFits
@@ -88,7 +95,7 @@ export class ViewThatFitsClass extends View {
     super();
 
     // Parse arguments (SwiftUI-style overloading)
-    if (optionsOrFirstChild instanceof View || typeof optionsOrFirstChild === 'function') {
+    if (optionsOrFirstChild instanceof View || isDescriptor(optionsOrFirstChild) || typeof optionsOrFirstChild === 'function') {
       this.children = [optionsOrFirstChild, ...children].flat();
       this.axis = Axis.both;
     } else {
@@ -127,7 +134,7 @@ export class ViewThatFitsClass extends View {
     }
 
     // Render view to measure its ideal size
-    const element = view._render();
+    const element = renderAny(view);
 
     // Apply fixedSize-like behavior: allow view to take its ideal size
     // In CSS, this means no width/height constraints
@@ -282,7 +289,7 @@ export class ViewThatFitsClass extends View {
 
       if (newIndex >= 0 && newIndex < this.children.length) {
         const selectedView = this.children[newIndex];
-        const element = selectedView._render();
+        const element = renderAny(selectedView);
         this._container.appendChild(element);
       }
     }

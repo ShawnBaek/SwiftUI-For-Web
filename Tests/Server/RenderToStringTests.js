@@ -114,6 +114,18 @@ describe('renderToString (#40)', () => {
     expect(typeof globalThis.window).toBe('undefined');
   });
 
+  it('containers keep a view descriptor given as their first argument', async () => {
+    const { ScrollView, LazyVStack, LazyHStack, Form, ViewThatFits } = await import('../../src/index.js');
+    for (const container of [ScrollView, LazyVStack, LazyHStack, Form]) {
+      const html = renderToString(() => container(VStack(Text('inside'))));
+      expect(html.includes('inside')).toBe(true);
+    }
+    // ViewThatFits needs layout to pick a child (empty in a static render),
+    // but it must keep the descriptor as a candidate.
+    expect(ViewThatFits(VStack(Text('inside'))).children.length).toBe(1);
+    expect(renderToString(() => WindowGroup(VStack(Text('scene')))).includes('scene')).toBe(true);
+  });
+
   it('accepts a descriptor, a factory and a legacy View', () => {
     expect(renderToString(Text('a'))).toBe(renderToString(() => Text('a')));
     expect(renderToString(Toggle('x', new State(false).binding)).startsWith('<')).toBe(true);

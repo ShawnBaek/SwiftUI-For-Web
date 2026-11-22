@@ -17,7 +17,14 @@
  * )
  */
 
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
 import { View } from '../../Core/View.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
+
+// A child that is a legacy View or a view descriptor.
+function renderAny(child) {
+  return isDescriptor(child) ? renderDescriptor(child) : child._render();
+}
 import { Alignment } from '../Alignment.js';
 
 /**
@@ -28,7 +35,7 @@ export class LazyVStackView extends View {
     super();
 
     // Handle case where first arg is a child
-    if (options instanceof View || Array.isArray(options)) {
+    if (options instanceof View || isDescriptor(options) || Array.isArray(options)) {
       children = [options, ...children];
       options = {};
     }
@@ -74,12 +81,12 @@ export class LazyVStackView extends View {
 
     // Render children with lazy loading support
     this._children.forEach((child, index) => {
-      if (child instanceof View) {
+      if (child instanceof View || isDescriptor(child)) {
         const wrapper = document.createElement('div');
         wrapper.dataset.lazyIndex = String(index);
         wrapper.style.minHeight = `${this._itemHeight}px`;
 
-        const rendered = child._render();
+        const rendered = renderAny(child);
         wrapper.appendChild(rendered);
 
         // Observe for visibility
@@ -120,7 +127,7 @@ export class LazyHStackView extends View {
     super();
 
     // Handle case where first arg is a child
-    if (options instanceof View || Array.isArray(options)) {
+    if (options instanceof View || isDescriptor(options) || Array.isArray(options)) {
       children = [options, ...children];
       options = {};
     }
@@ -159,13 +166,13 @@ export class LazyHStackView extends View {
 
     // Render children with lazy loading support
     this._children.forEach((child, index) => {
-      if (child instanceof View) {
+      if (child instanceof View || isDescriptor(child)) {
         const wrapper = document.createElement('div');
         wrapper.dataset.lazyIndex = String(index);
         wrapper.style.minWidth = `${this._itemWidth}px`;
         wrapper.style.flexShrink = '0';
 
-        const rendered = child._render();
+        const rendered = renderAny(child);
         wrapper.appendChild(rendered);
 
         observer.observe(wrapper);
