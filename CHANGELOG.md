@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Importing the library no longer needs a browser (#49). The environment
+  store creates its system defaults (color scheme, locale, reduced motion,
+  layout direction, size classes, `openURL`) on first use instead of at
+  import, and falls back to fixed defaults without `window`, `document` or
+  `navigator`. `scripts/check-package.js` now imports every entry in plain
+  Node with no browser stub.
+- `openURL` opens links with `noopener,noreferrer`.
 - Signal-as-value (#52, `docs/adr/0001-reactivity.md`): `Text(state)`,
   `Text(binding)` and style modifiers given a `State` or `Binding`
   (`.opacity(isVisible)`, `.foregroundColor(color)`, `.padding(spacing)` and
