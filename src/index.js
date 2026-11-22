@@ -12,5 +12,6 @@ import { namespaceObject } from './Core/namespaceObject.js';
 
 export * from './exports.js';
 
-const SwiftUI = namespaceObject(SwiftUINamespace);
+// Marked pure so a bundler can drop it when only named exports are used.
+const SwiftUI = /* @__PURE__ */ namespaceObject(SwiftUINamespace);
 export default SwiftUI;
