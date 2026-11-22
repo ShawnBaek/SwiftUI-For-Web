@@ -21,6 +21,12 @@
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
+let disclosureCount = 0;
+function nextDisclosureId() {
+  disclosureCount += 1;
+  return `swiftui-disclosure-${disclosureCount}`;
+}
+
 /**
  * DisclosureGroup view class
  */
@@ -96,6 +102,7 @@ export class DisclosureGroupView extends View {
 
     // Header (clickable to expand/collapse)
     const header = document.createElement('button');
+    header.type = 'button';
     header.dataset.disclosurePart = 'header';
     header.style.width = '100%';
     header.style.display = 'flex';
@@ -143,6 +150,18 @@ export class DisclosureGroupView extends View {
     content.style.overflow = 'hidden';
     content.style.maxHeight = isExpanded ? 'none' : '0';
     content.style.transition = 'max-height 0.3s ease';
+    // #51: the header reports the state and the region it controls, and the
+    // collapsed region is removed from keyboard and screen-reader access
+    // (max-height 0 alone still exposes it).
+    content.id = nextDisclosureId();
+    header.setAttribute('aria-controls', content.id);
+    const applyExpandedState = (expanded) => {
+      header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      content.inert = !expanded;
+      if (expanded) content.removeAttribute('aria-hidden');
+      else content.setAttribute('aria-hidden', 'true');
+    };
+    applyExpandedState(isExpanded);
 
     // Content wrapper for proper padding
     const contentWrapper = document.createElement('div');
@@ -168,6 +187,7 @@ export class DisclosureGroupView extends View {
     header.addEventListener('click', () => {
       const newExpanded = !this._getExpanded();
       this._setExpanded(newExpanded);
+      applyExpandedState(newExpanded);
 
       // Animate
       chevron.style.transform = newExpanded ? 'rotate(90deg)' : 'rotate(0deg)';

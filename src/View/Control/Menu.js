@@ -25,6 +25,12 @@
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
+let menuCount = 0;
+function nextMenuId() {
+  menuCount += 1;
+  return `swiftui-menu-${menuCount}`;
+}
+
 /**
  * Menu view class
  */
@@ -129,21 +135,39 @@ export class MenuView extends View {
     dropdown.style.transformOrigin = 'top left';
     dropdown.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
     dropdown.style.pointerEvents = 'none';
+    // #51: menu-button pattern. The closed menu is hidden from keyboard and
+    // screen-reader access, not only made transparent.
+    dropdown.setAttribute('role', 'menu');
+    dropdown.id = nextMenuId();
+    dropdown.inert = true;
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.type = 'button';
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', dropdown.id);
     dropdown.style.display = 'flex';
     dropdown.style.flexDirection = 'column';
+
+    // Focusable items, in order, for the menu keyboard pattern.
+    const items = [];
 
     // Render menu items
     this._content.forEach((item, index) => {
       if (item instanceof View) {
         const menuItem = document.createElement('div');
         menuItem.dataset.menuItem = 'true';
+        menuItem.setAttribute('role', 'menuitem');
 
         // Check if it's a divider
         if (item.constructor.name === 'DividerView') {
+          menuItem.setAttribute('role', 'separator');
           menuItem.style.height = '1px';
           menuItem.style.backgroundColor = 'rgba(60, 60, 67, 0.1)';
           menuItem.style.margin = '6px 0';
         } else {
+          // Roving focus: items are reachable with the arrow keys, not Tab.
+          menuItem.tabIndex = -1;
+          items.push(menuItem);
           menuItem.style.padding = '10px 12px';
           menuItem.style.borderRadius = '8px';
           menuItem.style.cursor = 'pointer';
@@ -188,6 +212,10 @@ export class MenuView extends View {
     // Toggle menu
     const openMenu = () => {
       this._isOpen = true;
+      trigger.setAttribute('aria-expanded', 'true');
+      dropdown.inert = false;
+      dropdown.removeAttribute('aria-hidden');
+      items[0]?.focus?.();
       dropdown.style.opacity = '1';
       dropdown.style.transform = 'scale(1) translateY(0)';
       dropdown.style.pointerEvents = 'auto';
@@ -196,6 +224,13 @@ export class MenuView extends View {
 
     const closeMenu = () => {
       this._isOpen = false;
+      trigger.setAttribute('aria-expanded', 'false');
+      // Return focus before the menu becomes inert, or it falls to <body>.
+      if (typeof document !== 'undefined' && dropdown.contains?.(document.activeElement)) {
+        trigger.focus?.();
+      }
+      dropdown.inert = true;
+      dropdown.setAttribute('aria-hidden', 'true');
       dropdown.style.opacity = '0';
       dropdown.style.transform = 'scale(0.95) translateY(-8px)';
       dropdown.style.pointerEvents = 'none';
@@ -203,6 +238,35 @@ export class MenuView extends View {
     };
 
     this._closeMenu = closeMenu;
+
+    // Menu keyboard pattern (#51): arrows, Home and End move focus between
+    // items; Enter and Space activate the focused item; Tab closes the menu.
+    dropdown.addEventListener('keydown', (e) => {
+      const current = items.indexOf(document.activeElement);
+      const focusAt = (index) => {
+        if (items.length === 0) return;
+        items[(index + items.length) % items.length].focus();
+      };
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); focusAt(current + 1); break;
+        case 'ArrowUp': e.preventDefault(); focusAt(current < 0 ? items.length - 1 : current - 1); break;
+        case 'Home': e.preventDefault(); focusAt(0); break;
+        case 'End': e.preventDefault(); focusAt(items.length - 1); break;
+        case 'Enter':
+        case ' ':
+          if (current >= 0) { e.preventDefault(); items[current].click(); }
+          break;
+        case 'Tab': closeMenu(); break;
+        default: break;
+      }
+    });
+    trigger.addEventListener('keydown', (e) => {
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !this._isOpen) {
+        e.preventDefault();
+        openMenu();
+        if (e.key === 'ArrowUp') items[items.length - 1]?.focus?.();
+      }
+    });
 
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -224,6 +288,7 @@ export class MenuView extends View {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._isOpen) {
         closeMenu();
+        trigger.focus?.();
       }
     });
 
