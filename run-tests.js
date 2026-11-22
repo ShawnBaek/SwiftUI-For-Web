@@ -1526,6 +1526,35 @@ async function runTests() {
         root.remove();
       });
 
+      it('NavigationLink drops javascript:, data: and other unsafe URLs', () => {
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => NavigationStack(VStack(
+            NavigationLink('A', () => ModifierText('a'), { url: 'javascript:alert(1)' }),
+            NavigationLink('B', () => ModifierText('b'), { url: ' JaVa\tScRiPt:alert(1)' }),
+            NavigationLink('C', () => ModifierText('c'), { url: 'data:text/html,<script>x</script>' }),
+            NavigationLink('D', () => ModifierText('d'), { url: '/profile?id=1#top' }),
+            NavigationLink('E', () => ModifierText('e'), { url: 'https://example.org/' }),
+            NavigationLink('F', () => ModifierText('f'), { url: 'mailto:a@example.org' })
+          ), { transitionStyle: 'none' })).mount(root);
+          const links = [];
+          const walk = (node) => { if (node.dataset?.view === 'NavigationLink') links.push(node); (node.children || []).forEach(walk); };
+          walk(root);
+          expect(links.map((link) => link.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'A', 'A', 'A']);
+          expect(links.slice(0, 3).map((link) => link.getAttribute('href'))).toEqual([null, null, null]);
+          expect(links[3].getAttribute('href')).toBe('/profile?id=1#top');
+          expect(warnings.filter((m) => m.includes('NavigationLink ignored')).length).toBe(3);
+          app.unmount();
+          root.remove();
+        } finally {
+          console.warn = originalWarn;
+        }
+      });
+
       it('Picker keeps Text options tagged with .tag(_:)', () => {
         const flavor = new State('vanilla');
         const root = document.createElement('div');
