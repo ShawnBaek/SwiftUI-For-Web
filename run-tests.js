@@ -377,7 +377,7 @@ async function runTests() {
     const { TabView } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
-    const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
+    const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
     const { Picker } = await import('./src/View/Control/Picker.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
@@ -882,6 +882,51 @@ async function runTests() {
         expect(text().includes('2')).toBe(true);
         stack.push(() => ModifierText('Detail'), '', false);
         expect(text().includes('Detail')).toBe(true);
+        app.unmount();
+        root.remove();
+      });
+
+      // #51: NavigationLink is a native, keyboard-operable element.
+      it('NavigationLink renders a button, or an anchor when it has a URL, and navigates on click', () => {
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(VStack(
+          NavigationLink('Details', () => ModifierText('Detail')),
+          NavigationLink('Profile', () => ModifierText('Profile screen'), { url: '/profile' })
+        ), { transitionStyle: 'none' }))).mount(root);
+        const links = [];
+        const walk = (node) => { if (node.dataset?.view === 'NavigationLink') links.push(node); (node.children || []).forEach(walk); };
+        walk(root);
+        const [button, anchor] = links;
+        expect(button.tagName).toBe('BUTTON');
+        expect(button.getAttribute('type')).toBe('button');
+        // The button keeps the old <div>'s unstyled look and flex sizing.
+        expect(button.style.width || '').toBe('');
+        expect(button.style.display).toBe('block');
+        expect(button.style.background).toBe('none');
+        expect(button.style.textAlign).toBe('inherit');
+        expect(anchor.tagName).toBe('A');
+        expect(anchor.getAttribute('href')).toBe('/profile');
+        // A modified click on the anchor is left to the browser (new tab).
+        const modified = new MockEvent('click');
+        modified.metaKey = true;
+        anchor.dispatchEvent(modified);
+        expect(modified.defaultPrevented).toBe(false);
+        expect(stack.depth).toBe(0);
+        const middle = new MockEvent('click');
+        middle.button = 1;
+        anchor.dispatchEvent(middle);
+        expect(middle.defaultPrevented).toBe(false);
+        expect(stack.depth).toBe(0);
+        // A plain click navigates in place instead of loading the URL.
+        const plain = new MockEvent('click');
+        anchor.dispatchEvent(plain);
+        expect(plain.defaultPrevented).toBe(true);
+        expect(stack.depth).toBe(1);
+        stack.pop(false);
+        button.click();
+        expect(stack.depth).toBe(1);
         app.unmount();
         root.remove();
       });
