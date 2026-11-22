@@ -27,21 +27,33 @@
 | Suite | Command | Needs |
 |---|---|---|
 | Browser unit tests | Serve the repo (`python3 -m http.server 8000`) and open `http://localhost:8000/Tests/TestRunner.html` | Any browser |
-| Node unit tests | `node run-tests.js` (also `npm test`) | Node ≥ 20 |
+| Browser unit tests, headless | `node scripts/run-browser-tests.js` (also `npm run test:browser`). It serves the repo itself and reads the result from the page. `--if-available` skips when no browser is installed; `BROWSER_BIN` selects one. | Node ≥ 20 and an installed Chrome, Chromium, Edge, or Brave |
+| Node unit tests | `node run-tests.js` | Node ≥ 20 |
+| DOM-free `Tests/**` suites | `node scripts/run-node-suites.js` | Node ≥ 20 |
+| Package checks | `node scripts/check-package.js`: every `exports` entry loads, `./core` matches `.`, and `index.d.ts` matches the runtime | Node ≥ 20.6 |
 | Release-build tests | `node scripts/build-tests.js` | Node ≥ 20 |
+| All four Node commands | `npm test` | Node ≥ 20.6 |
 | Optional e2e/visual | `Tests/e2e`, `Tests/visual` with Playwright | Optional only |
 
-**Target (#53):** CI runs both the node suites and `Tests/TestRunner.html` in
-the runner's installed browser (headless), with no npm dependencies.
+CI runs all of the above except the optional Playwright specs (#53), with no
+npm dependencies.
 
-## Current assessment (October 2026)
+**Async tests.** In `Tests/**`, a test may return a promise:
+`it('…', async () => { … })`. The harness runs tests one at a time, a rejected
+promise fails the test, and `afterEach` runs whether the test passes or fails.
+The runner waits with `whenSettled()` before it reports. In `run-tests.js`,
+use `await itAsync(…)` directly inside `runTests`.
 
-The 14 `Tests/**/*Tests.js` files contain **490** tests.
-`Tests/TestRunner.html` runs 465 of them, plus 16 harness sanity checks:
-474 pass and 7 fail. `Tests/Data/SignalTests.js` (25 tests) isn't imported by
-the runner, so it never runs; it passes 25/25 under plain `node`. Neither
-`npm test` nor CI runs any of these files. `npm test` runs a separate set of
-96 tests in `run-tests.js`.
+## Current assessment
+
+`Tests/TestRunner.html` runs every `Tests/**/*Tests.js` file, including
+`Tests/Data/SignalTests.js` and the real-document lifecycle tests in
+`Tests/Core/LifecycleTests.js`: **515** tests, all passing in headless Chrome.
+`npm test` runs 149 tests in `run-tests.js` and the 180 tests of the five
+DOM-free suites. CI runs all three.
+
+The quality assessment below is from the October 2026 review of the 490 tests
+that existed then, and still applies to them.
 
 | Category | Share | Meaning |
 |---|---|---|
@@ -55,7 +67,12 @@ About **43% (≈210)** are meaningful. None of the tests that run mount an app,
 write state, and check the DOM. The suite would catch **none** of the 8 known
 core bugs (#44–#51).
 
-### The 7 current failures (all stale tests; no product regressions)
+### The 7 failures of October 2026 (fixed)
+
+All seven were stale tests and are rewritten as the table says. The product
+bug the table mentions, a reapplied shader effect being duplicated, is fixed
+too (test: "does not repeat a shader that is applied twice" in
+`Tests/Graphic/ShaderTests.js`).
 
 | Test | Cause | Fix |
 |---|---|---|
@@ -77,12 +94,12 @@ code where a bug is noted.
 5. ~~**I3 / #46:** after unmounting, a reused pooled element doesn't fire the old action or `onAppear`. After unmounting, a state write doesn't touch detached nodes.~~ Done in `run-tests.js` ("Element pool release cleanup"), including `onDisappear` on release, `onAppear` of content disposed before it appeared, lifecycle maps back at baseline after 1,000 rows, replaced TabView, NavigationStack, and GeometryReader content, legacy elements with their own listeners, and NavigationStack's animation timer after unmount. The detached-node write is covered by the #44 tests.
 6. **I7 / #50:** `Button(a).onTapGesture(f)` fires both handlers. `frame({ maxWidth: 'infinity' })` produces valid CSS. The modifier-order spec needs the #50 design first.
 7. **I9 / #51:** Toggle has `role="switch"`, and `aria-checked` follows both clicks and external state writes.
-8. **I8 / #47:** every package entry loads, and the `.d.ts` exports match the runtime exports.
+8. ~~**I8 / #47:** every package entry loads, and the `.d.ts` exports match the runtime exports.~~ Done in `scripts/check-package.js`, with the still-undeclared exports listed in `scripts/types-baseline.json`.
 9. **I5 / I6 / #49:** sibling subtrees with different `.environment` values each read their own. Importing the library in plain `node` doesn't throw.
 
 ## Cleanup plan
 
-- **Harness:** import `SignalTests.js` in the runner, run `afterEach` in `finally`, and add async support to `it`. Add a `node` entry for DOM-free suites (Signal, Scheduler, Color, Binding).
+- ~~**Harness:** import `SignalTests.js` in the runner, run `afterEach` in `finally`, and add async support to `it`. Add a `node` entry for DOM-free suites (Signal, Scheduler, Color, Binding).~~ Done (#53).
 - **Keep:**
   - SignalTests
   - Text and Stack `render()` tests
@@ -91,7 +108,7 @@ code where a bug is noted.
   - Toggle/TextField two-way binding
   - ObservableObject snapshot/restore
 - **Rewrite:**
-  - the 7 failures, as described above
+  - ~~the 7 failures, as described above~~ (done)
   - State/ObservableObject tests that use the legacy `subscribe()`: assert through effect tracking instead
   - the "View class" App test: it has no assertion and hides a real bug
   - "applies modifiers in order": it checks unrelated properties, so it can't fail

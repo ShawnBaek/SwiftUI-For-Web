@@ -40,7 +40,7 @@
   <div id="test-output"></div>
 
   <script type="module">
-    import { describe, it, expect, printSummary, renderResults } from './TestUtils.js';
+    import { describe, it, expect, printSummary, renderResults, whenSettled } from './TestUtils.js';
 
     // ==========================================================================
     // Test Suite: TestUtils Self-Test
@@ -124,12 +124,14 @@
     // Import and run component tests as they are created
     // ==========================================================================
     import './Core/ViewTests.js';
+    import './Core/LifecycleTests.js';
     import './View/TextTests.js';
     import './Graphic/ColorTests.js';
     import './Graphic/FontTests.js';
     import './Graphic/ShaderTests.js';
     import './Layout/StackTests.js';
     import './App/AppTests.js';
+    import './Data/SignalTests.js';
     import './Data/StateTests.js';
     import './Data/ObservableObjectTests.js';
     import './View/Control/ButtonTests.js';
@@ -137,7 +139,8 @@
     import './View/Control/ToggleTests.js';
     import './View/List/ForEachTests.js';
 
-    // Print summary and render to DOM
+    // Wait for async tests, then print the summary and render to DOM
+    await whenSettled();
     printSummary();
     renderResults('#test-output');
   </script>

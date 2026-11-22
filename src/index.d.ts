@@ -20,10 +20,6 @@ export class View {
   padding(value?: number | EdgeInsets): this;
   /** Set explicit width and/or height */
   frame(options: FrameOptions): this;
-  /** Offset the view's position */
-  offset(x?: number, y?: number): this;
-  /** Position the view absolutely */
-  position(x: number, y: number): this;
 
   // Style Modifiers
   /** Set the foreground (text/icon) color */
@@ -54,6 +50,39 @@ export class View {
   onChange<T>(of: T | Binding<T> | (() => T), action: (oldValue: T, newValue: T) => void): this;
   /** Run when the observed value changes, optionally including the initial value */
   onChange<T>(of: T | Binding<T> | (() => T), options: OnChangeOptions, action: (oldValue: T, newValue: T) => void): this;
+  /**
+   * Run asynchronous work for as long as the view is on screen. The action
+   * starts when the view appears and is cancelled when it disappears.
+   *
+   * The action receives an `AbortSignal`, the JavaScript counterpart of Swift
+   * task cancellation: `signal.aborted` is `Task.isCancelled`, and
+   * `signal.throwIfAborted()` is `Task.checkCancellation()`. Pass it to
+   * `fetch`, and check it after any other `await` before writing state.
+   *
+   * @see https://developer.apple.com/documentation/swiftui/view/task(priority:_:)
+   *
+   * @example
+   * List(...).task(async (signal) => {
+   *   const response = await fetch('/index.json', { signal });
+   *   items.value = await response.json();
+   * })
+   */
+  task(action: TaskAction): this;
+  /**
+   * Run asynchronous work that restarts when `id` changes: the running action
+   * is cancelled and a new one starts. `id` is a value, a `State` or
+   * `Binding`, or a getter that reads state; values are compared with
+   * `Object.is`, like `onChange`.
+   *
+   * @see https://developer.apple.com/documentation/swiftui/view/task(id:priority:_:)
+   *
+   * @example
+   * Text(() => summary.value).task({ id: () => query.value }, async (signal) => {
+   *   const results = await search(query.value, signal);
+   *   if (!signal.aborted) summary.value = describe(results);
+   * })
+   */
+  task<T>(options: TaskOptions<T>, action: TaskAction): this;
   /** Add a search field bound to text state */
   searchable(text: Binding<string>, options?: SearchableOptions): this;
   /** Present content while a Boolean binding is true */
@@ -145,6 +174,14 @@ export interface OnChangeOptions {
   initial?: boolean;
 }
 
+/** The action of `.task`. `signal` is aborted when the task is cancelled. */
+export type TaskAction = (signal: AbortSignal) => void | Promise<void>;
+
+export interface TaskOptions<T = unknown> {
+  /** The value to observe. When it changes, the task is cancelled and restarted. */
+  id: T | State<T> | Binding<T> | (() => T);
+}
+
 export type SearchFieldPlacementValue =
   | 'automatic'
   | 'navigationBarDrawer'
@@ -199,10 +236,22 @@ export class Binding<T> {
   constructor(get: () => T, set: (value: T) => void);
 
   /** Current value */
+  value: T;
+
+  /** Current value (SwiftUI's name for `value`) */
   wrappedValue: T;
 
+  /** Create a binding whose value is converted in both directions */
+  transform<U>(transform: (value: T) => U, reverseTransform?: (value: U) => T): Binding<U>;
+
   /** Create a binding to a property of this binding's value */
-  project<K extends keyof T>(key: K): Binding<T[K]>;
+  property<K extends keyof T>(keyPath: K): Binding<T[K]>;
+
+  /** Create a binding to an element of this binding's array value */
+  index(index: number): Binding<T extends readonly (infer E)[] ? E : unknown>;
+
+  /** A binding with an immutable value */
+  static constant<T>(value: T): Binding<T>;
 }
 
 /** Creates a new Binding instance */
@@ -210,11 +259,29 @@ export function createBinding<T>(get: () => T, set: (value: T) => void): Binding
 
 /** Base class for observable view models */
 export class ObservableObject {
+  /** Declare a published property; writing it updates the views that read it */
+  published<T>(name: string, initialValue: T): void;
+
+  /** Get a Binding to a published property */
+  binding<T = any>(propertyName: string): Binding<T>;
+
   /** Subscribe to any published property changes */
   subscribe(callback: () => void): () => void;
 
-  /** Notify all subscribers of changes */
-  objectWillChange(): void;
+  /** Subscribe to changes of one published property */
+  subscribeToProperty<T = any>(propertyName: string, callback: (newValue: T, oldValue: T) => void): () => void;
+
+  /** Group several writes into one notification */
+  batch(updateFn: () => void): void;
+
+  /** Names of the published properties */
+  get publishedPropertyNames(): string[];
+
+  /** Copy the published properties into a plain object */
+  snapshot(): Record<string, any>;
+
+  /** Write the published properties back from a snapshot */
+  restore(snapshot: Record<string, any>): void;
 }
 
 /** Mark a property as published (triggers updates on change) */
@@ -223,10 +290,8 @@ export function Published<T>(target: any, propertyKey: string): void;
 /** Creates an observable object with automatic change tracking */
 export function createObservable<T extends object>(target: T): T & ObservableObject;
 
-/** iOS 17+ style Observable macro equivalent */
-export class Observable {
-  static create<T extends object>(target: T): T;
-}
+/** iOS 17+ style Observable macro equivalent: makes an object's properties observable */
+export function Observable<T extends object>(target: T): T;
 
 /** StateObject - owned observable that persists across re-renders */
 export class StateObject<T extends ObservableObject> {
@@ -303,7 +368,7 @@ export class EnvironmentObject<T extends ObservableObject> {
 // =============================================================================
 
 /** Display text content */
-export function Text(content: string | number): View & {
+export function Text(content: string | number | (() => string | number | null | undefined)): View & {
   /** Set font style */
   font(font: Font): View;
   /** Set font weight */
@@ -379,6 +444,8 @@ export const ContentMode: {
   fit: string;
   fill: string;
 };
+/** A value of `ContentMode` */
+export type ContentMode = (typeof ContentMode)[keyof typeof ContentMode];
 
 /** Label with icon and text */
 export function Label(title: string, options: { systemImage?: string; image?: string }): View;
@@ -395,19 +462,13 @@ export function Button(label: string | View, action: () => void): View & {
   disabled(isDisabled: boolean): View;
 };
 
-/** Button style presets */
-export const ButtonStyle: {
-  automatic: string;
-  bordered: string;
-  borderedProminent: string;
-  borderless: string;
-  plain: string;
-};
+/** Button style names, passed as strings: `.buttonStyle('borderedProminent')` */
+export type ButtonStyle = 'automatic' | 'bordered' | 'borderedProminent' | 'borderless' | 'plain';
 
 /** Text input field */
 export function TextField(placeholder: string, text: Binding<string>): View & {
   /** Set text field style */
-  textFieldStyle(style: TextFieldStyle): View;
+  textFieldStyle(style: 'default' | 'roundedBorder' | 'plain'): View;
   /** Disable autocorrect */
   disableAutocorrection(disable: boolean): View;
   /** Set keyboard type */
@@ -427,13 +488,8 @@ export function Toggle(label: string | View, isOn: Binding<boolean>): View & {
   tint(color: Color): View;
 };
 
-/** Toggle style presets */
-export const ToggleStyle: {
-  automatic: string;
-  switch: string;
-  button: string;
-  checkbox: string;
-};
+/** Toggle style names, passed as strings: `.toggleStyle('switch')` */
+export type ToggleStyle = 'automatic' | 'switch' | 'button' | 'checkbox';
 
 /** Slider for selecting a value from a range */
 export function Slider(
@@ -469,6 +525,8 @@ export const PickerStyle: {
   wheel: string;
   inline: string;
 };
+/** A value of `PickerStyle` */
+export type PickerStyle = (typeof PickerStyle)[keyof typeof PickerStyle];
 
 /** Date picker */
 export function DatePicker(
@@ -482,6 +540,8 @@ export const DatePickerComponents: {
   date: string;
   hourAndMinute: string;
 };
+/** A value of `DatePickerComponents` */
+export type DatePickerComponents = (typeof DatePickerComponents)[keyof typeof DatePickerComponents];
 
 /** Color picker */
 export function ColorPicker(label: string, selection: Binding<Color>): View;
@@ -537,6 +597,8 @@ export const GridItemSize: {
   flexible(minimum?: number, maximum?: number): any;
   adaptive(minimum: number, maximum?: number): any;
 };
+/** A value of `GridItemSize` */
+export type GridItemSize = (typeof GridItemSize)[keyof typeof GridItemSize];
 
 /** Lazy vertical grid */
 export function LazyVGrid(columns: any[], options?: { spacing?: number; pinnedViews?: any }, ...children: View[]): View;
@@ -569,12 +631,16 @@ export const Alignment: {
   bottomLeading: string;
   bottomTrailing: string;
 };
+/** A value of `Alignment` */
+export type Alignment = (typeof Alignment)[keyof typeof Alignment];
 
 export const HorizontalAlignment: {
   leading: string;
   center: string;
   trailing: string;
 };
+/** A value of `HorizontalAlignment` */
+export type HorizontalAlignment = (typeof HorizontalAlignment)[keyof typeof HorizontalAlignment];
 
 export const VerticalAlignment: {
   top: string;
@@ -583,6 +649,8 @@ export const VerticalAlignment: {
   firstTextBaseline: string;
   lastTextBaseline: string;
 };
+/** A value of `VerticalAlignment` */
+export type VerticalAlignment = (typeof VerticalAlignment)[keyof typeof VerticalAlignment];
 
 // =============================================================================
 // Lists & Collections
@@ -607,6 +675,8 @@ export const ListStyle: {
   insetGrouped: string;
   sidebar: string;
 };
+/** A value of `ListStyle` */
+export type ListStyle = (typeof ListStyle)[keyof typeof ListStyle];
 
 /** Iterate over a collection */
 export function ForEach<T>(
@@ -621,6 +691,43 @@ export function ForEach<T>(
 
 /** Create a range of numbers */
 export function Range(start: number, end: number): number[];
+
+// =============================================================================
+// Reactive control flow and helpers
+// =============================================================================
+
+/**
+ * Conditional content. Renders `thenView` while `when()` is truthy and
+ * `elseView` (or nothing) otherwise; the stand-in for `if`/`else` in a
+ * SwiftUI view body.
+ */
+export function Show(when: () => unknown, thenView: View, elseView?: View): View;
+
+/**
+ * Reactive keyed list. Renders `render(item, index)` for each element of
+ * `each()` and keeps a row's DOM while its key stays in the array. The key
+ * defaults to the item's `id`, else its index.
+ */
+export function For<T>(
+  each: () => readonly T[],
+  render: (item: T, index: number) => View,
+  keyFn?: (item: T, index: number) => unknown
+): View;
+
+/**
+ * Run `fn` now and again whenever state it read changes. Returns a function
+ * that stops it; it also stops when the view that created it goes away.
+ */
+export function effect(fn: () => void): () => void;
+
+/** Read state inside `fn` without subscribing the surrounding effect to it */
+export function untrack<T>(fn: () => T): T;
+
+/** Group several state writes into one update */
+export function batch<T>(fn: () => T): T;
+
+/** Apply pending state updates now, instead of waiting for the next microtask */
+export function flushSync(): void;
 
 /** Group items with header/footer */
 export function Section(
@@ -654,6 +761,8 @@ export const FormStyle: {
   grouped: string;
   columns: string;
 };
+/** A value of `FormStyle` */
+export type FormStyle = (typeof FormStyle)[keyof typeof FormStyle];
 
 /** Expandable/collapsible section */
 export function DisclosureGroup(
@@ -668,24 +777,37 @@ export function DisclosureGroup(
 
 /** Navigation container with push/pop stack */
 export function NavigationStack(
-  options?: { path?: NavigationPath },
-  ...children: View[]
+  root: View | (() => View),
+  options?: {
+    /** How pushed views animate in. Default: 'slide'. */
+    transitionStyle?: 'slide' | 'fade' | 'none';
+    /** Transition duration in milliseconds. Default: 300. */
+    transitionDuration?: number;
+  }
 ): View & {
-  /** Set navigation title */
-  navigationTitle(title: string): View;
-  /** Set navigation bar hidden */
-  navigationBarHidden(hidden: boolean): View;
-  /** Configure toolbar */
-  toolbar(content: () => View): View;
-  /** Define navigation destinations */
-  navigationDestination<T>(forType: new () => T, destination: (value: T) => View): View;
+  /** Push a view onto the stack */
+  push(view: View | (() => View), title?: string, animated?: boolean): void;
+  /** Pop the top view */
+  pop(animated?: boolean): void;
+  /** Pop back to the root view */
+  popToRoot(animated?: boolean): void;
+  /** Number of pushed views */
+  readonly depth: number;
+  /** Whether there is a view to pop */
+  readonly canGoBack: boolean;
+  /** Define the view shown for a value of the given type on the navigation path */
+  navigationDestination<T>(forType: (new (...args: any[]) => T) | string, destination: (value: T) => View): View;
 };
 
-/** Trigger navigation to a destination */
+/** Trigger navigation to a destination inside the enclosing NavigationStack */
 export function NavigationLink(
   label: string | View,
-  options: { destination?: View; value?: any }
+  destination: View | (() => View),
+  options?: { /** Title shown for the destination */ title?: string }
 ): View;
+
+/** Button that pops the enclosing NavigationStack */
+export function BackButton(label?: string): View;
 
 /** Navigation path for programmatic navigation */
 export class NavigationPath {
@@ -722,6 +844,8 @@ export const NavigationSplitViewVisibility: {
   doubleColumn: string;
   detailOnly: string;
 };
+/** A value of `NavigationSplitViewVisibility` */
+export type NavigationSplitViewVisibility = (typeof NavigationSplitViewVisibility)[keyof typeof NavigationSplitViewVisibility];
 
 /** Tab bar navigation */
 export function TabView(
@@ -738,6 +862,8 @@ export const TabViewStyle: {
   page: string;
   pageAlwaysVisible: string;
 };
+/** A value of `TabViewStyle` */
+export type TabViewStyle = (typeof TabViewStyle)[keyof typeof TabViewStyle];
 
 // =============================================================================
 // Shapes
@@ -915,6 +1041,8 @@ export const UnitPoint: {
   bottomLeading: { x: number; y: number };
   bottomTrailing: { x: number; y: number };
 };
+/** A value of `UnitPoint` */
+export type UnitPoint = (typeof UnitPoint)[keyof typeof UnitPoint];
 
 // =============================================================================
 // Shader Effects (SwiftUI iOS 17+ shader modifiers, SVG-filter-backed)
@@ -1080,9 +1208,6 @@ export class AnyTransition {
   /** Move from edge */
   static move(edge: 'top' | 'bottom' | 'leading' | 'trailing'): AnyTransition;
 
-  /** Offset transition */
-  static offset(x?: number, y?: number): AnyTransition;
-
   /** Asymmetric insertion/removal */
   static asymmetric(insertion: AnyTransition, removal: AnyTransition): AnyTransition;
 
@@ -1198,6 +1323,95 @@ export function buildView(...views: (View | View[] | null | undefined)[]): View;
 export function Group(...children: View[]): View;
 
 // =============================================================================
+// Charts (also available on their own from 'swiftui-for-web/charts')
+// =============================================================================
+
+export * from './Charts/index.js';
+
+/** Library version */
+export const VERSION: string;
+
+// =============================================================================
+// Further constants and helpers
+// =============================================================================
+
+/** Scroll and fitting axes */
+export const Axis: {
+  horizontal: 'horizontal';
+  vertical: 'vertical';
+  both: 'both';
+};
+
+/** The axes ViewThatFits measures (same values as `Axis`) */
+export const ViewThatFitsAxis: typeof Axis;
+
+/** Label styles */
+export const LabelStyle: {
+  automatic: 'automatic';
+  titleOnly: 'titleOnly';
+  iconOnly: 'iconOnly';
+  titleAndIcon: 'titleAndIcon';
+};
+
+/** DatePicker styles */
+export const DatePickerStyle: {
+  automatic: 'automatic';
+  compact: 'compact';
+  graphical: 'graphical';
+  wheel: 'wheel';
+};
+
+/** Views a lazy stack pins while scrolling */
+export const PinnedScrollableViews: {
+  sectionHeaders: 'sectionHeaders';
+  sectionFooters: 'sectionFooters';
+};
+
+/** Window styles */
+export const WindowStyle: {
+  automatic: 'automatic';
+  hiddenTitleBar: 'hiddenTitleBar';
+  plain: 'plain';
+  titleBar: 'titleBar';
+};
+
+/** Linear gradient directions */
+export const GradientDirection: {
+  toTop: string;
+  toBottom: string;
+  toLeft: string;
+  toRight: string;
+  toTopLeft: string;
+  toTopRight: string;
+  toBottomLeft: string;
+  toBottomRight: string;
+};
+
+/** Create a StateObject from a function that makes the ObservableObject */
+export function createStateObject<T extends ObservableObject>(initializer: () => T): StateObject<T>;
+
+/** Create a StateObject from an ObservableObject class and its constructor arguments */
+export function stateObject<T extends ObservableObject, A extends any[]>(
+  ObjectClass: new (...args: A) => T,
+  ...args: A
+): StateObject<T>;
+
+/** Whether a `withAnimation` body is running */
+export function isAnimating(): boolean;
+
+/** The animation of the running `withAnimation` body, if any */
+export function currentAnimation(): Animation | null;
+
+/** Whether the browser supports the View Transitions API */
+export function isViewTransitionSupported(): boolean;
+
+/** Whether the user asked the system to reduce motion */
+export function prefersReducedMotion(): boolean;
+
+/** The idiom of the current device, one of `UserInterfaceIdiom` */
+export function currentDeviceIdiom(): string;
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -1285,8 +1499,6 @@ declare const SwiftUI: {
   HorizontalAlignment: typeof HorizontalAlignment;
   VerticalAlignment: typeof VerticalAlignment;
   ContentMode: typeof ContentMode;
-  ButtonStyle: typeof ButtonStyle;
-  ToggleStyle: typeof ToggleStyle;
   PickerStyle: typeof PickerStyle;
   ListStyle: typeof ListStyle;
   FormStyle: typeof FormStyle;

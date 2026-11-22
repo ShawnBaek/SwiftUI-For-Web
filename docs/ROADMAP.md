@@ -49,13 +49,13 @@ whenever a phase completes or a goal changes.
 | Area | Problem | Issue |
 |---|---|---|
 | Reactivity | ~~Thunks and reactive modifiers inside `Show`/`For` branches never bind, and stale effects write into detached nodes.~~ Fixed by the #44 PR. | #44 |
-| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR (only elements created by `acquireElement` are pooled). The lifecycle observer still rescans every registered element on each mutation batch. | #45, #46, #57 |
+| Robustness | ~~A throwing effect drops the rest of the scheduler batch.~~ Fixed by the #45 PR. ~~Pooled elements keep stale handlers and lifecycle callbacks.~~ Fixed by the #46 PR (only elements created by `acquireElement` are pooled). ~~The lifecycle observer rescans every registered element on each mutation batch.~~ Fixed for #57: a batch walks only the subtrees it added or removed. | #45, #46, #57 |
 | Model | Two view systems (descriptors and legacy `View` classes). `NavigationStack(VStack(…))` renders nothing. | #48 |
 | Environment | `.environment()` does nothing, `environmentObject` is global, and importing touches `window`. | #49 |
 | Semantics | Modifier order is ignored, a second handler for the same event replaces the first, and `frame(maxWidth: 'infinity')` produces invalid CSS. | #50 |
-| Packaging | The `./core` entry fails to load, `./src/*` exposes internals, and `index.d.ts` disagrees with the runtime. | #47 |
+| Packaging | ~~The `./core` entry fails to load, and `./src/*` exposes internals.~~ Fixed. `index.d.ts` is now checked against the runtime, but 86 runtime exports are still undeclared, and performance internals are still exported from the main entry. | #47 |
 | Accessibility | Toggle, NavigationLink, and TabView lack roles, state, and keyboard support. | #51 |
-| Tests and docs | Most tests never run in npm or CI. Benchmarks measure full remounts. README size numbers and scripts are stale. `CLAUDE.md` contradicts `AGENTS.md`. | #53, [TESTING.md](TESTING.md) |
+| Tests and docs | ~~Most tests never run in npm or CI. README size numbers and scripts are stale.~~ Every suite now runs in CI: `Tests/TestRunner.html` headless, plus the DOM-free suites under Node. Benchmarks still measure full remounts, there is no size budget, and Pages still publishes the whole repository. | #53, [TESTING.md](TESTING.md) |
 | Concept | The divergence between "SwiftUI API" and the "body runs once" engine isn't documented. | #52 |
 
 ## Plan
@@ -70,8 +70,8 @@ Small, high-leverage fixes, each with a failing test written first.
 - [x] #44 Bind reactive thunks and modifiers during render, under the current owner.
 - [x] #45 Isolate effects in the scheduler.
 - [x] #46 Release delegated handlers and lifecycle callbacks when pooled elements are reused.
-- #47 Fix the entries and exports, and add a `.d.ts`-versus-runtime check.
-- #53 Run every existing test in CI, without adding dependencies.
+- #47 Fix the entries and exports, and add a `.d.ts`-versus-runtime check. Done: entries, `./core`, `./src/*`, `sideEffects`, and the check (`scripts/check-package.js`). Remaining: declare the 86 exports in `scripts/types-baseline.json`, move performance internals behind a subpath, and derive the default and named exports from one list.
+- #53 Run every existing test in CI, without adding dependencies. Done: `scripts/run-node-suites.js`, `scripts/run-browser-tests.js`, async tests in the harness, and the README scripts and sizes. Remaining: benchmarks that measure in-place updates, a size budget, and publishing only `docs/` and `Examples/` to Pages.
 
 **Exit criteria:** every test runs in CI, there are no known correctness bugs
 in the reactive core, and every package entry loads.
@@ -83,14 +83,14 @@ in the reactive core, and every package entry loads.
 - #49 Scope the environment to the owner tree, and keep imports free of browser access.
 - #50 Make modifier order follow SwiftUI semantics.
 - #51 Make the controls accessible.
-- #57 Scan only the changed subtrees for lifecycle callbacks.
+- [x] #57 Scan only the changed subtrees for lifecycle callbacks.
 
 **Exit criteria:** invariants I1–I9 in
 [ARCHITECTURE.md](ARCHITECTURE.md#3-invariants) hold, and each has a test.
 
 ### Phase 2: Features (from AppleSampleCode.com)
 
-- #37 `.task` and `.task(id:)`
+- [x] #37 `.task` and `.task(id:)`. The AppleSampleCode explorer has not been moved to it yet.
 - #38 `.fullScreenCover`, `.alert`, `.confirmationDialog`, and remaining `.sheet` behavior
 - #39 Progressive activation of server-rendered hosts
 - #41 Release build: optional bundling, export-level tree shaking, safe minification, content hashing, a manifest, and incremental output. It stays dependency-free, and its output must pass the same tests as the source.
@@ -101,10 +101,10 @@ in the reactive core, and every package entry loads.
 
 | Measure | Today | Target |
 |---|---|---|
-| Tests running in CI | 96 | Every test in `Tests/**` plus the node suites |
-| Known core correctness bugs | 1 (#47) | 0 |
+| Tests running in CI | 149 in `run-tests.js`, 180 in the DOM-free `Tests/**` suites under Node, and all 515 of `Tests/TestRunner.html` in a headless browser | Every test in `Tests/**` plus the node suites |
+| Known core correctness bugs | 0 | 0 |
 | Invariants with a test | 3 / 10 (I2, I3, I4; I3 is partial) | 10 / 10 |
-| `.d.ts` agrees with the runtime | No | Checked in CI |
+| `.d.ts` agrees with the runtime | Checked in CI; 86 runtime exports still undeclared | Checked in CI, with no undeclared exports |
 | Release build size budget | Reported only | Enforced in CI |
 | Accessibility of controls | Partial | Every control passes keyboard and role checks |
 

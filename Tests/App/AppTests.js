@@ -3,12 +3,13 @@
  * Tests for the App mounting functionality
  */
 
-import { describe, it, expect, beforeEach } from '../TestUtils.js';
+import { describe, it, expect, beforeEach, afterEach } from '../TestUtils.js';
 import { App, AppInstance } from '../../src/App/App.js';
 import { View } from '../../src/Core/View.js';
 import { Text } from '../../src/View/Text.js';
 import { VStack } from '../../src/Layout/Stack/VStack.js';
 import { flushSync } from '../../src/Core/Scheduler.js';
+import { State } from '../../src/Data/State.js';
 
 describe('App', () => {
   // Create a test container before each test
@@ -21,12 +22,14 @@ describe('App', () => {
     document.body.appendChild(testContainer);
   });
 
-  // Clean up after each test (using a simple approach)
+  // Remove the container after each test, also when the test fails, so the
+  // next test never mounts into a stale '#test-root'.
   const cleanup = () => {
     if (testContainer && testContainer.parentNode) {
       testContainer.parentNode.removeChild(testContainer);
     }
   };
+  afterEach(cleanup);
 
   describe('Factory Function', () => {
     it('should create an AppInstance', () => {
@@ -152,17 +155,16 @@ describe('App', () => {
   });
 
   describe('refresh()', () => {
-    it('should schedule a re-render', () => {
-      let counter = 0;
-      const app = App(() => Text(`Count: ${counter}`));
+    it('is not needed: a state write updates the mounted view', () => {
+      const counter = new State(0);
+      const app = App(() => Text(() => `Count: ${counter.value}`));
       app.mount('#test-root');
       expect(testContainer.textContent).toContain('Count: 0');
 
-      counter = 1;
-      app.refresh();
-      flushSync(); // Flush the scheduled refresh
+      counter.value = 1;
+      flushSync();
       expect(testContainer.textContent).toContain('Count: 1');
-      cleanup();
+      app.unmount();
     });
 
     it('should return the app instance for chaining', () => {

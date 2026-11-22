@@ -123,7 +123,15 @@ function bindReactive(element, descriptor) {
 
   if (!getOwner()) {
     if (hasThunk) element.textContent = String(untrack(thunk) ?? '');
-    warnUnownedRender(descriptor.type);
+    // A task needs no effect unless its id is reactive: it still starts when
+    // the element appears and is cancelled when the element disappears.
+    let needsOwner = hasThunk;
+    for (let i = 0; i < descriptor.modifiers.length; i++) {
+      const modifier = descriptor.modifiers[i];
+      if (modifier.type === ModifierType.TASK) installReactiveModifier(element, modifier);
+      else if (isReactiveModifier(modifier)) needsOwner = true;
+    }
+    if (needsOwner) warnUnownedRender(descriptor.type);
     return;
   }
 
@@ -140,6 +148,7 @@ function bindReactive(element, descriptor) {
 
 function isReactiveModifier(modifier) {
   return modifier.type === ModifierType.ON_CHANGE
+    || modifier.type === ModifierType.TASK
     || modifier.type === ModifierType.SEARCHABLE
     || modifier.type === ModifierType.SHEET;
 }
@@ -287,6 +296,7 @@ function applyModifier(element, modifier) {
     // Reactive modifiers are not styles. bindReactive() installs them in
     // render(), under the current owner, so they are disposed with it.
     case ModifierType.ON_CHANGE:
+    case ModifierType.TASK:
     case ModifierType.SEARCHABLE:
     case ModifierType.SHEET:
       break;
@@ -521,7 +531,10 @@ export function applyShaderToElement(element, shader) {
   // chained .colorEffect().layerEffect() builds "url(#a) url(#b)".
   const existing = element.style.filter || '';
   const ref = `url(#${shader.id})`;
-  element.style.filter = existing.includes(ref) ? existing : (existing ? `${existing} ${ref}` : ref);
+  // Browsers read the value back as url("#id"), so look for the id itself,
+  // up to the closing quote or parenthesis.
+  const applied = existing.split(`#${shader.id}`).slice(1).some((rest) => /^["')]/.test(rest));
+  element.style.filter = applied ? existing : (existing ? `${existing} ${ref}` : ref);
 }
 
 function applyShaderEffect(element, value, modifierType) {

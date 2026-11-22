@@ -136,7 +136,8 @@ chain.accessibilityHeading = (level) => {
 5. Export the view from `src/index.js`, in both the default namespace and the
    named exports, and add it to `src/index.d.ts`.
 6. Add behavior tests in `Tests/View/<Name>Tests.js` and import them in
-   [Tests/TestRunner.html](Tests/TestRunner.html).
+   [Tests/TestRunner.html](Tests/TestRunner.html). Add the view to
+   `src/core.js` as well, unless it belongs to Charts.
 
 ### 4.3 Chainable freeze
 
@@ -171,8 +172,11 @@ The `.d.ts` file is the only source of editor autocomplete without a build step.
 - Chainable modifiers return `this`.
 - Enums are `const` objects.
 
-Until #47 adds an automatic check, verify the `.d.ts` by hand against the real
-signature.
+`node scripts/check-package.js` (part of `npm test`) fails when the `.d.ts`
+declares a value or class member the runtime lacks, or when a new runtime
+export has no declaration. It can't check parameter types, so still compare
+those with the real signature by hand. Don't add names to
+`scripts/types-baseline.json`; that list only shrinks.
 
 ---
 
@@ -223,7 +227,7 @@ signature.
 - [ ] Zero new dependencies; still runs with no install or build
 - [ ] Public API name and labels match SwiftUI (doc URL: ___), or the change is listed in ARCHITECTURE.md § 5
 - [ ] Failing test written first; tests assert behavior on the live path
-- [ ] Browser runner and `node run-tests.js` pass; `node scripts/build-tests.js` passes
+- [ ] `npm test` passes (unit, DOM-free suites, package checks, builder), and `node scripts/run-browser-tests.js` passes
 - [ ] New views are descriptors with `acquireElement`; reactive props bound in the renderer under an owner
 - [ ] Exported from src/index.js (default + named) and typed in src/index.d.ts
 - [ ] Docs updated: ARCHITECTURE invariant status / ROADMAP / README as needed

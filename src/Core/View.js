@@ -501,6 +501,24 @@ export class View {
   }
 
   /**
+   * Run asynchronous work for as long as the view is on screen.
+   * Matches SwiftUI's `.task(_:)` and `.task(id:_:)`: the action starts when
+   * the view appears and is cancelled when it disappears; with an `id`, a
+   * change of the id cancels the running action and starts a new one.
+   *
+   * @see https://developer.apple.com/documentation/swiftui/view/task(priority:_:)
+   * @see https://developer.apple.com/documentation/swiftui/view/task(id:priority:_:)
+   *
+   * @param {Object|Function} optionsOrAction - `{ id }` or the action
+   * @param {Function} [action] - Receives an AbortSignal that is aborted on cancellation
+   * @returns {View}
+   */
+  task(optionsOrAction, action) {
+    const modifier = createModifier(ModifierType.TASK, { optionsOrAction, action });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /**
    * Add a search field bound to text state.
    * Matches SwiftUI's `.searchable(text:placement:prompt:)` vocabulary.
    *

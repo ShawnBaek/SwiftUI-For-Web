@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from '../TestUtils.js';
 import { View } from '../../src/Core/View.js';
+import { initDelegation, teardownDelegation } from '../../src/Core/EventDelegate.js';
 
 describe('View', () => {
   describe('constructor', () => {
@@ -413,10 +414,18 @@ describe('View', () => {
         view.onTapGesture(() => { clicked = true; });
         const element = view._render();
 
-        // Event delegation requires element to be in DOM
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
+        // Tap handlers are delegated: the click is handled by the listener
+        // on a root that has delegation, as App.mount sets up.
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        initDelegation(root);
+        try {
+          root.appendChild(element);
+          element.click();
+        } finally {
+          teardownDelegation(root);
+          root.remove();
+        }
 
         expect(clicked).toBeTruthy();
       });
