@@ -458,6 +458,7 @@ async function runTests() {
       });
     });
 
+    const PresentationEnvironment = await import('./src/Data/Environment.js');
     describe('SwiftUI-style modifiers', () => {
       it('maps accessibility modifiers to semantic attributes', () => {
         const element = render(
@@ -544,6 +545,91 @@ async function runTests() {
         expect(dismissCount).toBe(1);
         app.unmount();
         root.remove();
+      });
+
+      // #38: alert, confirmation dialog and full-screen cover share the controller.
+      it('presents an alert with roles, runs the chosen action and dismisses through the binding', () => {
+        const shown = new State(false);
+        const calls = [];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => ModifierText('Page').alert('Delete draft?', shown.binding, {
+          message: 'This cannot be undone.',
+          actions: [
+            Button('Delete', { role: 'destructive' }, () => calls.push('delete')),
+            { title: 'Cancel', role: 'cancel', action: () => calls.push('cancel') },
+          ],
+          onDismiss: () => calls.push('dismissed'),
+        })).mount(root);
+        shown.value = true;
+        Scheduler.flushSync();
+        const dialog = document.body.querySelector('[data-view="Alert"]');
+        expect(dialog.getAttribute('role')).toBe('alertdialog');
+        const findIn = (node, test) => test(node) ? node : (node.children || []).map((c) => findIn(c, test)).find(Boolean);
+        const title = findIn(dialog, (node) => node.tagName === 'H2');
+        expect(title.textContent).toBe('Delete draft?');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+        expect(Boolean(dialog.getAttribute('aria-describedby'))).toBe(true);
+        const buttons = findIn(dialog, (node) => node.classList?.contains?.('swiftui-alert-actions')).children;
+        expect(buttons.map((button) => button.dataset.role)).toEqual(['destructive', 'cancel']);
+        buttons[0].click();
+        Scheduler.flushSync();
+        expect(shown.value).toBe(false);
+        expect(calls).toEqual(['delete', 'dismissed']);
+        expect(document.body.querySelector('[data-view="Alert"]')).toBeNull();
+        // Escape (the dialog's cancel event) runs the cancel action.
+        shown.value = true;
+        Scheduler.flushSync();
+        const again = document.body.querySelector('[data-view="Alert"]');
+        again.dispatchEvent(new MockEvent('cancel'));
+        Scheduler.flushSync();
+        expect(shown.value).toBe(false);
+        expect(calls).toEqual(['delete', 'dismissed', 'cancel', 'dismissed']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('full-screen cover gives its content dismiss, locks scroll and nests', () => {
+        const { Environment, EnvironmentValues } = PresentationEnvironment;
+        const previousRoot = document.documentElement;
+        document.documentElement = { style: { overflow: 'auto' } };
+        try {
+          const cover = new State(false);
+          const confirm = new State(false);
+          let dismiss = null;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => ModifierText('Page')
+            .fullScreenCover(cover.binding, () => {
+              dismiss = Environment.get(EnvironmentValues.dismiss);
+              return ModifierText('Cover').confirmationDialog('Leave?', confirm.binding, { titleVisibility: 'hidden' });
+            })).mount(root);
+          cover.value = true;
+          Scheduler.flushSync();
+          expect(Boolean(document.body.querySelector('[data-view="FullScreenCover"]'))).toBe(true);
+          expect(document.documentElement.style.overflow).toBe('hidden');
+          confirm.value = true;
+          Scheduler.flushSync();
+          const dialog = document.body.querySelector('[data-view="ConfirmationDialog"]');
+          expect(dialog.getAttribute('role')).toBe('dialog');
+          expect(dialog.getAttribute('aria-label')).toBe('Leave?');
+          // The default action is an OK cancel button.
+          const findIn = (node, test) => test(node) ? node : (node.children || []).map((c) => findIn(c, test)).find(Boolean);
+          expect(findIn(dialog, (node) => node.classList?.contains?.('swiftui-alert-actions')).children[0].textContent).toBe('OK');
+          confirm.value = false;
+          Scheduler.flushSync();
+          expect(document.documentElement.style.overflow).toBe('hidden');
+          expect(typeof dismiss).toBe('function');
+          dismiss();
+          Scheduler.flushSync();
+          expect(cover.value).toBe(false);
+          expect(document.body.querySelector('[data-view="FullScreenCover"]')).toBeNull();
+          expect(document.documentElement.style.overflow).toBe('auto');
+          app.unmount();
+          root.remove();
+        } finally {
+          document.documentElement = previousRoot;
+        }
       });
     });
 

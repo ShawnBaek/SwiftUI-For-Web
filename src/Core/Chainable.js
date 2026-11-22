@@ -46,6 +46,9 @@ export function chainable(descriptor) {
   chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
   chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
   chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
+  chain.fullScreenCover = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content })));
+  chain.alert = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options })));
+  chain.confirmationDialog = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options })));
 
   // Accessibility modifiers
   chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));

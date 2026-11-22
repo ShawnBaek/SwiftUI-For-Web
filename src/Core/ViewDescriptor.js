@@ -385,6 +385,8 @@ export const ModifierType = {
   TASK: 'task',
   SEARCHABLE: 'searchable',
   SHEET: 'sheet',
+  // fullScreenCover, alert and confirmationDialog (#38); value.kind says which.
+  PRESENTATION: 'presentation',
   ACCESSIBILITY_LABEL: 'accessibilityLabel',
   ACCESSIBILITY_VALUE: 'accessibilityValue',
   ACCESSIBILITY_HINT: 'accessibilityHint',

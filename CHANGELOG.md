@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Presentations share one controller (#38): `.fullScreenCover(isPresented,
+  content)`, `.alert(title, isPresented, { actions, message })` and
+  `.confirmationDialog(title, isPresented, { titleVisibility, actions,
+  message })` join `.sheet`, all on `<dialog>.showModal()` (inert page,
+  focus trap). The controller locks page scroll while anything is
+  presented, returns focus to the presenter, stacks nested presentations,
+  and puts `dismiss` in the presented content's environment
+  (`Environment.get(EnvironmentValues.dismiss)`). The binding is the single
+  source of truth: Escape, a backdrop click (not for an alert) and actions
+  write `false`, and `onDismiss` runs once. An alert is
+  `role="alertdialog"` labelled by its title and described by its message;
+  actions follow SwiftUI roles (`Button('Delete', { role: 'destructive' },
+  action)` or `{ title, role, action }`), and Escape runs the `cancel`
+  action. With no actions, one "OK" button is shown.
 - Every runtime export now has a declaration (#47): the 76 names that were
   allowed untyped in `scripts/types-baseline.json` (legacy `*View` classes,
   gesture recognizers, `AppInstance`, `ColorValue`, `FontValue`, scheduler

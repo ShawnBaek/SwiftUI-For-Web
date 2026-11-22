@@ -143,6 +143,68 @@ body {
   background: rgb(0 0 0 / 48%);
 }
 
+.swiftui-full-screen-cover {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+}
+
+.swiftui-full-screen-cover .swiftui-sheet-content {
+  max-height: 100vh;
+  height: 100%;
+}
+
+.swiftui-alert {
+  width: min(20rem, calc(100vw - 32px));
+  border-radius: 14px;
+  text-align: center;
+}
+
+.swiftui-alert-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 16px 12px;
+}
+
+.swiftui-alert-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.swiftui-alert-message {
+  font-size: 13px;
+}
+
+.swiftui-alert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.swiftui-alert-action {
+  padding: 10px;
+  font: inherit;
+  color: var(--color-blue, #007AFF);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.swiftui-alert-action[data-role="cancel"] {
+  font-weight: 600;
+}
+
+.swiftui-alert-action[data-role="destructive"] {
+  color: var(--color-red, #FF3B30);
+}
+
 .swiftui-sheet-content {
   box-sizing: border-box;
   max-height: calc(100vh - 34px);

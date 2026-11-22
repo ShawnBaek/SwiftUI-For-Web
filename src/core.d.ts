@@ -100,6 +100,13 @@ export class View {
   sheet(isPresented: Binding<boolean>, content: () => View): this;
   /** Present content while a Boolean binding is true and handle dismissal */
   sheet(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+  /** Present content over the whole window while `isPresented` is true (#38). */
+  fullScreenCover(isPresented: Binding<boolean>, content: () => View): this;
+  fullScreenCover(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+  /** An alert (`role="alertdialog"`). Escape runs the `cancel` action. */
+  alert(title: string, isPresented: Binding<boolean>, options?: PresentationMessageOptions): this;
+  /** A confirmation dialog. Escape and a backdrop click run the `cancel` action. */
+  confirmationDialog(title: string, isPresented: Binding<boolean>, options?: PresentationMessageOptions & { titleVisibility?: 'automatic' | 'visible' | 'hidden' }): this;
 
   // Accessibility Modifiers
   accessibilityLabel(label: string | number | View | Signal<string | number>): this;
@@ -478,6 +485,11 @@ export function Label(title: string, options: { systemImage?: string; image?: st
 // Controls
 // =============================================================================
 
+/** A button with a role, SwiftUI's `Button(_:role:action:)` (#38). */
+export function Button(label: string, options: { role?: 'cancel' | 'destructive' }, action: () => void): View & {
+  buttonStyle(style: ButtonStyle): View;
+  disabled(isDisabled: boolean): View;
+};
 /** Interactive button */
 export function Button(label: string | View, action: () => void): View & {
   /** Set button style */
@@ -840,6 +852,21 @@ export function NavigationLink(
     url?: string;
   }
 ): View;
+
+/** An alert or confirmation-dialog action. A `Button` made with `{ role }` works too. */
+export interface PresentationAction {
+  title: string;
+  role?: 'cancel' | 'destructive';
+  action?: () => void;
+}
+
+export interface PresentationMessageOptions {
+  /** Actions, or a function returning them. Default: one "OK" cancel action. */
+  actions?: Array<PresentationAction | View> | (() => Array<PresentationAction | View>);
+  /** Message text or view. */
+  message?: string | View | (() => string | View);
+  onDismiss?: () => void;
+}
 
 /** Button that pops the enclosing NavigationStack */
 export function BackButton(label?: string): View;

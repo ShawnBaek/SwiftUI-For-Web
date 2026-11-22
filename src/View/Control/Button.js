@@ -50,6 +50,9 @@ function chainable(descriptor) {
   chain.task = (optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.TASK, { optionsOrAction, action })));
   chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
   chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
+  chain.fullScreenCover = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content })));
+  chain.alert = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options })));
+  chain.confirmationDialog = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options })));
   chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
   chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
   chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
@@ -89,13 +92,20 @@ function chainable(descriptor) {
  *   .buttonStyle('borderedProminent')
  *   .disabled(isLoading)
  */
-export function Button(labelOrAction, actionOrLabel) {
+export function Button(labelOrAction, actionOrLabel, roleAction) {
   let label = null;
+  let role = null;
   let action = () => {};
   let children = [];
 
   // Parse arguments to support multiple signatures
-  if (typeof labelOrAction === 'string') {
+  if (typeof labelOrAction === 'string' && actionOrLabel && typeof actionOrLabel === 'object' && !actionOrLabel.type) {
+    // Button('Delete', { role: 'destructive' }, action), SwiftUI's
+    // Button(_:role:action:) (#38)
+    label = labelOrAction;
+    role = actionOrLabel.role ?? null;
+    action = roleAction || (() => {});
+  } else if (typeof labelOrAction === 'string') {
     // Button('Label', action)
     label = labelOrAction;
     action = actionOrLabel || (() => {});
@@ -121,6 +131,7 @@ export function Button(labelOrAction, actionOrLabel) {
   return chainable(createDescriptor('Button', {
     label,
     action,
+    role,
     isDisabled: false,
     buttonStyle: 'default'
   }, children));

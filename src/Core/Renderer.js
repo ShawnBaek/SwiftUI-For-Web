@@ -243,7 +243,8 @@ function isReactiveModifier(modifier) {
   return modifier.type === ModifierType.ON_CHANGE
     || modifier.type === ModifierType.TASK
     || modifier.type === ModifierType.SEARCHABLE
-    || modifier.type === ModifierType.SHEET;
+    || modifier.type === ModifierType.SHEET
+    || modifier.type === ModifierType.PRESENTATION;
 }
 
 /**
@@ -565,6 +566,7 @@ function applyModifier(element, modifier) {
     case ModifierType.TASK:
     case ModifierType.SEARCHABLE:
     case ModifierType.SHEET:
+    case ModifierType.PRESENTATION:
       break;
 
     case ModifierType.CLIP_SHAPE:

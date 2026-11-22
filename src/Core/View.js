@@ -541,6 +541,24 @@ export class View {
     return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
   }
 
+  /** `.fullScreenCover(isPresented:onDismiss:content:)` (#38). */
+  fullScreenCover(isPresented, optionsOrContent, content) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /** `.alert(title, isPresented:, actions:, message:)` (#38). */
+  alert(title, isPresented, options) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /** `.confirmationDialog(title, isPresented:, titleVisibility:, actions:, message:)` (#38). */
+  confirmationDialog(title, isPresented, options) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
   accessibilityLabel(label) {
     return this.modifier({ apply: (element) => element.setAttribute('aria-label', String(label ?? '')) });
   }
