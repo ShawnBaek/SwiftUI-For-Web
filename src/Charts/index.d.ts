@@ -3,7 +3,7 @@
  * Declarative charting library matching Apple's Swift Charts API
  *
  * @module swiftui-for-web/charts
- * @version 3.0.0-alpha.2
+ * @version 3.1.0
  */
 
 import { View, Color } from '../index.js';

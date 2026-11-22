@@ -58,6 +58,26 @@ Mount once, mutate freely. The `Text(() => …)` thunk subscribes to whatever si
 
 No `npm install`, no bundler, no JSX. Save as `index.html` + `main.js`, serve with any static server, done.
 
+### New in 3.1.0
+
+- **One view model.** Every built-in view, from `Text` to `List`,
+  `NavigationStack` and the shapes, is a descriptor with the same modifier
+  table; the `*View` classes are gone. See the
+  [CHANGELOG](CHANGELOG.md#breaking) for migration notes.
+- **Static rendering and hydration.** `swiftui-for-web/server` renders views
+  to HTML in Node (`renderToString`, `renderDocument`, `sitemap`), and
+  `mount(host, { mode: 'adopt' })` hydrates that markup in place.
+- **SwiftUI behaviour, closer.** Ordered modifier layers, gesture composition,
+  removal transitions, scoped `.environment`, `.task`, keyed reactive
+  `ForEach`, and presentations (`.sheet`, `.alert`, `.confirmationDialog`,
+  `.fullScreenCover`) on one controller.
+- **Accessibility.** `Toggle`, `Picker`, `TabView`, `Menu`, `List` selection
+  and `DisclosureGroup` follow the WAI-ARIA patterns, with keyboard support.
+- **Release build.** `--bundle`, `--hash` and `modulepreload`, within a
+  120 KB gzip budget.
+- **Reliable cold loads.** `serve.py` no longer resets connections on a cold
+  first load, and reports a module that fails to load instead of a blank page.
+
 ### New in 2.0.0-alpha.1
 
 The first 2.0 alpha moves common interaction and accessibility work behind

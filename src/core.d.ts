@@ -8,7 +8,7 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 3.0.0-alpha.2
+ * @version 3.1.0
  */
 
 // =============================================================================

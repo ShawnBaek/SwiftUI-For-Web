@@ -1,6 +1,6 @@
 # Roadmap
 
-This page records the current state (as of 2.0.0-alpha.1), the goals, and the
+This page records the current state (as of 3.1.0), the goals, and the
 planned order of work. The live checklist is the tracking issue
 [#43](https://github.com/ShawnBaek/SwiftUI-For-Web/issues/43). Update this file
 whenever a phase completes or a goal changes.

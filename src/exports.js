@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 3.0.0-alpha.2
+ * @version 3.1.0
  *
  * @example
  * // Simple import (recommended)
@@ -221,7 +221,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '3.0.0-alpha.2';
+const VERSION = '3.1.0';
 
 
 
