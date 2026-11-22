@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The tab-bar `TabView` follows the WAI-ARIA tabs pattern (#51): the bar is a
+  `tablist`, each button a `tab` with `aria-selected`, `aria-controls` and a
+  roving `tabindex`, and the content area a `tabpanel` labelled by the
+  selected tab. ←/→ (wrapping), Home and End move to a tab and select it.
 - `DisclosureGroup` and `Menu` expose their state (#51). The disclosure
   header reports `aria-expanded` and `aria-controls`; `Menu` follows the
   menu-button pattern (`aria-haspopup="menu"`, `aria-expanded`,
