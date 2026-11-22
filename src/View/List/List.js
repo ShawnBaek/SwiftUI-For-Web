@@ -16,8 +16,9 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR, isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { VIEW_DESCRIPTOR, isDescriptor, ModifierType, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor, registerRenderer } from '../../Core/Renderer.js';
+import { createEffect, getOwner, untrack } from '../../Data/Signal.js';
 
 /**
  * Helper to render both View instances and descriptors
@@ -144,7 +145,8 @@ export class ListView extends View {
     const el = document.createElement('div');
     el.dataset.view = 'list';
     el.setAttribute('role', 'list');
-    this._selectableRows = [];
+    this._listElement = el;
+    this._selectionInstalled = false;
 
     // Apply list styles
     const styles = this._getListStyleCSS();
@@ -160,7 +162,12 @@ export class ListView extends View {
       }
     } else {
       // Children-based list - v2 fix
-      for (const child of this._children) {
+      for (const original of this._children) {
+        // A reactive ForEach (For): render each of its rows as a list row
+        // (chrome, role and selection), keyed like the ForEach (#52).
+        const child = isDescriptor(original) && original.type === 'For'
+          ? this._listRowsFor(original)
+          : original;
         // Render the child first
         const rendered = renderChild(child);
         if (rendered) {
@@ -169,8 +176,10 @@ export class ListView extends View {
           if (rendered.dataset && (rendered.dataset.view === 'For' || rendered.dataset.view === 'Show')) {
             // A reactive ForEach (For) or Show updates its own children in
             // place, so keep its wrapper intact: moving its rows into list
-            // rows would detach them on the next update (#52). Its rows are
-            // not given list-row chrome or selection.
+            // rows would detach them on the next update (#52). For rows are
+            // list rows already (see _listRowsFor). The wrapper has no role
+            // of its own, so the rows belong to the list.
+            rendered.setAttribute('role', 'none');
             el.appendChild(rendered);
           } else if (rendered.dataset && rendered.dataset.view === 'ForEach') {
             // Extract children from ForEach and add each as a list row
@@ -198,11 +207,45 @@ export class ListView extends View {
       }
     }
 
-    if (this._selection && this._selectableRows.length > 0) {
+    if (this._selection) {
       this._installSelection(el);
     }
 
     return this._applyModifiers(el);
+  }
+
+  /**
+   * A copy of a For descriptor whose rows render as list rows.
+   * @private
+   */
+  _listRowsFor(forDescriptor) {
+    const { render: renderRow, keyFn } = forDescriptor.props;
+    const list = this;
+    return createDescriptor('For', {
+      ...forDescriptor.props,
+      render: (item, index) => createDescriptor('ListRow', {
+        list,
+        content: renderRow(item, index),
+        id: keyFn(item, index),
+      }),
+    }, forDescriptor.children, forDescriptor.key, forDescriptor.modifiers);
+  }
+
+  /**
+   * The selectable rows now in the list, in order, including rows a
+   * reactive ForEach added after the first render.
+   * @private
+   */
+  _currentRows() {
+    const rows = [];
+    const walk = (node) => {
+      for (const child of Array.from(node.children || [])) {
+        if (child._listId !== undefined) rows.push({ row: child, id: child._listId });
+        else if (child.dataset?.listRow === undefined) walk(child);
+      }
+    };
+    if (this._listElement) walk(this._listElement);
+    return rows;
   }
 
   /**
@@ -259,7 +302,7 @@ export class ListView extends View {
 
   /** @private */
   _syncSelection() {
-    for (const { row, id } of this._selectableRows) {
+    for (const { row, id } of this._currentRows()) {
       const selected = this._isSelected(id);
       row.setAttribute('aria-selected', selected ? 'true' : 'false');
       row.style.backgroundColor = selected ? 'rgba(0, 122, 255, 0.1)' : 'white';
@@ -273,9 +316,9 @@ export class ListView extends View {
    * @private
    */
   _installSelection(el) {
-    const rows = this._selectableRows;
     el.setAttribute('role', 'listbox');
     if (this._readSelection() instanceof Set) el.setAttribute('aria-multiselectable', 'true');
+    const rows = this._currentRows();
     let focusIndex = rows.findIndex(({ id }) => this._isSelected(id));
     if (focusIndex === -1) focusIndex = 0;
     rows.forEach(({ row }, index) => {
@@ -290,44 +333,59 @@ export class ListView extends View {
         row.setAttribute('aria-disabled', 'true');
       }
     }
+    this._selectionInstalled = true;
     this._syncSelection();
+    // Follow writes to the selection made elsewhere.
+    if (getOwner()) {
+      createEffect(() => {
+        this._readSelection();
+        untrack(() => this._syncSelection());
+      });
+    }
+  }
 
+  /**
+   * Keyboard and click selection for one row. Rows are looked up when the
+   * event happens, so rows added later by a reactive ForEach take part.
+   * @private
+   */
+  _wireSelectableRow(row, id) {
     const moveFocus = (index) => {
-      rows.forEach(({ row }, i) => { row.tabIndex = i === index ? 0 : -1; });
-      rows[index].row.focus?.();
+      const rows = this._currentRows();
+      rows.forEach(({ row: other }, i) => { other.tabIndex = i === index ? 0 : -1; });
+      rows[index]?.row.focus?.();
     };
-
-    rows.forEach(({ row, id }, index) => {
-      row.addEventListener('keydown', (event) => {
-        // Keys typed in a control inside the row belong to that control.
-        if (event.target && event.target !== row) return;
-        const last = rows.length - 1;
-        switch (event.key) {
-          case 'ArrowDown':
-            moveFocus(Math.min(index + 1, last));
-            break;
-          case 'ArrowUp':
-            moveFocus(Math.max(index - 1, 0));
-            break;
-          case 'Home':
-            moveFocus(0);
-            break;
-          case 'End':
-            moveFocus(last);
-            break;
-          case ' ':
-          case 'Spacebar':
-            this._selectRow(id);
-            break;
-          default:
-            return;
-        }
-        event.preventDefault?.();
-      });
-      row.addEventListener('click', () => {
-        rows.forEach(({ row: other }, i) => { other.tabIndex = i === index ? 0 : -1; });
-        this._selectRow(id);
-      });
+    row.addEventListener('keydown', (event) => {
+      // Keys typed in a control inside the row belong to that control.
+      if (event.target && event.target !== row) return;
+      const rows = this._currentRows();
+      const index = rows.findIndex((entry) => entry.row === row);
+      const last = rows.length - 1;
+      switch (event.key) {
+        case 'ArrowDown':
+          moveFocus(Math.min(index + 1, last));
+          break;
+        case 'ArrowUp':
+          moveFocus(Math.max(index - 1, 0));
+          break;
+        case 'Home':
+          moveFocus(0);
+          break;
+        case 'End':
+          moveFocus(last);
+          break;
+        case ' ':
+        case 'Spacebar':
+          this._selectRow(id);
+          break;
+        default:
+          return;
+      }
+      event.preventDefault?.();
+    });
+    row.addEventListener('click', () => {
+      for (const { row: other } of this._currentRows()) other.tabIndex = other === row ? 0 : -1;
+      this._selectRow(id);
     });
   }
 
@@ -357,11 +415,21 @@ export class ListView extends View {
       row.style.backgroundColor = isSelected ? 'rgba(0, 122, 255, 0.1)' : 'white';
     });
 
-    // Selection: wired up in _installSelection once every row exists.
+    // Selection: roles and the roving tabindex are set by _installSelection
+    // for the first render, and here for rows added later.
     const selectable = Boolean(this._selection) && id !== undefined && id !== null;
     if (selectable) {
       row.style.cursor = 'pointer';
-      this._selectableRows.push({ row, id });
+      row._listId = id;
+      this._wireSelectableRow(row, id);
+      if (this._selectionInstalled) {
+        const selected = this._isSelected(id);
+        row.setAttribute('role', 'option');
+        row.setAttribute('aria-selected', selected ? 'true' : 'false');
+        row.style.backgroundColor = selected ? 'rgba(0, 122, 255, 0.1)' : 'white';
+        // Keep one Tab stop: the first row of a list that was empty gets it.
+        row.tabIndex = this._currentRows().some(({ row: other }) => other.tabIndex === 0) ? -1 : 0;
+      }
     }
 
     // Append content
@@ -377,6 +445,9 @@ export class ListView extends View {
     return row;
   }
 }
+
+// A row of a reactive ForEach inside a List (#52).
+registerRenderer('ListRow', (props) => props.list._createListRow(renderChild(props.content), null, props.id));
 
 /**
  * Factory function for List

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Rows of a reactive `ForEach` inside a `List` are list rows (#52): they get
+  the row styling, the `listitem`/`option` role, and take part in selection
+  and keyboard navigation, including rows added later (the first row of an
+  empty list takes the Tab stop). A selectable `List` follows selection
+  writes made elsewhere.
 - Layout (#50): `ZStack` overlays the rows of a `ForEach`, `For` or `Show`
   (the wrapper becomes an overlay cell; rows added later follow a
   `[data-zstack-layer]` rule in `base.css`). `frame(alignment:)` positions
@@ -115,9 +120,6 @@
   so rows with a stable id keep their DOM when the data changes. A plain
   array stays static. `For` is deprecated in favour of `ForEach` (it stays
   for one minor release).
-  Inside a `List`, the rows of a reactive `ForEach` update in place but don't
-  get list-row styling, `listitem` roles or selection yet; use an array (or
-  `List(data, …)`) where those matter.
 - Development warning (#52): reading `State.value` while building a view,
   outside any reactive scope (the `Text(count.value)` mistake), logs a warning
   once per call site. It is on in the source tree and compiled out of the

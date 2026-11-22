@@ -1067,6 +1067,38 @@ async function runTests() {
         teardown();
       });
 
+      it('reactive ForEach rows in a selectable List are options that select and update', () => {
+        const items = new State([{ id: 'a', name: 'A' }]);
+        const picked = new State('a');
+        const { root, teardown } = mountInRoot(() => VStack(
+          A11yList({ selection: picked.binding }, ReactiveForEach(items, { id: 'id' }, (item) => ModifierText(item.name)))
+        ));
+        const list = root.children[0].children[0];
+        const rows = () => {
+          const found = [];
+          const walk = (node) => { if (node.dataset?.listRow === 'true') found.push(node); else (node.children || []).forEach(walk); };
+          walk(list);
+          return found;
+        };
+        expect(list.getAttribute('role')).toBe('listbox');
+        expect(rows().map((row) => [row.getAttribute('role'), row.getAttribute('aria-selected'), row.tabIndex])).toEqual([['option', 'true', 0]]);
+        items.value = [...items.value, { id: 'b', name: 'B' }];
+        Scheduler.flushSync();
+        expect(rows().map((row) => [row.getAttribute('role'), row.getAttribute('aria-selected'), row.tabIndex])).toEqual([['option', 'true', 0], ['option', 'false', -1]]);
+        // Keyboard: ArrowDown moves to the new row, Space selects it.
+        const key = (row, name) => { const event = new MockEvent('keydown'); event.key = name; row.dispatchEvent(event); };
+        key(rows()[0], 'ArrowDown');
+        expect(rows().map((row) => row.tabIndex)).toEqual([-1, 0]);
+        key(rows()[1], ' ');
+        expect(picked.value).toBe('b');
+        expect(rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+        // A write made elsewhere is reflected.
+        picked.value = 'a';
+        Scheduler.flushSync();
+        expect(rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+        teardown();
+      });
+
       it('does not warn for reads inside untrack()', () => {
         const warnings = [];
         const originalWarn = console.warn;
