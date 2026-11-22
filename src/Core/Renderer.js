@@ -23,6 +23,35 @@ import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
+import { State } from '../Data/State.js';
+import { Binding } from '../Data/Binding.js';
+
+// Style modifiers that accept a State or Binding as their value (#52,
+// signal-as-value): `.opacity(isVisible)` re-applies when the state changes.
+const SIGNAL_STYLE_MODIFIERS = new Set([
+  ModifierType.PADDING,
+  ModifierType.FRAME,
+  ModifierType.FOREGROUND_COLOR,
+  ModifierType.BACKGROUND,
+  ModifierType.FONT,
+  ModifierType.OPACITY,
+  ModifierType.CORNER_RADIUS,
+  ModifierType.SHADOW,
+  ModifierType.ACCESSIBILITY_LABEL,
+  ModifierType.ACCESSIBILITY_VALUE,
+  ModifierType.ACCESSIBILITY_HINT,
+]);
+
+/**
+ * Whether a value is a reactive source that views accept directly in place
+ * of a thunk: a State or a Binding.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+export function isSignalValue(value) {
+  return value instanceof State || value instanceof Binding;
+}
 
 /**
  * Registry of view type renderers
@@ -224,7 +253,84 @@ function renderUnknown(descriptor) {
  */
 export function applyModifiers(element, modifiers) {
   for (let i = 0; i < modifiers.length; i++) {
-    applyModifier(element, modifiers[i]);
+    const modifier = modifiers[i];
+    if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
+      applySignalModifier(element, modifier);
+    } else {
+      applyModifier(element, modifier);
+    }
+  }
+}
+
+function applySignalModifier(element, modifier) {
+  const source = modifier.value;
+  if (!getOwner()) {
+    applyModifier(element, { ...modifier, value: untrack(() => source.value) });
+    warnUnownedRender(`.${modifier.type}`);
+    return;
+  }
+  // Each run records the style properties and attributes it writes, with
+  // their previous values. The next run restores exactly those before
+  // applying the new value, so nothing from an older value is left behind
+  // (an italic font switched to a plain one, `{ top }` padding switched to
+  // `{ left }`, a color switched to null) and other modifiers on the element
+  // are untouched.
+  let previous = null;
+  createEffect(() => {
+    const value = source.value;
+    if (previous) restoreWrites(element, previous);
+    previous = recordWrites(element, (target) => {
+      applyModifier(target, { ...modifier, value });
+    });
+  });
+}
+
+function recordWrites(element, apply) {
+  const styles = new Map();
+  const attributes = new Map();
+  const style = new Proxy(element.style, {
+    set(target, property, value) {
+      if (typeof property === 'string' && !styles.has(property)) {
+        styles.set(property, target[property]);
+      }
+      target[property] = value;
+      return true;
+    },
+  });
+  const rememberAttribute = (name) => {
+    if (!attributes.has(name)) {
+      const current = element.getAttribute(name);
+      attributes.set(name, current === undefined ? null : current);
+    }
+  };
+  const target = new Proxy(element, {
+    get(object, property) {
+      if (property === 'style') return style;
+      if (property === 'setAttribute') {
+        return (name, value) => { rememberAttribute(name); object.setAttribute(name, value); };
+      }
+      if (property === 'removeAttribute') {
+        return (name) => { rememberAttribute(name); object.removeAttribute(name); };
+      }
+      const value = Reflect.get(object, property, object);
+      return typeof value === 'function' ? value.bind(object) : value;
+    },
+    set(object, property, value) {
+      object[property] = value;
+      return true;
+    },
+  });
+  apply(target);
+  return { styles, attributes };
+}
+
+function restoreWrites(element, { styles, attributes }) {
+  for (const [property, value] of styles) {
+    element.style[property] = value ?? '';
+  }
+  for (const [name, value] of attributes) {
+    if (value === null) element.removeAttribute(name);
+    else element.setAttribute(name, value);
   }
 }
 

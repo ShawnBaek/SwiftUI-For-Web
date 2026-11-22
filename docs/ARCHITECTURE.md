@@ -80,7 +80,7 @@ under review in #52, and changes to this list go through that RFC.
 | SwiftUI | SwiftUI-For-Web | Reason |
 |---|---|---|
 | `@State var count = 0` | `const count = new State(0)`; `count.value`, `count.binding` | JavaScript has no property wrappers. |
-| `body` re-evaluated on change | `body` runs once, and reactive reads are written as thunks: `Text(() => …)` | Fine-grained updates with no virtual DOM. A plain `Text(count.value)` doesn't update. |
+| `body` re-evaluated on change | `body` runs once. Reactive reads pass a `State` or `Binding` directly (`Text(count)`, `.opacity(isVisible)`) or a thunk for derived values (`Text(() => …)`) | Fine-grained updates with no virtual DOM. A plain `Text(count.value)` doesn't update. See [ADR 0001](adr/0001-reactivity.md). |
 | `if`, `switch` in a result builder | `Show(when, then, else)` | JavaScript has no result builders. |
 | `ForEach(data, id:)` (always reactive) | `For(each, render, key)` is reactive; `ForEach` is a static snapshot | Historical. To be resolved in #52. |
 | Argument labels | An options object, e.g. `VStack({ spacing: 8 }, …)` | JavaScript has no argument labels. |

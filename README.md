@@ -186,6 +186,8 @@ Text(() => `Hello, ${user.name}`)
 
 Plain `Text(user.name)` (no thunk) snapshots at mount and never updates. The thunk is the opt-in.
 
+A `State` or `Binding` can be passed directly, and it subscribes like a thunk would: `Text(count)`, `Text('Hi').opacity(isVisible)`. Keep thunks for derived text such as ``Text(() => `${count.value} items`)``. See [ADR 0001](docs/adr/0001-reactivity.md).
+
 ### Conditional rendering — `Show`
 
 ```javascript
