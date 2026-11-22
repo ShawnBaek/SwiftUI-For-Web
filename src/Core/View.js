@@ -27,6 +27,7 @@ import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHin
 import { ChangeTracker } from './ChangeTracker.js';
 import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { gestureAllowed } from '../Gesture/Gesture.js';
 import { createModifier, ModifierType } from './ViewDescriptor.js';
 import { installReactiveModifier } from './SignalRenderer.js';
 import { applyModifiers } from './Renderer.js';
@@ -449,7 +450,9 @@ export class View {
     return this.modifier({
       apply(element) {
         element.style.cursor = 'pointer';
-        delegateEvent(element, 'click', handler);
+        delegateEvent(element, 'click', (event) => {
+          if (gestureAllowed(element, 'tap')) handler(event);
+        });
       }
     });
   }

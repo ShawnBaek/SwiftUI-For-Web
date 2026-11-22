@@ -23,6 +23,8 @@ import {
 import { acquireElement, releaseTree, onRelease } from './ElementPool.js';
 import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { gestureAllowed } from '../Gesture/Gesture.js';
+import { removeWithTransition } from '../Animation/Animation.js';
 import { isHydrating, hydrationFrame } from './Hydration.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
@@ -545,8 +547,12 @@ function applyModifier(element, modifier) {
 
     case ModifierType.ON_TAP:
       element.style.cursor = 'pointer';
-      // Use event delegation instead of direct listener
-      delegateEvent(element, 'click', value);
+      // Use event delegation instead of direct listener. A tap is a tap
+      // gesture: a .highPriorityGesture(TapGesture()) on this view or an
+      // ancestor wins over it.
+      delegateEvent(element, 'click', function onTapGesture(event) {
+        if (gestureAllowed(element, 'tap')) value.call(this, event);
+      });
       break;
 
     case ModifierType.ON_APPEAR:
@@ -667,14 +673,30 @@ function showTopTitle() {
   if (!top) baseTitle = null;
 }
 
-// Views are attached after they render: check the order again then.
+// Views are attached after they render: check the order again then. An
+// entry whose view is still not in the document (attached later from a
+// frame, a timer or after an await) is checked again when it appears, through
+// the shared lifecycle observer.
 function queueTitleCheck() {
   if (titleCheckQueued) return;
   titleCheckQueued = true;
   queueMicrotask(() => {
     titleCheckQueued = false;
-    if (titleStack.length) showTopTitle();
+    if (!titleStack.length) return;
+    showTopTitle();
+    for (const entry of titleStack) watchTitleAttach(entry);
   });
+}
+
+function watchTitleAttach(entry) {
+  const element = entry.element;
+  if (entry.onAttach || !element || element.isConnected !== false) return;
+  if (typeof MutationObserver !== 'function') return;
+  entry.onAttach = () => {
+    entry.onAttach = null;
+    if (titleStack.includes(entry)) showTopTitle();
+  };
+  onAppear(element, entry.onAttach);
 }
 
 function applyNavigationTitle(element, value) {
@@ -686,7 +708,7 @@ function applyNavigationTitle(element, value) {
     return;
   }
   if (titleStack.length === 0) baseTitle = document.title;
-  const entry = { text: '', element };
+  const entry = { text: '', element, onAttach: null };
   titleStack.push(entry);
   if (isSignalValue(value)) {
     createEffect(() => {
@@ -701,6 +723,10 @@ function applyNavigationTitle(element, value) {
   onCleanup(() => {
     const index = titleStack.indexOf(entry);
     if (index !== -1) titleStack.splice(index, 1);
+    if (entry.onAttach) {
+      cancelAppear(element, entry.onAttach);
+      entry.onAttach = null;
+    }
     showTopTitle();
   });
 }
@@ -1305,6 +1331,18 @@ registerRenderer('ForEach', (props, children) => {
 // signal owner — the SignalRenderer's mount() establishes that root.
 // ---------------------------------------------------------------------------
 
+// Remove a view's node: its effects are already disposed. A view with a
+// .transition stays in the document while the removal animation runs
+// (removeWithTransition); otherwise it goes now.
+function removeNode(node) {
+  if (!node) return;
+  const release = () => {
+    if (node.parentNode) node.parentNode.removeChild(node);
+    releaseTree(node);
+  };
+  if (!removeWithTransition(node, release)) release();
+}
+
 // Show — reactive conditional branch
 registerRenderer('Show', (props) => {
   const { when, then: thenView, else: elseView } = props;
@@ -1322,10 +1360,7 @@ registerRenderer('Show', (props) => {
     lastBranch = branch;
 
     if (currentDispose) { currentDispose(); currentDispose = null; }
-    if (currentNode && currentNode.parentNode) {
-      currentNode.parentNode.removeChild(currentNode);
-    }
-    if (currentNode) releaseTree(currentNode);
+    removeNode(currentNode);
     currentNode = null;
 
     const view = truthy ? thenView : elseView;
@@ -1400,10 +1435,7 @@ registerRenderer('For', (props) => {
     for (const [key, entry] of rows) {
       if (!seen.has(key)) {
         entry.dispose();
-        if (entry.node && entry.node.parentNode) {
-          entry.node.parentNode.removeChild(entry.node);
-        }
-        if (entry.node) releaseTree(entry.node);
+        removeNode(entry.node);
         rows.delete(key);
       }
     }

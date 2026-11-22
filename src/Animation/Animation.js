@@ -22,6 +22,7 @@
  */
 
 import { nextElementId } from '../Core/ElementID.js';
+import { onRelease } from '../Core/ElementPool.js';
 
 // =============================================================================
 // Animation Class - Matches SwiftUI's Animation type
@@ -361,7 +362,11 @@ export class AnyTransition {
   constructor(options = {}) {
     this._insertion = options.insertion ?? {};
     this._removal = options.removal ?? {};
-    this._animation = options.animation ?? Animation.default;
+    // An animation given with .animation(_:) runs the removal even outside
+    // withAnimation; without one the transition needs a transaction.
+    this._explicitAnimation = options.animation ?? null;
+    this._removalAnimation = options.removalAnimation ?? this._explicitAnimation;
+    this._animation = this._explicitAnimation ?? Animation.default;
   }
 
   /**
@@ -471,7 +476,8 @@ export class AnyTransition {
     return new AnyTransition({
       insertion: { ...this._insertion, ...other._insertion },
       removal: { ...this._removal, ...other._removal },
-      animation: this._animation
+      animation: this._explicitAnimation ?? other._explicitAnimation,
+      removalAnimation: this._removalAnimation ?? other._removalAnimation
     });
   }
 
@@ -484,7 +490,8 @@ export class AnyTransition {
   static asymmetric(insertion, removal) {
     return new AnyTransition({
       insertion: insertion._insertion,
-      removal: removal._removal
+      removal: removal._removal,
+      removalAnimation: removal._removalAnimation
     });
   }
 
@@ -594,6 +601,14 @@ export function withAnimation(animationOrBody, body) {
   return animate(animationOrBody, body);
 }
 
+// Duration plus delay, in ms. `delay` is also the name of the instance
+// method that returns a delayed copy (the method replaces the getter), so
+// read the field.
+function totalMilliseconds(animation) {
+  const delay = typeof animation._delay === 'number' ? animation._delay : 0;
+  return (animation.duration + delay) * 1000;
+}
+
 /**
  * Runs imperative changes inside a SwiftUI-shaped animation transaction.
  *
@@ -637,7 +652,7 @@ export function animate(animationOrBody, body, completion) {
       requestAnimationFrame(() => {
         updateFn();
 
-        const totalMs = (animation.duration + (animation.delay ?? 0)) * 1000;
+        const totalMs = totalMilliseconds(animation);
         setTimeout(() => {
           _isAnimating = false;
           _currentAnimation = null;
@@ -709,7 +724,7 @@ export function animateStyles(element, animationOrStyles = Animation.default, st
   }
 
   const transition = properties
-    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation.delay}s`)
+    .map(property => `${property} ${animation.duration}s ${animation.timingFunction} ${animation._delay ?? 0}s`)
     .join(', ');
 
   element.style.transition = transition;
@@ -752,9 +767,12 @@ export function animationModifier(animation, value) {
 }
 
 /**
- * `.transition(_:)`: how the view appears when it is inserted inside
- * `withAnimation`. The element starts at the transition's insertion styles
- * and animates to its normal styles.
+ * `.transition(_:)`: how the view appears and disappears. An element
+ * inserted inside `withAnimation` starts at the transition's insertion
+ * styles and animates to its normal styles. An element removed inside
+ * `withAnimation`, or whose transition carries an animation
+ * (`AnyTransition.opacity.animation(...)`), animates to the removal styles
+ * before it leaves the document (see removeWithTransition).
  *
  * @see https://developer.apple.com/documentation/swiftui/view/transition(_:)
  * @param {AnyTransition} transition
@@ -764,11 +782,13 @@ export function transitionModifier(transition) {
   return {
     transition: trans,
     apply(element) {
-      // Stored for removal-aware containers.
+      // Read by removeWithTransition when the view is removed.
       element._swiftuiTransition = trans;
+      // Insertion runs inside withAnimation only: the first render (and a
+      // hydrating one) must not start transparent.
       if (!_isAnimating) return undefined;
-
       const animation = _currentAnimation ?? Animation.default;
+
       const insertion = trans.insertion;
       const previous = {};
       for (const key of Object.keys(insertion)) previous[key] = element.style[key] || '';
@@ -788,6 +808,118 @@ export function transitionModifier(transition) {
       };
     }
   };
+}
+
+// Elements whose `.transition` runs when `node` is removed: the node itself,
+// or the view inside modifier layers, navigation screen wrappers and
+// `display: contents` wrappers (Show, For, ForEach).
+function transitionTargets(node, out = []) {
+  if (!node || node.nodeType !== 1) return out;
+  if (node._swiftuiTransition) {
+    out.push(node);
+    return out;
+  }
+  const dataset = node.dataset;
+  if (dataset && (dataset.modifierLayer !== undefined || dataset.navigationScreen !== undefined)) {
+    transitionTargets(node.children?.[0], out);
+  } else if (node.style && node.style.display === 'contents' && node.children) {
+    for (const child of Array.from(node.children)) transitionTargets(child, out);
+  }
+  return out;
+}
+
+/** Nodes waiting for their removal transition to finish. */
+const _lingering = new WeakSet();
+
+/**
+ * Run the removal half of the `.transition` of the view(s) in `node`, then
+ * call `finish` (which removes and releases the node). Returns false, and
+ * does nothing, when there is nothing to animate: no transition, no
+ * animation (outside `withAnimation`, with no animation on the transition),
+ * reduced motion, or a node that isn't in the document. The caller then
+ * removes the node right away.
+ *
+ * Only the element lingers: the caller disposes the view's effects first.
+ * While it lingers the node takes no pointer events and is hidden from
+ * assistive technology. If it is released meanwhile (its container went
+ * away), the pending removal is cancelled.
+ *
+ * @param {Node} node - The node about to be removed
+ * @param {() => void} finish - Removes and releases the node
+ * @returns {boolean} Whether removal was deferred
+ * @internal
+ */
+export function removeWithTransition(node, finish) {
+  if (!node || node.nodeType !== 1) return false;
+  if (_lingering.has(node)) return true;
+  const targets = transitionTargets(node);
+  if (targets.length === 0 || !node.isConnected || prefersReducedMotion()) return false;
+
+  const plays = [];
+  let longest = 0;
+  for (const target of targets) {
+    const trans = target._swiftuiTransition;
+    const animation = _isAnimating ? (_currentAnimation ?? Animation.default) : trans._removalAnimation;
+    const removal = trans.removal;
+    if (!animation || !removal || Object.keys(removal).length === 0) continue;
+    plays.push({ target, animation, removal });
+    longest = Math.max(longest, totalMilliseconds(animation));
+  }
+  if (plays.length === 0) return false;
+
+  _lingering.add(node);
+  node.style.pointerEvents = 'none';
+  if (typeof node.setAttribute === 'function') node.setAttribute('aria-hidden', 'true');
+
+  const players = [];
+  const cssPlays = [];
+  let frame = null;
+  let timer = null;
+  let done = false;
+  const end = (removeNow) => {
+    if (done) return;
+    done = true;
+    _lingering.delete(node);
+    if (timer) clearTimeout(timer);
+    if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+    for (const player of players) {
+      try { player.cancel(); } catch { /* already finished */ }
+    }
+    if (removeNow) finish();
+  };
+
+  for (const play of plays) {
+    if (typeof play.target.animate === 'function') {
+      try {
+        players.push(play.target.animate([play.removal], {
+          ...play.animation.toWAAPIOptions(),
+          iterations: 1,
+          direction: 'normal',
+          fill: 'forwards'
+        }));
+        continue;
+      } catch {
+        // Fall through to a CSS transition.
+      }
+    }
+    play.target.style.transition = play.animation.toCSS();
+    cssPlays.push(play);
+  }
+  if (cssPlays.length > 0) {
+    const toRemoval = () => {
+      frame = null;
+      for (const play of cssPlays) Object.assign(play.target.style, play.removal);
+    };
+    if (typeof requestAnimationFrame === 'function') frame = requestAnimationFrame(toRemoval);
+    else toRemoval();
+  }
+
+  timer = setTimeout(() => {
+    timer = null;
+    end(true);
+  }, longest);
+  onRelease(node, () => end(false));
+  return true;
 }
 
 /**
@@ -857,7 +989,7 @@ export function isViewTransitionSupported() {
  * @returns {boolean}
  */
 export function prefersReducedMotion() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 

@@ -130,11 +130,20 @@ export function releaseCallbacks(element) {
 
 /**
  * Drop an element's pending onAppear, for example when the owner that rendered
- * it is disposed before the element was ever attached.
+ * it is disposed before the element was ever attached. With `callback`, only
+ * that callback is dropped and the element's others stay.
  *
  * @param {HTMLElement} element
+ * @param {Function} [callback]
  */
-export function cancelAppear(element) {
+export function cancelAppear(element, callback) {
+  if (callback) {
+    const callbacks = _appearCallbacks.get(element);
+    const index = callbacks ? callbacks.indexOf(callback) : -1;
+    if (index === -1) return;
+    callbacks.splice(index, 1);
+    if (callbacks.length > 0) return;
+  }
   if (_appearCallbacks.delete(element)) {
     _newAppearElements.delete(element);
     maybeDisconnectObserver();

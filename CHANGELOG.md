@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Gesture composition (#50): `.simultaneousGesture(_:including:)`,
+  `.highPriorityGesture(_:including:)` and `.gesture(_:including:)` with
+  `GestureMask` (`all`, `gesture`, `subviews`, `none`), on every descriptor
+  view and the legacy `View`. A high-priority gesture wins over gestures of
+  the same kind on the view and inside it: a high-priority tap on a parent
+  beats a child's `TapGesture` and `.onTapGesture`, and a high-priority drag
+  keeps a child drag from starting. A simultaneous gesture recognizes
+  together with the view's own gestures. Arbitration is a check each
+  recognizer makes before it starts or fires; it costs nothing until a view
+  uses one of these modifiers. Limitations are listed in
+  `docs/parity-audit.md`.
+- Removal transitions (#50): a view with `.transition(_:)` that Show, For (or
+  a reactive `ForEach`) or a NavigationStack pop removes stays in the
+  document while its removal animation runs (opacity, scale, slide, move,
+  and the removal half of `AnyTransition.asymmetric`), then is removed and
+  released. Its effects are disposed at once; the lingering element takes no
+  pointer events and is `aria-hidden`. Removal animates inside
+  `withAnimation` or when the transition carries an animation
+  (`AnyTransition.opacity.animation(...)`). With `prefers-reduced-motion`,
+  no transition or no animation, removal stays immediate and synchronous.
+- `.navigationTitle` now updates when its view is attached after the render
+  (from a frame, a timer or after an `await`): an entry whose view isn't in
+  the document yet is checked again when it appears, through the shared
+  lifecycle observer, and the watcher is dropped when the view is disposed.
+  `cancelAppear(element, callback)` can drop a single callback.
+- Fixed: `withAnimation` resolved (and ran its completion) right after its
+  first two frames instead of after the animation, because it added the
+  `delay()` method instead of the delay value; `animateStyles`' CSS fallback wrote the method
+  into the transition string the same way.
 - AppleSampleCode proof case (Refs #40): `Examples/AppleSampleCodeProof`
   renders AppleSampleCode's Core NFC framework collection page with
   `renderDocument`, and `Tests/Server/AppleSampleCodeProofTests.js` checks

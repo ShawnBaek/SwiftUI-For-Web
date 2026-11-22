@@ -45,7 +45,7 @@ class only, not onto `View`, so it isn't part of this comparison.
 | `.onDrag(onChanged, onEnded)` | `DragGesture` with both handlers | Missing | `dragGestureModifier`. The document-level mouse listeners are removed too. |
 | `.mask(_:alignment)` | clip-path for `CircleView`, `EllipseView`, `RectangleView` only | Missing | `ModifierType.MASK`, `applyMask` in the renderer: clip-path for circle, ellipse, capsule, rounded rectangle and rectangle (shape views, descriptors or names), and mask-image for gradients. A new `mask` layer category: background, border, padding, frame or shadow after a mask go on an outer layer. |
 | `.contentShape(_:eoFill:)` | Same as `clipShape` | Missing | `ModifierType.CONTENT_SHAPE`, `applyContentShape`: the box is hit-testable (`pointer-events: auto`), a rounded shape rounds it like `clipShape`. A rectangle no longer clips drawing, matching SwiftUI. |
-| `simultaneousGesture`, `highPriorityGesture` | Not present | Not present | Not added: the rule is parity with what worked before. |
+| `simultaneousGesture`, `highPriorityGesture`, `gesture(_:including:)` | Not present | Not present | Added after the audit (#50), on descriptors and the legacy `View`: see [Gesture composition](#gesture-composition). |
 | `body`, `getElement`, `rerender`, `trackChanges` | Imperative legacy API | Not present | Not applicable: descriptors are immutable and render through `render()`; there is no element to fetch or re-render in place. |
 
 The other 31 names (`padding`, `frame`, …, `environment`, `tag`, `tabItem`,
@@ -84,3 +84,54 @@ numbers only.
 - `Tests/Core/GestureAnimationTests.js` in `Tests/TestRunner.html` (headless
   Chrome via `npm run test:browser`): real mouse and wheel events, computed
   transition and clip-path, listener release on unmount.
+
+## Gesture composition
+
+Added after the audit (#50). Each element records what it claims, and every
+recognizer (and `.onTapGesture`) asks `gestureAllowed(element, kind,
+priority)` in `src/Gesture/Gesture.js` before it starts or fires. Kinds are
+`tap`, `longPress`, `drag`, `magnification` and `rotation`.
+
+- `.highPriorityGesture(g)` wins over gestures of the same kind on the view
+  (its `.gesture`) and inside it (every priority). A high-priority tap on a
+  parent beats a child's `TapGesture` and `.onTapGesture`; a high-priority
+  drag keeps a child drag from starting.
+- `.simultaneousGesture(g)` recognizes together with the view's own
+  gestures, including its high-priority one.
+- `.gesture(g, { including: GestureMask.… })`: `gesture` disables the
+  gestures inside the view, `subviews` disables `g`, `none` disables both.
+- Claims are released with the gesture's listeners (element release or owner
+  cleanup).
+
+## Removal transitions
+
+`.transition(_:)` now also animates removal (#50). Show, For (and a reactive
+`ForEach`) and a NavigationStack pop without the stack's own animation keep
+the removed view's element in the document while the transition's removal
+styles animate (Web Animations, or a CSS transition where `animate` is
+missing), then remove and release it. Effects are disposed at once; only the
+element lingers, without pointer events and with `aria-hidden`. Removal
+animates inside `withAnimation`, or when the transition carries an animation
+(`AnyTransition.opacity.animation(...)`); with `prefers-reduced-motion`, no
+transition or no animation, it is immediate and synchronous.
+
+## Still missing
+
+- Default exclusivity between plain `.gesture`s: a parent's and a child's
+  `.gesture` of the same kind both fire (SwiftUI lets the child win). Use
+  `.highPriorityGesture` or `GestureMask` to choose.
+- A high-priority gesture takes the interaction even when it fails: a
+  high-priority `TapGesture(2)` blocks a single tap of the same view or its
+  subviews. SwiftUI would hand the tap on once the double tap fails.
+- Gestures of different kinds don't arbitrate (a drag does not cancel a tap),
+  and `Button` actions are not gestures here, so a high-priority tap on a
+  parent doesn't stop a child `Button`.
+- `SequenceGesture`, `ExclusiveGesture`, `.sequenced(before:)`,
+  `.exclusively(before:)`, `@GestureState` and `.updating(_:body:)`.
+- Insertion transitions still run only inside `withAnimation`; an animation
+  attached to the transition animates removal only, so the first render and
+  a hydrating render never start transparent.
+- A NavigationStack push or pop with the stack's own slide or fade
+  animation doesn't run the screen's `.transition`.
+- Combined transitions that both set `transform` (`scale` with `move`) keep
+  only the last one's transform.

@@ -133,7 +133,18 @@ export class View {
    * Add a gesture recognizer.
    * @see https://developer.apple.com/documentation/swiftui/view/gesture(_:including:)
    */
-  gesture(gesture: Gesture): this;
+  gesture(gesture: Gesture, options?: GestureOptions): this;
+  /**
+   * Recognize `gesture` together with this view's own gestures.
+   * @see https://developer.apple.com/documentation/swiftui/view/simultaneousgesture(_:including:)
+   */
+  simultaneousGesture(gesture: Gesture, options?: GestureOptions): this;
+  /**
+   * `gesture` wins over this view's and its subviews' gestures of the same
+   * kind (a tap over taps, a drag over drags).
+   * @see https://developer.apple.com/documentation/swiftui/view/highprioritygesture(_:including:)
+   */
+  highPriorityGesture(gesture: Gesture, options?: GestureOptions): this;
   /** Handle a drag: `onChanged` while dragging, `onEnded` on release. */
   onDrag(onChanged?: (value: DragGestureValue) => void, onEnded?: (value: DragGestureValue) => void): this;
   /**
@@ -1351,6 +1362,24 @@ export class Namespace {
 export interface Gesture {
   onChanged(action: (value: any) => void): Gesture;
   onEnded(action: (value: any) => void): Gesture;
+}
+
+/**
+ * Which gestures `.gesture(_:including:)` enables.
+ * @see https://developer.apple.com/documentation/swiftui/gesturemask
+ */
+export type GestureMaskValue = 'all' | 'gesture' | 'subviews' | 'none';
+export const GestureMask: {
+  readonly all: 'all';
+  readonly gesture: 'gesture';
+  readonly subviews: 'subviews';
+  readonly none: 'none';
+};
+
+/** Options of `.gesture`, `.simultaneousGesture` and `.highPriorityGesture`. */
+export interface GestureOptions {
+  /** Default `GestureMask.all`. */
+  including?: GestureMaskValue;
 }
 
 /** Tap gesture */

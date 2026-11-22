@@ -20,7 +20,8 @@ import { isDescriptor } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { State } from '../../Data/State.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
-import { releaseChildren, releaseTree } from '../../Core/ElementPool.js';
+import { releaseTree } from '../../Core/ElementPool.js';
+import { removeWithTransition } from '../../Animation/Animation.js';
 
 /**
  * Global navigation context for nested NavigationLinks
@@ -156,6 +157,8 @@ class NavigationStackView extends View {
 
     // Create new content
     const newContent = document.createElement('div');
+    // removeWithTransition looks through this wrapper for the screen's view.
+    newContent.dataset.navigationScreen = '';
     newContent.style.position = 'absolute';
     newContent.style.top = '0';
     newContent.style.left = '0';
@@ -179,8 +182,20 @@ class NavigationStackView extends View {
 
     if (!animated || this._transitionStyle === 'none') {
       // No animation. The slot already disposed the previous screen's
-      // effects, so its elements can go back to the pool.
-      releaseChildren(this._container);
+      // effects, so its elements can go back to the pool, after the
+      // screen's own .transition removal if it has one: it then lies over
+      // the incoming screen until the animation ends.
+      for (const child of Array.from(this._container.children)) {
+        const release = () => {
+          if (child.parentNode) child.parentNode.removeChild(child);
+          releaseTree(child);
+        };
+        if (removeWithTransition(child, release)) {
+          Object.assign(child.style, { position: 'absolute', top: '0', left: '0', width: '100%' });
+        } else {
+          release();
+        }
+      }
       this._container.appendChild(newContent);
       newContent.style.position = 'relative';
       return;

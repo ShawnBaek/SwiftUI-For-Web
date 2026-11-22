@@ -37,6 +37,103 @@ function listenerGroup() {
   };
 }
 
+// =============================================================================
+// Gesture arbitration (#50): `.highPriorityGesture`, `.simultaneousGesture`
+// and `.gesture(_:including:)`.
+//
+// SwiftUI decides between competing gestures in its gesture graph. Here each
+// element records what it claims: high-priority gesture kinds, and whether
+// its subviews' gestures are masked off. A recognizer asks
+// `gestureAllowed(element, kind, priority)` before it starts or fires, which
+// walks the element and its ancestors. The walk only happens while some
+// element has a claim, so plain `.gesture` pays nothing.
+// =============================================================================
+
+/**
+ * Which gestures `.gesture(_:including:)` enables.
+ * @see https://developer.apple.com/documentation/swiftui/gesturemask
+ */
+export const GestureMask = Object.freeze({
+  /** This gesture and the subviews' gestures (the default). */
+  all: 'all',
+  /** This gesture only; gestures inside the view are disabled. */
+  gesture: 'gesture',
+  /** The subviews' gestures only; this gesture is disabled. */
+  subviews: 'subviews',
+  /** Neither this gesture nor the subviews' gestures. */
+  none: 'none'
+});
+
+/** @type {WeakMap<Element, { high: Map<string, number>, mask: number }>} */
+const _claims = new WeakMap();
+let _claimCount = 0;
+
+function claimsOf(element) {
+  let claims = _claims.get(element);
+  if (!claims) {
+    claims = { high: new Map(), mask: 0 };
+    _claims.set(element, claims);
+  }
+  return claims;
+}
+
+function claim(element, update, undo) {
+  const claims = claimsOf(element);
+  update(claims);
+  _claimCount++;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    undo(claims);
+    _claimCount--;
+  };
+}
+
+function claimHighPriority(element, kind) {
+  return claim(
+    element,
+    (claims) => claims.high.set(kind, (claims.high.get(kind) || 0) + 1),
+    (claims) => claims.high.set(kind, claims.high.get(kind) - 1)
+  );
+}
+
+function claimSubviewMask(element) {
+  return claim(element, (claims) => { claims.mask++; }, (claims) => { claims.mask--; });
+}
+
+/**
+ * Whether a gesture of `kind` on `element` may start or fire now.
+ *
+ * - A high-priority gesture of the same kind on an ancestor wins over every
+ *   gesture of that kind inside it.
+ * - A high-priority gesture on the element itself wins over the element's
+ *   own `.gesture` (priority 'normal'), but not over its
+ *   `.simultaneousGesture` or another high-priority gesture.
+ * - `.gesture(_, { including: GestureMask.gesture | GestureMask.none })` on
+ *   an ancestor disables every gesture inside it.
+ *
+ * @param {Element} element
+ * @param {string} kind - 'tap', 'longPress', 'drag', 'magnification', 'rotation'
+ * @param {'normal'|'simultaneous'|'high'} [priority]
+ * @returns {boolean}
+ * @internal
+ */
+export function gestureAllowed(element, kind, priority = 'normal') {
+  if (_claimCount === 0 || !element) return true;
+  for (let node = element; node; node = node.parentElement) {
+    const claims = _claims.get(node);
+    if (!claims) continue;
+    const high = claims.high.get(kind) > 0;
+    if (node === element) {
+      if (high && priority === 'normal') return false;
+    } else if (high || claims.mask > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Base Gesture class
  */
@@ -89,7 +186,9 @@ export class TapGestureRecognizer extends GestureBase {
     this._count = count;
   }
 
-  _apply(element) {
+  get _kind() { return 'tap'; }
+
+  _apply(element, { priority = 'normal' } = {}) {
     element.style.cursor = 'pointer';
     element.style.userSelect = 'none';
 
@@ -98,6 +197,7 @@ export class TapGestureRecognizer extends GestureBase {
     let tapTimer = null;
 
     listeners.on(element, 'click', (e) => {
+      if (!gestureAllowed(element, 'tap', priority)) return;
       const value = { location: { x: e.clientX, y: e.clientY } };
       if (this._count === 1) {
         if (this._onEndedHandler) this._onEndedHandler(value);
@@ -143,7 +243,9 @@ export class LongPressGestureRecognizer extends GestureBase {
     this._maximumDistance = options.maximumDistance ?? 10;
   }
 
-  _apply(element) {
+  get _kind() { return 'longPress'; }
+
+  _apply(element, { priority = 'normal' } = {}) {
     element.style.cursor = 'pointer';
     element.style.userSelect = 'none';
     element.style.webkitTouchCallout = 'none';
@@ -162,12 +264,14 @@ export class LongPressGestureRecognizer extends GestureBase {
     };
 
     const startHandler = (e) => {
+      if (!gestureAllowed(element, 'longPress', priority)) return;
       const point = e.touches ? e.touches[0] : e;
       startLocation = { x: point.clientX, y: point.clientY };
       if (timer) clearTimeout(timer);
 
       timer = setTimeout(() => {
         timer = null;
+        if (!gestureAllowed(element, 'longPress', priority)) return;
         const value = { location: startLocation, startLocation };
         if (this._onChangedHandler) this._onChangedHandler(value);
         if (this._onEndedHandler) this._onEndedHandler(value);
@@ -231,7 +335,9 @@ export class DragGestureRecognizer extends GestureBase {
     this._coordinateSpace = options.coordinateSpace ?? 'local';
   }
 
-  _apply(element) {
+  get _kind() { return 'drag'; }
+
+  _apply(element, { priority = 'normal' } = {}) {
     element.style.cursor = 'grab';
     element.style.userSelect = 'none';
 
@@ -257,6 +363,9 @@ export class DragGestureRecognizer extends GestureBase {
     });
 
     const startHandler = (e) => {
+      // A high-priority drag on this view or an ancestor keeps this one
+      // from starting.
+      if (!gestureAllowed(element, 'drag', priority)) return;
       startLocation = getPoint(e);
       currentLocation = startLocation;
       element.style.cursor = 'grabbing';
@@ -327,7 +436,9 @@ export class MagnificationGestureRecognizer extends GestureBase {
     this._minimumScaleDelta = options.minimumScaleDelta ?? 0.01;
   }
 
-  _apply(element) {
+  get _kind() { return 'magnification'; }
+
+  _apply(element, { priority = 'normal' } = {}) {
     element.style.touchAction = 'none';
 
     const listeners = listenerGroup();
@@ -337,7 +448,7 @@ export class MagnificationGestureRecognizer extends GestureBase {
     const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 
     const startHandler = (e) => {
-      if (e.touches && e.touches.length === 2) {
+      if (e.touches && e.touches.length === 2 && gestureAllowed(element, 'magnification', priority)) {
         initialDistance = getDistance(e.touches[0], e.touches[1]);
         magnification = 1;
       }
@@ -365,7 +476,7 @@ export class MagnificationGestureRecognizer extends GestureBase {
 
     // Trackpad pinch arrives as a wheel event with ctrlKey on desktop.
     listeners.on(element, 'wheel', (e) => {
-      if (e.ctrlKey) {
+      if (e.ctrlKey && gestureAllowed(element, 'magnification', priority)) {
         e.preventDefault();
         magnification *= e.deltaY > 0 ? 0.9 : 1.1;
         if (this._onChangedHandler) this._onChangedHandler({ magnification, velocity: 0 });
@@ -392,7 +503,9 @@ export class RotationGestureRecognizer extends GestureBase {
     this._minimumAngleDelta = options.minimumAngleDelta ?? 0.01;
   }
 
-  _apply(element) {
+  get _kind() { return 'rotation'; }
+
+  _apply(element, { priority = 'normal' } = {}) {
     element.style.touchAction = 'none';
 
     const listeners = listenerGroup();
@@ -402,7 +515,7 @@ export class RotationGestureRecognizer extends GestureBase {
     const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
 
     const startHandler = (e) => {
-      if (e.touches && e.touches.length === 2) {
+      if (e.touches && e.touches.length === 2 && gestureAllowed(element, 'rotation', priority)) {
         initialAngle = getAngle(e.touches[0], e.touches[1]);
         rotation = 0;
       }
@@ -446,20 +559,59 @@ export function RotationGesture(options = {}) {
 // =============================================================================
 
 /**
- * `.gesture(_:)`: attach a gesture recognizer.
+ * `.gesture(_:including:)`: attach a gesture recognizer.
+ *
+ * `options.including` is a GestureMask: `gesture` disables the gestures
+ * inside the view, `subviews` disables this one, `none` disables both.
+ * `options.priority` is set by `.simultaneousGesture` ('simultaneous') and
+ * `.highPriorityGesture` ('high'); see gestureAllowed().
+ *
  * @see https://developer.apple.com/documentation/swiftui/view/gesture(_:including:)
  * @param {GestureBase} gesture
+ * @param {{ including?: string, priority?: 'normal'|'simultaneous'|'high' }} [options]
  */
-export function gestureModifier(gesture) {
+export function gestureModifier(gesture, options = {}) {
+  const including = options?.including ?? GestureMask.all;
+  const priority = options?.priority ?? 'normal';
   return {
     gesture,
+    including,
+    priority,
     apply(element) {
-      if (gesture && typeof gesture._apply === 'function') {
-        return gesture._apply(element);
+      const disposers = [];
+      if (including === GestureMask.gesture || including === GestureMask.none) {
+        disposers.push(claimSubviewMask(element));
       }
-      return undefined;
+      const enabled = including === GestureMask.all || including === GestureMask.gesture;
+      if (enabled && gesture && typeof gesture._apply === 'function') {
+        if (priority === 'high' && gesture._kind) disposers.push(claimHighPriority(element, gesture._kind));
+        const dispose = gesture._apply(element, { priority });
+        if (typeof dispose === 'function') disposers.push(dispose);
+      }
+      if (disposers.length === 0) return undefined;
+      return () => {
+        while (disposers.length) disposers.pop()();
+      };
     }
   };
+}
+
+/**
+ * `.simultaneousGesture(_:including:)`: recognized together with the view's
+ * own gestures; the view's `.highPriorityGesture` doesn't block it.
+ * @see https://developer.apple.com/documentation/swiftui/view/simultaneousgesture(_:including:)
+ */
+export function simultaneousGestureModifier(gesture, options = {}) {
+  return gestureModifier(gesture, { ...options, priority: 'simultaneous' });
+}
+
+/**
+ * `.highPriorityGesture(_:including:)`: wins over the view's and its
+ * subviews' gestures of the same kind (a tap over taps, a drag over drags).
+ * @see https://developer.apple.com/documentation/swiftui/view/highprioritygesture(_:including:)
+ */
+export function highPriorityGestureModifier(gesture, options = {}) {
+  return gestureModifier(gesture, { ...options, priority: 'high' });
 }
 
 /**
@@ -486,8 +638,18 @@ const extendViewWithGestures = (ViewClass) => {
    * Attach a gesture recognizer to this view
    * @param {GestureBase} gesture - Gesture recognizer to attach
    */
-  ViewClass.prototype.gesture = function (gesture) {
-    return this.modifier(gestureModifier(gesture));
+  ViewClass.prototype.gesture = function (gesture, options = {}) {
+    return this.modifier(gestureModifier(gesture, options));
+  };
+
+  /** Recognize `gesture` together with this view's own gestures. */
+  ViewClass.prototype.simultaneousGesture = function (gesture, options = {}) {
+    return this.modifier(simultaneousGestureModifier(gesture, options));
+  };
+
+  /** `gesture` wins over this view's and its subviews' gestures of the same kind. */
+  ViewClass.prototype.highPriorityGesture = function (gesture, options = {}) {
+    return this.modifier(highPriorityGestureModifier(gesture, options));
   };
 
   /**

@@ -202,6 +202,25 @@ class MockElement {
     return global.document?.contains(this) || false;
   }
 
+  // Document order, for .navigationTitle's title stack: 4 when `other`
+  // follows this node (or is inside it), 2 when it precedes it.
+  compareDocumentPosition(other) {
+    const path = (node) => {
+      const chain = [];
+      for (let at = node; at; at = at.parentNode) chain.unshift(at);
+      return chain;
+    };
+    const a = path(this);
+    const b = path(other);
+    if (a[0] !== b[0]) return 1; // DISCONNECTED
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    if (i === a.length) return 16 | 4; // other is inside this
+    if (i === b.length) return 8 | 2; // other contains this
+    const siblings = a[i - 1].children;
+    return siblings.indexOf(b[i]) > siblings.indexOf(a[i]) ? 4 : 2;
+  }
+
   addEventListener(event, handler) {
     this._eventListeners[event] = this._eventListeners[event] || [];
     this._eventListeners[event].push(handler);
@@ -4212,6 +4231,284 @@ async function runTests() {
       element.dispatchEvent(mouse('mousedown', 0, 0));
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(presses).toBe(1);
+    });
+
+    // Gesture composition (#50): .simultaneousGesture, .highPriorityGesture,
+    // .gesture(_:including:).
+    describe('Gesture composition: simultaneous, high priority, GestureMask', () => {
+      const { TapGesture, DragGesture, GestureMask, gestureAllowed } = GestureModule;
+      const tap = (log, name) => TapGesture().onEnded(() => log.push(name));
+      const mountAttached = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, teardown: () => { app.unmount(); root.remove(); } };
+      };
+      const firstText = (root) => findAll(root, (n) => n.dataset?.view === 'Text')[0];
+
+      it('every descriptor and the legacy View have simultaneousGesture and highPriorityGesture', () => {
+        for (const view of [ModifierText('a'), VStack(ModifierText('a')), Button('b', () => {}), ModifierText('a').padding(2).bold()]) {
+          expect(typeof view.simultaneousGesture).toBe('function');
+          expect(typeof view.highPriorityGesture).toBe('function');
+        }
+        expect(Object.isFrozen(ModifierText('a').highPriorityGesture(TapGesture()))).toBe(true);
+        expect(typeof LegacyView.prototype.simultaneousGesture).toBe('function');
+        expect(typeof LegacyView.prototype.highPriorityGesture).toBe('function');
+      });
+
+      it("a high-priority tap on a parent beats the child's TapGesture and onTapGesture", () => {
+        const log = [];
+        const { root, teardown } = mountAttached(() => VStack(
+          ModifierText('child').gesture(tap(log, 'child')).onTapGesture(() => log.push('onTap'))
+        ).highPriorityGesture(tap(log, 'parent')));
+        firstText(root).dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['parent']);
+        teardown();
+      });
+
+      it("on one view, a high-priority tap beats .gesture but not .simultaneousGesture", () => {
+        const log = [];
+        const element = render(ModifierText('x')
+          .gesture(tap(log, 'own'))
+          .highPriorityGesture(tap(log, 'high'))
+          .simultaneousGesture(tap(log, 'sim')));
+        element.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['high', 'sim']);
+      });
+
+      it('without a high-priority gesture, .gesture and .simultaneousGesture both fire', () => {
+        const log = [];
+        const element = render(ModifierText('x').gesture(tap(log, 'own')).simultaneousGesture(tap(log, 'sim')));
+        element.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['own', 'sim']);
+      });
+
+      it('a high-priority drag on a parent keeps a child drag from starting; a child tap still fires', () => {
+        const log = [];
+        const childDrag = DragGesture({ minimumDistance: 0 }).onChanged(() => log.push('child drag'));
+        const parentDrag = DragGesture({ minimumDistance: 0 }).onEnded((v) => log.push('parent ' + v.translation.width));
+        const { root, teardown } = mountAttached(() => VStack(
+          ModifierText('c').gesture(childDrag).gesture(tap(log, 'child tap'))
+        ).highPriorityGesture(parentDrag));
+        const child = firstText(root);
+        child.dispatchEvent(mouse('mousedown', 0, 0));
+        document.dispatchEvent(mouse('mousemove', 12, 0));
+        document.dispatchEvent(mouse('mouseup', 12, 0));
+        child.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['parent 12', 'child tap']);
+        teardown();
+      });
+
+      it('.gesture(_, { including }) masks the subviews, the gesture, or both', () => {
+        const run = (including) => {
+          const log = [];
+          const parent = render(VStack(ModifierText('c').gesture(tap(log, 'child'))).gesture(tap(log, 'parent'), { including }));
+          findAll(parent, (n) => n.dataset?.view === 'Text')[0].dispatchEvent(new MockEvent('click'));
+          return log;
+        };
+        expect(run(GestureMask.all)).toEqual(['child', 'parent']);
+        expect(run(GestureMask.gesture)).toEqual(['parent']);
+        expect(run(GestureMask.subviews)).toEqual(['child']);
+        expect(run(GestureMask.none)).toEqual([]);
+      });
+
+      it('claims are released with the view: the child tap works again after the parent is disposed', () => {
+        const log = [];
+        const child = render(ModifierText('c').gesture(tap(log, 'child')));
+        let parent = null;
+        const dispose = Signal.createRoot((d) => {
+          parent = render(VStack(ModifierText('x')).highPriorityGesture(TapGesture()));
+          return d;
+        });
+        parent.appendChild(child);
+        expect(gestureAllowed(child, 'tap')).toBe(false);
+        dispose();
+        expect(gestureAllowed(child, 'tap')).toBe(true);
+        child.dispatchEvent(new MockEvent('click'));
+        expect(log).toEqual(['child']);
+      });
+    });
+
+    // Removal transitions (#50): a removed view with a .transition stays in
+    // the document while the removal animation runs.
+    {
+      const { AnyTransition, Animation } = AnimationModule;
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const mountAttached = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, wrapper: root.children[0].children[0], teardown: () => { app.unmount(); root.remove(); } };
+      };
+
+      await itAsync('Show: a view with a transition lingers for its removal animation; effects stop at once', async () => {
+        const shown = new State(true);
+        const n = new State(0);
+        let runs = 0;
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.03));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value,
+          ModifierText(() => { runs++; return 'n' + n.value; }).transition(fade))));
+        const node = wrapper.children[0];
+        shown.value = false;
+        Scheduler.flushSync();
+        expect(wrapper.children.includes(node)).toBe(true);
+        expect(node.style.pointerEvents).toBe('none');
+        expect(node.getAttribute('aria-hidden')).toBe('true');
+        const runsAtRemoval = runs;
+        n.value = 1;
+        Scheduler.flushSync();
+        expect(runs).toBe(runsAtRemoval);
+        await wait(5);
+        expect(wrapper.children.includes(node)).toBe(true);
+        expect(node.style.opacity).toBe('0');
+        expect(node.style.transition).toBe(Animation.linear(0.03).toCSS());
+        await wait(50);
+        expect(wrapper.children.includes(node)).toBe(false);
+        teardown();
+      });
+
+      await itAsync('without a transition, or outside an animation, removal is immediate', async () => {
+        const shown = new State(true);
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value,
+          ModifierText('plain'))));
+        shown.value = false;
+        Scheduler.flushSync();
+        expect(wrapper.children.length).toBe(0);
+        teardown();
+        // A transition with no animation, outside withAnimation: immediate.
+        const again = new State(true);
+        const second = mountAttached(() => VStack(Show(() => again.value, ModifierText('t').transition(AnyTransition.opacity))));
+        again.value = false;
+        Scheduler.flushSync();
+        expect(second.wrapper.children.length).toBe(0);
+        second.teardown();
+      });
+
+      await itAsync('withAnimation animates removal with its animation; asymmetric uses the removal half', async () => {
+        const shown = new State(true);
+        const slideOut = AnyTransition.asymmetric(AnyTransition.opacity, AnyTransition.move('trailing'));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value, ModifierText('m').transition(slideOut))));
+        const node = wrapper.children[0];
+        await AnimationModule.withAnimation(Animation.linear(0.02), () => {
+          shown.value = false;
+          Scheduler.flushSync();
+          expect(wrapper.children.includes(node)).toBe(true);
+        });
+        // withAnimation resolves after the animation's duration.
+        await wait(30);
+        expect(wrapper.children.includes(node)).toBe(false);
+        teardown();
+      });
+
+      await itAsync('For: a removed row lingers, the others update; prefers-reduced-motion removes at once', async () => {
+        const items = new State([{ id: 'a' }, { id: 'b' }]);
+        const fade = AnyTransition.scale().animation(Animation.linear(0.02));
+        const { wrapper, teardown } = mountAttached(() => VStack(For(() => items.value,
+          (item) => ModifierText(item.id).transition(fade), (item) => item.id)));
+        const rowA = wrapper.children[0];
+        items.value = [items.value[1]];
+        Scheduler.flushSync();
+        expect(wrapper.children.includes(rowA)).toBe(true);
+        await wait(40);
+        expect(wrapper.children.map((row) => row.textContent)).toEqual(['b']);
+
+        const previousWindow = globalThis.window;
+        globalThis.window = { matchMedia: () => ({ matches: true }) };
+        try {
+          items.value = [];
+          Scheduler.flushSync();
+          expect(wrapper.children.length).toBe(0);
+        } finally {
+          globalThis.window = previousWindow;
+        }
+        teardown();
+      });
+
+      await itAsync('unmounting while a view lingers cancels the pending removal', async () => {
+        const shown = new State(true);
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.02));
+        const { wrapper, teardown } = mountAttached(() => VStack(Show(() => shown.value, ModifierText('x').transition(fade))));
+        const node = wrapper.children[0];
+        shown.value = false;
+        Scheduler.flushSync();
+        teardown();
+        // The element went back to the pool with its container; a view that
+        // reuses it must not lose it to the old timer.
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        host.appendChild(node);
+        await wait(40);
+        expect(node.parentNode).toBe(host);
+        host.remove();
+      });
+
+      await itAsync('NavigationStack pop: the popped screen lingers over the root for its transition', async () => {
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(ModifierText('Home'), { transitionStyle: 'none' }))).mount(root);
+        const fade = AnyTransition.opacity.animation(Animation.linear(0.02));
+        stack.push(() => ModifierText('Detail').transition(fade), '', false);
+        const container = stack._container;
+        const detail = container.children[0];
+        stack.pop(false);
+        expect(container.children.length).toBe(2);
+        expect(detail.style.position).toBe('absolute');
+        await wait(40);
+        expect(container.children.length).toBe(1);
+        expect(container.children.includes(detail)).toBe(false);
+        app.unmount();
+        root.remove();
+      });
+
+      globalThis.requestAnimationFrame = previousRAF;
+    }
+
+    // .navigationTitle of a view attached later (rAF, setTimeout, await).
+    await itAsync('.navigationTitle updates when a titled view is attached later, and leaves no watcher after cleanup', async () => {
+      const LifecycleModuleForTitle = await import('./src/Core/LifecycleObserver.js');
+      const previousObserver = globalThis.MutationObserver;
+      globalThis.MutationObserver = class { observe() {} disconnect() {} };
+      const previousTitle = document.title;
+      document.title = 'Page';
+      try {
+        const first = document.createElement('div');
+        document.body.appendChild(first);
+        const appA = App(() => VStack(ModifierText('a')).navigationTitle('A')).mount(first);
+        expect(document.title).toBe('A');
+
+        // Rendered into a detached host, attached after an await.
+        const later = document.createElement('div');
+        const appB = App(() => VStack(ModifierText('b')).navigationTitle('B')).mount(later);
+        await Promise.resolve();
+        expect(document.title).toBe('A');
+        const pending = LifecycleModuleForTitle.getLifecycleStats().pendingAppear;
+        expect(pending >= 1).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        document.body.appendChild(later);
+        LifecycleModuleForTitle.flushLifecycleCallbacks();
+        expect(document.title).toBe('B');
+        appB.unmount();
+        later.remove();
+        expect(document.title).toBe('A');
+
+        // Disposed before it was ever attached: the watcher goes with it.
+        const never = document.createElement('div');
+        const appC = App(() => VStack(ModifierText('c')).navigationTitle('C')).mount(never);
+        await Promise.resolve();
+        const watching = LifecycleModuleForTitle.getLifecycleStats().pendingAppear;
+        appC.unmount();
+        expect(LifecycleModuleForTitle.getLifecycleStats().pendingAppear).toBe(watching - 1);
+        appA.unmount();
+        first.remove();
+        expect(document.title).toBe('Page');
+      } finally {
+        LifecycleModuleForTitle.flushLifecycleCallbacks();
+        globalThis.MutationObserver = previousObserver;
+        document.title = previousTitle;
+      }
     });
 
     // Summary

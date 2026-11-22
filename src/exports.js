@@ -206,6 +206,7 @@ import {
   DragGesture, DragGestureRecognizer,
   MagnificationGesture, MagnificationGestureRecognizer,
   RotationGesture, RotationGestureRecognizer,
+  GestureMask,
   extendViewWithGestures
 } from './Gesture/Gesture.js';
 
@@ -348,6 +349,7 @@ export {
   DragGesture, DragGestureRecognizer,
   MagnificationGesture, MagnificationGestureRecognizer,
   RotationGesture, RotationGestureRecognizer,
+  GestureMask,
   extendViewWithGestures,
 
   // App

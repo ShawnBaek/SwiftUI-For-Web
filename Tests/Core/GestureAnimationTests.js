@@ -13,6 +13,7 @@ import { State } from '../../src/Data/State.js';
 import { Circle } from '../../src/Shape/Shape.js';
 import { flushSync } from '../../src/Core/Scheduler.js';
 import { TapGesture, DragGesture, MagnificationGesture } from '../../src/Gesture/Gesture.js';
+import { For } from '../../src/View/ControlFlow/For.js';
 import { Animation, AnyTransition, Namespace, withAnimation } from '../../src/Animation/Animation.js';
 
 const attachedRoot = () => {
@@ -125,6 +126,113 @@ describe('Gestures and animation on descriptor views (browser)', () => {
       expect(getComputedStyle(masked).clipPath).toBe('circle(50%)');
       expect(getComputedStyle(hero).viewTransitionName).toBe(ns.name('hero'));
     } finally {
+      app.unmount();
+      root.remove();
+    }
+  });
+});
+
+describe('Gesture arbitration (browser)', () => {
+  it('a high-priority tap on a parent beats the child tap; the parent\'s simultaneous tap still fires', () => {
+    const root = attachedRoot();
+    const log = [];
+    const app = App(() => VStack(
+      Text('child')
+        .gesture(TapGesture().onEnded(() => log.push('child gesture')))
+        .onTapGesture(() => log.push('child onTapGesture'))
+    )
+      .highPriorityGesture(TapGesture().onEnded(() => log.push('parent high')))
+      .simultaneousGesture(TapGesture().onEnded(() => log.push('parent simultaneous')))).mount(root);
+    try {
+      root.querySelector('span').dispatchEvent(mouse('click', 1, 1));
+      expect(log).toEqual(['parent high', 'parent simultaneous']);
+    } finally {
+      app.unmount();
+      root.remove();
+    }
+  });
+
+  it('a high-priority drag on a parent keeps the child drag from starting', () => {
+    const root = attachedRoot();
+    const log = [];
+    const app = App(() => VStack(
+      Text('child').gesture(DragGesture({ minimumDistance: 0 }).onChanged(() => log.push('child')))
+    ).highPriorityGesture(DragGesture({ minimumDistance: 0 }).onEnded((v) => log.push('parent ' + v.translation.width)))).mount(root);
+    try {
+      root.querySelector('span').dispatchEvent(mouse('mousedown', 0, 0));
+      document.dispatchEvent(mouse('mousemove', 30, 0));
+      document.dispatchEvent(mouse('mouseup', 30, 0));
+      expect(log).toEqual(['parent 30']);
+    } finally {
+      app.unmount();
+      root.remove();
+    }
+  });
+});
+
+describe('Removal transitions (browser)', () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('Show: the removed view stays for the animation, runs a Web Animation, then leaves', async () => {
+    const root = attachedRoot();
+    const shown = new State(true);
+    const fade = AnyTransition.opacity.animation(Animation.linear(0.15));
+    const app = App(() => VStack(Show(() => shown.value, Text('bye').transition(fade)))).mount(root);
+    try {
+      const span = root.querySelector('span');
+      shown.value = false;
+      flushSync();
+      const seen = [span.isConnected, getComputedStyle(span).pointerEvents, span.getAnimations().length];
+      await wait(60);
+      seen.push(span.isConnected);
+      await wait(160);
+      seen.push(span.isConnected);
+      expect(seen).toEqual([true, 'none', 1, true, false]);
+      expect(root.querySelector('span')).toBeNull();
+    } finally {
+      app.unmount();
+      root.remove();
+    }
+  });
+
+  it('For inside withAnimation: the removed row slides out while the others stay', async () => {
+    const root = attachedRoot();
+    const items = new State(['a', 'b']);
+    const app = App(() => VStack(For(() => items.value, (item) => Text(item).transition(AnyTransition.slide), (item) => item))).mount(root);
+    const previousRAF = window.requestAnimationFrame;
+    window.requestAnimationFrame = timerFrames;
+    try {
+      const [rowA] = root.querySelectorAll('span');
+      let lingering = null;
+      const done = withAnimation(Animation.linear(0.1), () => {
+        items.value = ['b'];
+        flushSync();
+        lingering = rowA.isConnected;
+      });
+      await done;
+      expect(lingering).toBe(true);
+      await wait(40);
+      expect([...root.querySelectorAll('span')].map((s) => s.textContent)).toEqual(['b']);
+    } finally {
+      window.requestAnimationFrame = previousRAF;
+      app.unmount();
+      root.remove();
+    }
+  });
+
+  it('prefers-reduced-motion removes the view at once', () => {
+    const root = attachedRoot();
+    const shown = new State(true);
+    const fade = AnyTransition.opacity.animation(Animation.linear(0.15));
+    const app = App(() => VStack(Show(() => shown.value, Text('bye').transition(fade)))).mount(root);
+    const previous = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} });
+    try {
+      shown.value = false;
+      flushSync();
+      expect(root.querySelector('span')).toBeNull();
+    } finally {
+      window.matchMedia = previous;
       app.unmount();
       root.remove();
     }

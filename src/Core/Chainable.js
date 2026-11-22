@@ -16,7 +16,13 @@ import {
   ModifierType
 } from './ViewDescriptor.js';
 import { animationModifier, transitionModifier, matchedGeometryModifier } from '../Animation/Animation.js';
-import { gestureModifier, longPressGestureModifier, dragGestureModifier } from '../Gesture/Gesture.js';
+import {
+  gestureModifier,
+  simultaneousGestureModifier,
+  highPriorityGestureModifier,
+  longPressGestureModifier,
+  dragGestureModifier
+} from '../Gesture/Gesture.js';
 
 /**
  * @param {Object} descriptor - Base descriptor
@@ -67,7 +73,9 @@ export function chainable(descriptor, extras = null) {
     add(ModifierType.MATCHED_GEOMETRY, matchedGeometryModifier(id, namespace, options));
 
   // Gestures (src/Gesture)
-  chain.gesture = (gesture) => add(ModifierType.GESTURE, gestureModifier(gesture));
+  chain.gesture = (gesture, options) => add(ModifierType.GESTURE, gestureModifier(gesture, options));
+  chain.simultaneousGesture = (gesture, options) => add(ModifierType.GESTURE, simultaneousGestureModifier(gesture, options));
+  chain.highPriorityGesture = (gesture, options) => add(ModifierType.GESTURE, highPriorityGestureModifier(gesture, options));
   chain.onLongPressGesture = (handler, options = {}) => add(ModifierType.GESTURE, longPressGestureModifier(handler, options));
   chain.onDrag = (onChanged, onEnded) => add(ModifierType.GESTURE, dragGestureModifier(onChanged, onEnded));
 
