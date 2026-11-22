@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `frame(maxWidth: Infinity)` and `frame(maxHeight: Infinity)` (or the string
+  `'infinity'`) fill the available space, like SwiftUI's `.infinity`. They
+  used to emit `infinitypx`, which CSS ignores (#50). Frame lengths also
+  accept CSS strings such as `'4rem'` or `'50%'`; legacy views used to append
+  `px` to them. Descriptor and legacy views share one implementation
+  (`src/Core/Frame.js`).
 - `npm run validate` runs every local check in one command: `npm test`, the
   browser tests, the production build and the size report (#42).
 - `TabView` selects tabs by a descriptor's `.tag(_:)` value, everywhere it

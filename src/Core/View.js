@@ -28,6 +28,7 @@ import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } fr
 import { delegateEvent } from './EventDelegate.js';
 import { createModifier, ModifierType } from './ViewDescriptor.js';
 import { installReactiveModifier } from './SignalRenderer.js';
+import { applyFrame } from './Frame.js';
 
 /** @type {number} Global view counter for generating unique IDs */
 let _viewIdCounter = 0;
@@ -313,12 +314,7 @@ export class View {
   frame(options = {}) {
     return this.modifier({
       apply(element) {
-        if (options.width !== undefined) element.style.width = `${options.width}px`;
-        if (options.height !== undefined) element.style.height = `${options.height}px`;
-        if (options.minWidth !== undefined) element.style.minWidth = `${options.minWidth}px`;
-        if (options.maxWidth !== undefined) element.style.maxWidth = `${options.maxWidth}px`;
-        if (options.minHeight !== undefined) element.style.minHeight = `${options.minHeight}px`;
-        if (options.maxHeight !== undefined) element.style.maxHeight = `${options.maxHeight}px`;
+        applyFrame(element, options);
       }
     });
   }
