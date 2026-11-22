@@ -47,6 +47,10 @@ export function chainable(descriptor, extras = null) {
 
   const chain = Object.create(null);
   Object.assign(chain, descriptor);
+  // Object.assign skips the non-enumerable creation site that development
+  // builds record (#42), so render errors could not say where a view was
+  // created; keep it.
+  if (descriptor._source) Object.defineProperty(chain, '_source', { value: descriptor._source, enumerable: false });
 
   // Environment (#49)
   chain.environment = (key, value) => add(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] });

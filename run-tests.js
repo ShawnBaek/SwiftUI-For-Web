@@ -1042,6 +1042,23 @@ async function runTests() {
         teardown();
       });
 
+      // #42: the creation site survives chainable() (it copies enumerable
+      // properties only), so errors from built-in views say where they were created.
+      it('render errors from built-in views name the creation site', () => {
+        let caught = null;
+        try {
+          mountInRoot(() => VStack(ModifierText(() => { throw new Error('thunk exploded'); })));
+        } catch (error) {
+          caught = error;
+        }
+        expect(Boolean(caught)).toBe(true);
+        expect(caught.message.includes('failed to render: thunk exploded')).toBe(true);
+        if (DEV_BUILD) {
+          expect(caught.message.includes('created at')).toBe(true);
+          expect(caught.message.includes('run-tests.js')).toBe(true);
+        }
+      });
+
       // #42: render and modifier errors name the view and where it was created.
       it('render and modifier errors name the view, the modifier and the creation site', () => {
         registerRenderer('BoomView', () => { throw new Error('renderer exploded'); });
