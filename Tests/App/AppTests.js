@@ -229,4 +229,29 @@ describe('Containers (#48)', () => {
     expect(host.textContent).toBe('Home');
     done();
   });
+
+  it('NavigationStack keeps only the last screen after two pushes within the transition', async () => {
+    const { NavigationStack } = await import('../../src/View/Navigation/NavigationStack.js');
+    let navigator;
+    const { host, done } = mount(() => (navigator = NavigationStack(Text('Home'), { transitionDuration: 20 })));
+    navigator.push(Text('First'));
+    navigator.push(Text('Second'));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const container = host.querySelector('[data-view="NavigationStack"]').firstElementChild;
+    expect(container.children.length).toBe(1);
+    expect(container.textContent).toBe('Second');
+    done();
+  });
+
+  it('NavigationStack rendered outside an owner unsubscribes from its path when released', async () => {
+    const { NavigationStack } = await import('../../src/View/Navigation/NavigationStack.js');
+    const { NavigationPath } = await import('../../src/View/Navigation/NavigationPath.js');
+    const { render } = await import('../../src/Core/Renderer.js');
+    const { releaseTree } = await import('../../src/Core/ElementPool.js');
+    const path = new NavigationPath();
+    const element = render(NavigationStack(Text('Home'), { path, transitionStyle: 'none' }));
+    expect(path._subscribers.size).toBe(1);
+    releaseTree(element);
+    expect(path._subscribers.size).toBe(0);
+  });
 });

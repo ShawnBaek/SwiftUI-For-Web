@@ -25,7 +25,7 @@ import { createDescriptor, isView } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render } from '../../Core/Renderer.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
-import { releaseTree } from '../../Core/ElementPool.js';
+import { releaseTree, onRelease } from '../../Core/ElementPool.js';
 import { removeWithTransition } from '../../Animation/Animation.js';
 import { getOwner, onCleanup } from '../../Data/Signal.js';
 import { NavigationDestination } from './NavigationPath.js';
@@ -166,7 +166,11 @@ registerRenderer('NavigationStack', ({ nav, destinations }) => {
       nav.stack = screensForPath(nav);
       transition(nav, direction, true);
     });
+    // Unsubscribe with the owner; rendered outside any owner, unsubscribe
+    // when the stack's element is released instead, so the path doesn't keep
+    // a detached stack alive.
     if (getOwner()) onCleanup(unsubscribe);
+    else onRelease(wrapper, unsubscribe);
   }
   const top = nav.stack[nav.stack.length - 1];
   const rendered = nav.slot.render(() => renderScreen(nav, top ? top.view : nav.root));
@@ -175,6 +179,10 @@ registerRenderer('NavigationStack', ({ nav, destinations }) => {
   wrapper.appendChild(container);
   return wrapper;
 });
+
+// Screens being removed by their own .transition; their removal callback
+// releases them, so the slide cleanup must not release them a second time.
+const _leaving = new WeakSet();
 
 // Show the top screen, sliding or fading it in.
 function transition(nav, direction, animated) {
@@ -208,6 +216,7 @@ function transition(nav, direction, animated) {
         releaseTree(child);
       };
       if (removeWithTransition(child, release)) {
+        _leaving.add(child);
         Object.assign(child.style, { position: 'absolute', top: '0', left: '0', width: '100%' });
       } else {
         release();
@@ -215,18 +224,26 @@ function transition(nav, direction, animated) {
     }
     container.appendChild(newContent);
     newContent.style.position = 'relative';
+    nav.currentScreen = newContent;
     return;
   }
 
-  const existingContent = container.firstChild;
+  // The visible screen: the last one shown, or the first render's screen.
+  const existingContent = nav.currentScreen && nav.currentScreen.parentNode === container
+    ? nav.currentScreen
+    : container.lastElementChild;
+  nav.currentScreen = newContent;
   const duration = nav.duration;
   const animate = (property, from, to, existingTo) => {
     newContent.style[property] = from;
     requestAnimationFrame(() => {
-      if (existingContent) {
+      // A cleanup that ran first (a hidden page delays frames, not timers)
+      // may have released these elements to the pool: leave them alone.
+      if (existingContent && existingContent.parentNode === container) {
         existingContent.style.transition = `${property} ${duration}ms ease-out`;
         existingContent.style[property] = existingTo;
       }
+      if (newContent.parentNode !== container) return;
       newContent.style.transition = `${property} ${duration}ms ease-out`;
       newContent.style[property] = to;
     });
@@ -245,12 +262,16 @@ function transition(nav, direction, animated) {
 
   // Cleanup after the animation. If the stack was disposed meanwhile (the
   // app unmounted), its elements went back to the pool and may already
-  // belong to another view, so leave them alone.
+  // belong to another view, so leave them alone. If another transition
+  // started meanwhile, its own cleanup runs later and removes this screen.
+  // Otherwise remove every other layer, not only the one this transition
+  // slid out: two pushes within the duration leave the middle screen too.
   setTimeout(() => {
-    if (slot.isDisposed()) return;
-    if (existingContent && existingContent.parentNode === container) {
-      existingContent.remove();
-      releaseTree(existingContent);
+    if (slot.isDisposed() || nav.currentScreen !== newContent) return;
+    for (const child of Array.from(container.children)) {
+      if (child === newContent || _leaving.has(child)) continue;
+      child.remove();
+      releaseTree(child);
     }
     if (newContent.parentNode === container) {
       newContent.style.position = 'relative';

@@ -14,10 +14,9 @@ that failed to load, in the console and on the page, instead of staying blank.
 Usage:  python3 serve.py [port]   (default port 8000)
 """
 
+import re
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-
-port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
 # Reports a <script> that failed to load. A module script's error event also
 # fires when any module it imports fails to load, so this catches a reset
@@ -29,6 +28,33 @@ if(!s||s.tagName!=='SCRIPT')return;var m='SwiftUI-For-Web: '+(s.src||'an inline 
 console.error(m);var p=document.createElement('pre');p.textContent=m;p.setAttribute('role','alert');
 p.style.cssText='margin:16px;padding:12px;border:1px solid #c00;color:#c00;white-space:pre-wrap;font:13px ui-monospace,monospace';
 (document.body||document.documentElement).prepend(p)},true)</script>"""
+
+
+_HEAD_OPEN = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
+_HEAD_CLOSE = re.compile(rb"</head\s*>", re.IGNORECASE)
+_DOCTYPE = re.compile(rb"<!doctype[^>]*>", re.IGNORECASE)
+_BODY_OPEN = re.compile(rb"<body[\s>]", re.IGNORECASE)
+
+
+def inject_guard(data, guard=LOAD_GUARD):
+    """Insert `guard` into the HTML `data` without moving the doctype.
+
+    After the opening <head ...> tag (attributes allowed); otherwise before
+    </head>; otherwise after the doctype; otherwise before <body. Writing it
+    before <!DOCTYPE html> would put the page in quirks mode.
+    """
+    match = _HEAD_OPEN.search(data)
+    if match:
+        at = match.end()
+    elif (match := _HEAD_CLOSE.search(data)):
+        at = match.start()
+    elif (match := _DOCTYPE.search(data)):
+        at = match.end()
+    elif (match := _BODY_OPEN.search(data)):
+        at = match.start()
+    else:
+        at = 0
+    return data[:at] + guard + data[at:]
 
 
 class FastHandler(SimpleHTTPRequestHandler):
@@ -53,10 +79,7 @@ class FastHandler(SimpleHTTPRequestHandler):
     def copyfile(self, source, outputfile):
         if not getattr(self, "_guard", False):
             return super().copyfile(source, outputfile)
-        data = source.read()
-        head = data.lower().find(b"<head>")
-        at = head + len(b"<head>") if head >= 0 else 0
-        outputfile.write(data[:at] + LOAD_GUARD + data[at:])
+        outputfile.write(inject_guard(source.read()))
 
     def send_response(self, *args, **kwargs):
         self._guard = False
@@ -77,6 +100,8 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 1024
 
 
-with Server(("", port), FastHandler) as httpd:
-    print(f"Serving on http://localhost:{port}/  (multi-threaded)")
-    httpd.serve_forever()
+if __name__ == "__main__":
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    with Server(("", port), FastHandler) as httpd:
+        print(f"Serving on http://localhost:{port}/  (multi-threaded)")
+        httpd.serve_forever()

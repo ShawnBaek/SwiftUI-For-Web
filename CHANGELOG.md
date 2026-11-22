@@ -62,7 +62,10 @@ Each entry includes its migration notes.
     `PlottableValue`, as its declaration said.
   - Migration: replace `mark instanceof BarMark` with
     `mark.type === 'BarMark'`, `mark.x` with `mark.props.x`, and
-    `chart._render()` with `render(chart)`.
+    `chart._render()` with `App(chart).mount(host)` in the page (read
+    `host.firstElementChild` if you need the element) or
+    `renderToString(chart)` from `swiftui-for-web/server` on a server or in
+    tests.
 
 - **BREAKING: every built-in view is a descriptor; one view model** (#48).
   The containers, navigation, shapes and the rest of the former `View`
@@ -96,8 +99,9 @@ Each entry includes its migration notes.
     `path` option below).
   - Removed instance APIs with no descriptor equivalent: `ScrollView`'s
     `scrollTo`, `scrollToTop` and `scrollToBottom`; the class-only
-    `getElement`/`rerender`/`_render` on the built-in views (render with
-    `render(view)` or mount them); `View._printChanges`, `_logChanges`,
+    `getElement`/`rerender`/`_render` on the built-in views (mount them with
+    `App(view).mount(host)`, or use `renderToString(view)` from
+    `swiftui-for-web/server`); `View._printChanges`, `_logChanges`,
     `trackChanges` and `src/Core/ChangeTracker.js`; the `ProposedViewSize`
     helper class of `ViewThatFits.js`; and the setter-only
     `TabView._pageIndicatorVisibility`, replaced by
@@ -139,9 +143,15 @@ Each entry includes its migration notes.
   - Migration: build views with the factory functions and keep the
     returned descriptor (`const stack = NavigationStack(Root());
     stack.push(Detail())` still works). Replace `new XView(...)` with
-    `X(...)`, `view._render()` with `render(view)`, `x instanceof XView`
-    with `x.type === 'X'`, and `ScrollView(...).scrollTo(...)` with a
-    `.modifier((element) => …)` that keeps the element and scrolls it.
+    `X(...)`, `x instanceof XView` with `x.type === 'X'`, and
+    `ScrollView(...).scrollTo(...)` with a `.modifier((element) => …)` that
+    keeps the element and scrolls it. Replace `view._render()` with
+    `App(view).mount(host)` in the page (`App` takes a descriptor; read
+    `host.firstElementChild` if you need the element), or with
+    `renderToString(view)` from `swiftui-for-web/server` on a server or in
+    tests. `render` from `swiftui-for-web/internal/Core/Renderer.js` also
+    returns the element, but internal paths are unstable and can change in
+    any release.
   - Size: the gzipped total went from 118.7 KB to about 112 KB.
 - **BREAKING (3.0.0-alpha.2): the form controls are native descriptors and
   their classes are gone** (#48). `Toggle`, `Slider`, `Stepper`,
@@ -161,14 +171,17 @@ Each entry includes its migration notes.
   (`toggleStyle`, `tint`, `disabled`, `pickerStyle`, `textFieldStyle`,
   `onCommit`, `keyboardType`, `datePickerStyle`, …) and every shared modifier
   still chain in any order, but each call returns a new descriptor instead of
-  mutating the view. Render a control with `render()` or mount it; don't read
-  internals such as `._label`.
+  mutating the view. Mount a control with `App(view).mount(host)`, or render
+  it to HTML with `renderToString(view)` from `swiftui-for-web/server`; don't
+  read internals such as `._label`.
 
   ```js
   // before
   const element = new ToggleView('Wi-Fi', isOn.binding).toggleStyle('checkbox')._render();
   // after
-  const element = render(Toggle('Wi-Fi', isOn.binding).toggleStyle('checkbox'));
+  const host = document.createElement('div');
+  App(Toggle('Wi-Fi', isOn.binding).toggleStyle('checkbox')).mount(host);
+  const element = host.firstElementChild;
   ```
 
   Also fixed on the way: `Slider`'s minimum/maximum value labels render descriptor views (they
