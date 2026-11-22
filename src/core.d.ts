@@ -8,7 +8,7 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 2.0.0-alpha.1
+ * @version 3.0.0-alpha.1
  */
 
 // =============================================================================
@@ -1619,41 +1619,6 @@ export function withTracking<T>(context: object, fn: () => T): T;
 /** Built-in icon names for `Image(systemName:)`. */
 export const SystemIcons: Record<string, string>;
 
-/** Scheduler lanes, highest priority first. */
-export const SyncLane: number;
-export const DiscreteLane: number;
-export const DefaultLane: number;
-export const TransitionLane: number;
-export const IdleLane: number;
-/** Queue `work` in a scheduler lane. */
-export function scheduleWork(work: () => void, lane?: number): void;
-/** Run `fn` after the current flush. */
-export function schedulePostFlush(fn: () => void): void;
-/** Queue a DOM write for the next flush. */
-export function enqueueDOMWrite(write: () => void): void;
-/** Start coalescing updates into one flush; pair with endBatch(). */
-export function batchUpdates(): void;
-/** End a batch started with batchUpdates() and flush. */
-export function endBatch(): void;
-export function getSchedulerStats(): Record<string, number>;
-export function resetSchedulerStats(): void;
-
-/** Element pool used by the renderer. */
-export function acquireElement(tagName: string): HTMLElement;
-export function releaseElement(element: HTMLElement): void;
-export function releaseTree(root: Node): void;
-export function clearPools(): void;
-export function getPoolStats(): Record<string, number>;
-
-/** Event delegation used by the renderer. */
-export function initDelegation(root: HTMLElement, eventTypes?: string[]): void;
-export function teardownDelegation(root: HTMLElement): void;
-export function delegateEvent(element: HTMLElement, eventType: string, handler: (event: Event) => void, root?: HTMLElement): void;
-export function undelegateEvent(element: HTMLElement, eventType: string): void;
-
-/** Move an element to its own compositor layer during an animation, and back. */
-export function promoteToGPULayer(element: HTMLElement): void;
-export function demoteFromGPULayer(element: HTMLElement): void;
 
 /** Install the animation, environment, gesture and navigation-path methods on a class. */
 export function extendViewWithAnimation(ViewClass: Function): void;

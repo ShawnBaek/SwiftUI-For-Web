@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **BREAKING (3.0.0-alpha.1): performance internals left the main entry**
+  (#47). The scheduler (`scheduleWork`, `schedulePostFlush`,
+  `batchUpdates`, `endBatch`, `enqueueDOMWrite`, `getSchedulerStats`,
+  `resetSchedulerStats`, the `SyncLane`…`IdleLane` constants), the element
+  pool (`acquireElement`, `releaseElement`, `releaseTree`, `getPoolStats`,
+  `clearPools`), event delegation (`delegateEvent`, `undelegateEvent`,
+  `initDelegation`, `teardownDelegation`) and `promoteToGPULayer` /
+  `demoteFromGPULayer` are no longer exported from `swiftui-for-web` or
+  `swiftui-for-web/core`, nor on the default `SwiftUI` namespace. `batch`
+  and `flushSync` stay. Migration: import them from the new entry,
+
+  ```js
+  // before
+  import { scheduleWork, SyncLane, acquireElement } from 'swiftui-for-web';
+  // after
+  import { scheduleWork, SyncLane, acquireElement } from 'swiftui-for-web/performance';
+  ```
+
+  The package version is now `3.0.0-alpha.1`.
 - `mount(host, { mode: 'adopt' })` (#39) takes over server markup from
   `renderDocument`: it swaps in the client tree in one step with the host's
   size held, moves focus to the matching element, and in development warns

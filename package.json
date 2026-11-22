@@ -1,6 +1,6 @@
 {
   "name": "swiftui-for-web",
-  "version": "2.0.0-alpha.1",
+  "version": "3.0.0-alpha.1",
   "type": "module",
   "description": "A zero-dependency declarative UI framework that brings Apple's SwiftUI paradigm to web development.",
   "main": "src/index.js",
@@ -16,6 +16,11 @@
       "types": "./src/core.d.ts",
       "import": "./src/core.js",
       "default": "./src/core.js"
+    },
+    "./performance": {
+      "types": "./src/performance.d.ts",
+      "import": "./src/performance.js",
+      "default": "./src/performance.js"
     },
     "./islands": {
       "types": "./src/islands.d.ts",
