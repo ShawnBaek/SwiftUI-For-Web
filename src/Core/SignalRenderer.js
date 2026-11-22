@@ -16,7 +16,7 @@
  * sheet) that the renderer and legacy View subclasses install.
  */
 
-import { buildingView } from './Dev.js';
+import { buildingView, DEV_BUILD } from './Dev.js';
 import { nextElementId } from './ElementID.js';
 import { withEnvironment, EnvironmentValues } from '../Data/Environment.js';
 import { render } from './Renderer.js';
@@ -47,9 +47,12 @@ export function mount(viewFactory, container, options = {}) {
     const element = render(view);
 
     if (options.replace && typeof container.replaceChildren === 'function') {
+      // adopt: compare with the server markup and remember focus first.
+      const focusPath = options.adopt ? adoptPrepare(container, element) : null;
       // Swap the host's static fallback for the view in one step (#39).
       if (element) container.replaceChildren(element);
       else container.replaceChildren();
+      if (focusPath) restoreFocus(container, focusPath);
     } else {
       const oldChild = container.firstChild;
       if (oldChild) releaseTree(oldChild);
@@ -66,6 +69,70 @@ export function mount(viewFactory, container, options = {}) {
   });
 
   return dispose;
+}
+
+// ---------------------------------------------------------------------------
+// mount mode 'adopt' (#39)
+// ---------------------------------------------------------------------------
+
+// Tag, sorted attributes and text: the parts server and client markup must
+// share. Not style (serializers format it differently) and not generated
+// ids or the attributes that reference them (counters differ per page).
+const UNCOMPARED = new Set(['style', 'id', 'for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant']);
+
+function signature(node) {
+  if (!node) return '';
+  if (node.nodeType === 3) return (node.textContent || node.data || '').trim() ? `#${(node.textContent ?? node.data).trim()}` : '';
+  if (node.nodeType !== 1) return '';
+  const attributes = (node.getAttributeNames?.() ?? [])
+    .filter((name) => !UNCOMPARED.has(name))
+    .sort()
+    .map((name) => `${name}=${node.getAttribute(name)}`)
+    .join(' ');
+  return `<${String(node.tagName).toLowerCase()} ${attributes}>`;
+}
+
+function firstDifference(server, client, path = 'root') {
+  if (signature(server) !== signature(client)) return `${path}: server ${signature(server) || '(none)'} vs client ${signature(client) || '(none)'}`;
+  const a = Array.from(server?.childNodes || []).filter((n) => signature(n));
+  const b = Array.from(client?.childNodes || []).filter((n) => signature(n));
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const difference = firstDifference(a[i], b[i], `${path} > ${i}`);
+    if (difference) return difference;
+  }
+  return null;
+}
+
+function pathTo(container, node) {
+  const path = [];
+  for (let current = node; current && current !== container; current = current.parentNode) {
+    const parent = current.parentNode;
+    if (!parent) return null;
+    path.unshift(Array.prototype.indexOf.call(parent.children || [], current));
+  }
+  return path;
+}
+
+function adoptPrepare(container, element) {
+  if (DEV_BUILD) {
+    const server = container.firstElementChild ?? container.firstChild;
+    const difference = firstDifference(server, element);
+    if (difference) {
+      console.warn(`SwiftUI-For-Web: mount(host, { mode: 'adopt' }) found client markup that differs from the server markup at ${difference}. Render both from the same state.`);
+    }
+  }
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  return active && container.contains?.(active) ? pathTo(container, active) : null;
+}
+
+function restoreFocus(container, path) {
+  let node = container;
+  for (const index of path) {
+    node = node?.children?.[index];
+    if (!node) return;
+  }
+  node.focus?.({ preventScroll: true });
 }
 
 /**

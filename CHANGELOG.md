@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `mount(host, { mode: 'adopt' })` (#39) takes over server markup from
+  `renderDocument`: it swaps in the client tree in one step with the host's
+  size held, moves focus to the matching element, and in development warns
+  at the first difference between the server markup and the client tree
+  (tags, text and attributes, ignoring style and generated ids). It doesn't
+  reuse the server's nodes yet.
 - `.navigationTitle(_:)` (#40) sets the document title while its view is
   shown and restores the previous one when the view goes away (a popped
   screen, a closed branch); a `State` or `Binding` title stays in sync.

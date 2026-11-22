@@ -1369,9 +1369,11 @@ export function App(content: () => View): {
   /**
    * Mount to a DOM element. `mode: 'replace'` keeps the host's static
    * fallback until the view is ready, swaps them in one step and holds the
-   * host's size meanwhile (no layout shift).
+   * host's size meanwhile (no layout shift). `mode: 'adopt'` does the same
+   * for markup from renderDocument, warns in development when the client
+   * tree differs from it, and keeps focus inside the host.
    */
-  mount(selector: string | HTMLElement, options?: { mode?: 'replace' }): AppInstance;
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
   /** Refresh the UI */
   refresh(): void;
 };
@@ -1586,7 +1588,7 @@ export class SecureFieldView extends TextFieldView {}
 
 /** A mounted app, returned by `App(...).mount(...)`. */
 export class AppInstance {
-  mount(selector: string | HTMLElement, options?: { mode?: 'replace' }): AppInstance;
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
   unmount(): AppInstance;
 }
 

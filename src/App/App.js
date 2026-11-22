@@ -75,7 +75,12 @@ class AppInstance {
     // the view is rendered (off-document), then the two are swapped in one
     // step. The host holds its current size until the next frame, so
     // swapping the fallback for the view causes no layout shift.
-    const replace = options.mode === 'replace';
+    // mode 'adopt' (#39) takes over markup from renderDocument: like
+    // replace, plus a development check that the client tree matches the
+    // server markup, and focus kept inside the host. It swaps in the
+    // client's nodes; it does not reuse the server's (no hydration yet).
+    const adopt = options.mode === 'adopt';
+    const replace = adopt || options.mode === 'replace';
     if (replace) this._holdSize(this._rootElement);
     else this._rootElement.textContent = '';
 
@@ -85,7 +90,7 @@ class AppInstance {
     this._signalDispose = signalMount(
       () => (this._mountedView = this._createView()),
       this._rootElement,
-      { replace },
+      { replace, adopt },
     );
 
     this._renderCount++;
