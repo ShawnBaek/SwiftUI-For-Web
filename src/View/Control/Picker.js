@@ -211,56 +211,97 @@ export class PickerView extends View {
    * @private
    */
   _renderSegmented() {
+    // #51: a WAI-ARIA radio group. Each segment is a radio button with
+    // aria-checked and a roving tabindex; arrow keys move and select. Colors
+    // come from the theme tokens in base.css, so dark mode works.
     const container = document.createElement('div');
     container.dataset.view = 'picker';
     container.dataset.style = 'segmented';
+    container.setAttribute('role', 'radiogroup');
+    if (this._labelText) container.setAttribute('aria-label', this._labelText);
     container.style.display = 'inline-flex';
-    container.style.backgroundColor = 'rgba(120, 120, 128, 0.12)';
+    container.style.backgroundColor = 'var(--color-fill-tertiary, rgba(118, 118, 128, 0.12))';
     container.style.borderRadius = '8px';
     container.style.padding = '2px';
+    container.style.gap = '2px';
 
-    const currentSelection = this._getSelection();
+    const segments = [];
+    const tags = [];
+
+    const select = (index, focus) => {
+      segments.forEach((segment, i) => {
+        const checked = i === index;
+        segment.setAttribute('aria-checked', checked ? 'true' : 'false');
+        segment.tabIndex = checked ? 0 : -1;
+        segment.style.backgroundColor = checked
+          ? 'var(--color-segmented-selected, #FFFFFF)'
+          : 'transparent';
+        segment.style.boxShadow = checked ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none';
+      });
+      if (focus) segments[index].focus?.();
+    };
 
     for (const option of this._options) {
-      if (this._isOption(option)) {
-        const segment = document.createElement('button');
-        segment.style.padding = '6px 12px';
-        segment.style.border = 'none';
-        segment.style.borderRadius = '6px';
-        segment.style.fontSize = '13px';
-        segment.style.fontWeight = '500';
-        segment.style.cursor = 'pointer';
-        segment.style.transition = 'all 0.2s ease';
+      if (!this._isOption(option)) continue;
+      const index = segments.length;
+      const tag = this._getTag(option);
+      const segment = document.createElement('button');
+      segment.setAttribute('type', 'button');
+      segment.setAttribute('role', 'radio');
+      segment.style.padding = '6px 12px';
+      segment.style.border = 'none';
+      segment.style.borderRadius = '6px';
+      segment.style.font = 'inherit';
+      segment.style.fontSize = '13px';
+      segment.style.fontWeight = '500';
+      segment.style.color = 'var(--color-primary, #000000)';
+      segment.style.cursor = 'pointer';
+      segment.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
 
-        const tag = this._getTag(option);
-        const rendered = this._renderOption(option);
-        segment.textContent = rendered.textContent || tag || '';
+      const rendered = this._renderOption(option);
+      segment.textContent = rendered.textContent || tag || '';
 
-        if (tag === currentSelection) {
-          segment.style.backgroundColor = 'white';
-          segment.style.color = 'black';
-          segment.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-        } else {
-          segment.style.backgroundColor = 'transparent';
-          segment.style.color = 'rgba(60, 60, 67, 1)';
+      segment.addEventListener('click', () => {
+        this._setSelection(tag);
+        select(index, false);
+      });
+      segment.addEventListener('keydown', (event) => {
+        const last = segments.length - 1;
+        let next = null;
+        switch (event.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+            next = index === last ? 0 : index + 1;
+            break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            next = index === 0 ? last : index - 1;
+            break;
+          case 'Home':
+            next = 0;
+            break;
+          case 'End':
+            next = last;
+            break;
+          default:
+            return;
         }
+        event.preventDefault?.();
+        // Radio groups select on focus move.
+        this._setSelection(tags[next]);
+        select(next, true);
+      });
 
-        segment.addEventListener('click', () => {
-          this._setSelection(tag);
-          // Update all segments
-          const segments = container.querySelectorAll('button');
-          segments.forEach(s => {
-            s.style.backgroundColor = 'transparent';
-            s.style.color = 'rgba(60, 60, 67, 1)';
-            s.style.boxShadow = 'none';
-          });
-          segment.style.backgroundColor = 'white';
-          segment.style.color = 'black';
-          segment.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-        });
+      segments.push(segment);
+      tags.push(tag);
+      container.appendChild(segment);
+    }
 
-        container.appendChild(segment);
-      }
+    if (segments.length > 0) {
+      const selectedIndex = tags.indexOf(this._getSelection());
+      select(selectedIndex, false);
+      // With no matching selection, keep the group reachable by Tab.
+      if (selectedIndex === -1) segments[0].tabIndex = 0;
     }
 
     return this._applyModifiers(container);

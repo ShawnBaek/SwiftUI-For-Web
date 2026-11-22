@@ -10,6 +10,13 @@
   click time, after the render-time context was gone, so it did nothing.
   The label now sits inside a button or link, so it should not contain other
   interactive views (a `Button`, `Toggle` or another link).
+- The segmented `Picker` is a WAI-ARIA radio group (#51): the container has
+  `role="radiogroup"` and is labelled by the picker's title; each segment is a
+  `<button type="button" role="radio">` with `aria-checked` and a roving
+  `tabindex`, so it takes one Tab stop. ←/→ and ↑/↓ (both wrapping), Home and
+  End move to a segment and select it. Its colors come from theme tokens
+  (`--color-fill-tertiary`, `--color-segmented-selected`, `--color-primary`,
+  new in `base.css` with dark-mode values) instead of hard-coded light colors.
 - The tab-bar `TabView` follows the WAI-ARIA tabs pattern (#51): the bar is a
   `tablist`, each button a `tab` with `aria-selected`, `aria-controls` and a
   roving `tabindex`, and the content area a `tabpanel` labelled by the

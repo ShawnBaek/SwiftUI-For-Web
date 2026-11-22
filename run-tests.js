@@ -378,7 +378,7 @@ async function runTests() {
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
-    const { Picker } = await import('./src/View/Control/Picker.js');
+    const { Picker, PickerStyle } = await import('./src/View/Control/Picker.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
     const focusRingControls = {
@@ -927,6 +927,67 @@ async function runTests() {
         stack.pop(false);
         button.click();
         expect(stack.depth).toBe(1);
+        app.unmount();
+        root.remove();
+      });
+
+      // #51: the segmented Picker is a WAI-ARIA radio group.
+      it('segmented Picker is a radiogroup with aria-checked, roving tabindex and arrow keys', () => {
+        const flavor = new State('vanilla');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker('Flavor', flavor.binding,
+          ModifierText('Chocolate').tag('chocolate'),
+          ModifierText('Vanilla').tag('vanilla'),
+          ModifierText('Mint').tag('mint')).pickerStyle(PickerStyle.segmented)).mount(root);
+        let group = null;
+        const find = (node) => { if (!group && node.dataset?.style === 'segmented') group = node; (node.children || []).forEach(find); };
+        find(root);
+        const radios = group.children;
+        const checked = () => radios.map((radio) => radio.getAttribute('aria-checked'));
+        const tabStops = () => radios.map((radio) => radio.tabIndex);
+        const key = (radio, name) => { const event = new MockEvent('keydown'); event.key = name; radio.dispatchEvent(event); return event; };
+        expect(group.getAttribute('role')).toBe('radiogroup');
+        expect(group.getAttribute('aria-label')).toBe('Flavor');
+        expect(radios.map((radio) => radio.getAttribute('role'))).toEqual(['radio', 'radio', 'radio']);
+        expect(radios[0].getAttribute('type')).toBe('button');
+        expect(checked()).toEqual(['false', 'true', 'false']);
+        expect(tabStops()).toEqual([-1, 0, -1]);
+        expect(key(radios[1], 'ArrowRight').defaultPrevented).toBe(true);
+        expect(flavor.value).toBe('mint');
+        expect(checked()).toEqual(['false', 'false', 'true']);
+        expect(tabStops()).toEqual([-1, -1, 0]);
+        key(radios[2], 'ArrowRight');
+        expect(flavor.value).toBe('chocolate');
+        key(radios[0], 'ArrowLeft');
+        expect(flavor.value).toBe('mint');
+        key(radios[2], 'Home');
+        expect(flavor.value).toBe('chocolate');
+        key(radios[0], 'End');
+        expect(flavor.value).toBe('mint');
+        radios[1].click();
+        expect(flavor.value).toBe('vanilla');
+        expect(checked()).toEqual(['false', 'true', 'false']);
+        // Colors come from theme tokens, not hard-coded light values.
+        expect(group.style.backgroundColor.includes('var(--color-fill-tertiary')).toBe(true);
+        expect(radios[1].style.backgroundColor.includes('var(--color-segmented-selected')).toBe(true);
+        expect(radios[0].style.color.includes('var(--color-primary')).toBe(true);
+        app.unmount();
+        root.remove();
+      });
+
+      it('segmented Picker keeps one tab stop when the selection matches no segment', () => {
+        const flavor = new State('none');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker(flavor.binding,
+          ModifierText('A').tag('a'),
+          ModifierText('B').tag('b')).pickerStyle(PickerStyle.segmented)).mount(root);
+        let group = null;
+        const find = (node) => { if (!group && node.dataset?.style === 'segmented') group = node; (node.children || []).forEach(find); };
+        find(root);
+        expect(group.children.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+        expect(group.children.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false']);
         app.unmount();
         root.remove();
       });
