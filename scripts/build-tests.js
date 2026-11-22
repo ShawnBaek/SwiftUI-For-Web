@@ -137,6 +137,23 @@ async function main() {
     const unit = spawnSync(process.execPath, ['run-tests.js'], { cwd: libraryOut, encoding: 'utf8' });
     assert.equal(unit.status, 0, `unit tests failed against the optimized build:\n${(unit.stdout + unit.stderr).split('\n').filter((line) => line.includes('✗') || line.includes('Error')).slice(0, 20).join('\n')}`);
 
+    // #41: --hash renames files by content, rewrites references, preloads
+    // the static module graph and writes a manifest; the result is stable.
+    const hashedOut = path.join(tempRoot, 'hello-world-hashed');
+    run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', hashedOut, '--hash'], 'hashed entry build');
+    const manifest = JSON.parse(await readFile(path.join(hashedOut, 'manifest.json'), 'utf8'));
+    const hashedMain = manifest['Examples/HelloWorld/main.js'];
+    assert.match(hashedMain, /^Examples\/HelloWorld\/main\.[0-9a-f]{10}\.js$/, 'main.js was not content-hashed');
+    const hashedHTML = await readFile(path.join(hashedOut, 'index.html'), 'utf8');
+    assert.ok(hashedHTML.includes(`src="./${hashedMain}"`), 'index.html does not load the hashed main module');
+    assert.ok(/<link rel="modulepreload" href="\.\/src\/[^"]+\.[0-9a-f]{10}\.js">/.test(hashedHTML), 'no modulepreload hints for the module graph');
+    const hashedReachable = await assertReachableModules(path.join(hashedOut, hashedMain), hashedOut);
+    assert.ok(hashedReachable.every((file) => /\.[0-9a-f]{10}\.js$/.test(file)), 'a reachable module kept its unhashed name');
+    assert.ok(!(await exists(path.join(hashedOut, 'Examples/HelloWorld/main.js'))), 'the unhashed main.js was left behind');
+    const hashedAgain = path.join(tempRoot, 'hello-world-hashed-again');
+    run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', hashedAgain, '--hash'], 'second hashed entry build');
+    assert.deepEqual(JSON.parse(await readFile(path.join(hashedAgain, 'manifest.json'), 'utf8')), manifest, 'hashed names are not deterministic');
+
     const appOut = path.join(tempRoot, 'hello-world');
     run(['--entry', 'Examples/HelloWorld/index.html', '--out-dir', appOut], 'entry build');
 

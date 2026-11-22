@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Release build (#41): application builds add `<link rel="modulepreload">`
+  for every module the page's scripts import statically. `--hash` renames
+  each emitted file to `name.<hash>.ext` (the hash covers the file and
+  everything it reaches, so a change anywhere below renames it), rewrites
+  the import, `new URL(…, import.meta.url)`, CSS and HTML references, and
+  writes `manifest.json`. Names are deterministic.
 - Release build (#41): a token-aware JavaScript minifier
   (`scripts/minify.js`) copies strings, template literals with nested
   `${…}` and regular-expression literals verbatim, removes comments, and

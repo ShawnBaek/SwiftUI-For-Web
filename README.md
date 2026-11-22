@@ -170,6 +170,12 @@ and local resources, minifies emitted JavaScript/CSS, and writes
 and raw/gzip totals. Default namespace imports stay compatible and conservatively
 retain the full framework.
 
+It also adds `<link rel="modulepreload">` for the page's static module graph,
+so modules download in parallel. Add `--hash` to give every emitted file a
+content-hashed name (`main.3fa2b1c4d5.js`, references rewritten) and write
+`manifest.json` mapping source paths to hashed ones, for long-lived caching.
+`--no-minify` keeps the output readable.
+
 ---
 
 ## How reactivity works (the one important page)

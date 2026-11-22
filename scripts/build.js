@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { minifyJavaScript } from './minify.js';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { mkdir, rm, readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -19,6 +20,7 @@ function parseArguments(argv) {
     outDir: path.join(root, 'dist'),
     configuration: 'release',
     minify: true,
+    hash: false,
   };
 
   for (let index = 0; index < argv.length; index++) {
@@ -31,6 +33,8 @@ function parseArguments(argv) {
       options.configuration = requireValue(argv, ++index, argument);
     } else if (argument === '--no-minify') {
       options.minify = false;
+    } else if (argument === '--hash') {
+      options.hash = true;
     } else if (argument === '--help' || argument === '-h') {
       printHelp();
       process.exit(0);
@@ -71,6 +75,8 @@ Options:
   --out-dir <directory>     Output directory (default: dist)
   --configuration release  Production configuration
   --no-minify               Keep files unminified (still tree-shaken)
+  --hash                    Content-hash file names (application builds)
+                            and write manifest.json
   --help                    Show this help`);
 }
 
@@ -597,7 +603,7 @@ async function buildLibrary(outDir) {
   console.log(`Built ${files.length} source files into ${toPosix(path.relative(root, outDir) || outDir)}/`);
 }
 
-async function buildApplication(entry, outDir) {
+async function buildApplication(entry, outDir, options = {}) {
   if (path.extname(entry).toLowerCase() !== '.html' || !await exists(entry)) {
     throw new Error(`Application entry must be an existing HTML file: ${entry}`);
   }
@@ -687,6 +693,15 @@ async function buildApplication(entry, outDir) {
     emitted.add(relative);
   }
 
+  // #41: preload every module the entry's scripts import statically, so the
+  // browser fetches them in parallel instead of as a waterfall.
+  const nameMap = options.hash ? await hashOutputs(outDir, emitted) : null;
+  await addModulePreloads(outDir, nameMap);
+  if (nameMap) {
+    const manifest = Object.fromEntries([...nameMap].sort(([a], [b]) => a.localeCompare(b)));
+    await writeFile(path.join(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  }
+
   const candidates = await collectApplicationCandidates(entry, outDir);
   const retainedFiles = [...retained].map(projectRelative).sort();
   const removedFiles = candidates
@@ -731,6 +746,151 @@ async function buildApplication(entry, outDir) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Content hashing and modulepreload (#41)
+// ---------------------------------------------------------------------------
+
+// Relative references a built file makes to other built files, with the
+// [start, end) range of each quoted specifier in the source.
+function localReferences(source, extension) {
+  const found = [];
+  const add = (value, start) => {
+    if (/^\.{1,2}\//.test(value)) found.push({ value, start, end: start + value.length });
+  };
+  if (extension === '.js') {
+    for (const record of scanStaticModules(source)) {
+      const offset = source.indexOf(record.specifier, record.start);
+      if (offset !== -1 && offset < record.end) add(record.specifier, offset);
+    }
+    const urlPattern = /\bnew\s+URL\s*\(\s*(['"])([^'"]+)\1\s*,\s*import\.meta\.url\s*\)/g;
+    let match;
+    while ((match = urlPattern.exec(source))) add(match[2], match.index + match[0].indexOf(match[2]));
+  } else if (extension === '.css') {
+    const pattern = /@import\s+(?:url\(\s*)?(['"]?)([^'")\s]+)\1\s*\)?|url\(\s*(['"]?)([^'")]+)\3\s*\)/g;
+    let match;
+    while ((match = pattern.exec(source))) {
+      const value = match[2] || match[4];
+      add(value, match.index + match[0].indexOf(value));
+    }
+  }
+  return found;
+}
+
+function stripQuery(value) {
+  return value.replace(/[?#].*$/, '');
+}
+
+/**
+ * Rename every built file except index.html to name.<hash>.ext and rewrite
+ * the references between them. A file's hash covers its own content and the
+ * content of everything it reaches, so a change anywhere below renames it
+ * (cycles share a hash input). Returns Map(original → hashed) of paths
+ * relative to outDir.
+ */
+async function hashOutputs(outDir, emitted) {
+  const files = [...emitted].filter((file) => file !== 'index.html');
+  const sources = new Map();
+  const references = new Map();
+  for (const file of files) {
+    const extension = path.extname(file).toLowerCase();
+    const data = await readFile(path.join(outDir, file));
+    sources.set(file, data);
+    const text = extension === '.js' || extension === '.css' ? data.toString('utf8') : null;
+    const refs = text === null ? [] : localReferences(text, extension).map((ref) => ({
+      ...ref,
+      target: toPosix(path.join(path.dirname(file), stripQuery(ref.value))),
+    })).filter((ref) => sources.has(ref.target) || files.includes(ref.target));
+    references.set(file, refs);
+  }
+  const ownHash = new Map(files.map((file) => [file, createHash('sha256').update(sources.get(file)).digest('hex')]));
+  const reachable = (file) => {
+    const seen = new Set();
+    const stack = [file];
+    while (stack.length) {
+      const current = stack.pop();
+      if (seen.has(current)) continue;
+      seen.add(current);
+      for (const ref of references.get(current) || []) stack.push(ref.target);
+    }
+    return seen;
+  };
+  const nameMap = new Map();
+  for (const file of files) {
+    const hash = createHash('sha256');
+    for (const member of [...reachable(file)].sort()) hash.update(`${member}:${ownHash.get(member)}\n`);
+    const digest = hash.digest('hex').slice(0, 10);
+    const extension = path.extname(file);
+    nameMap.set(file, `${file.slice(0, -extension.length)}.${digest}${extension}`);
+  }
+  for (const file of files) {
+    let data = sources.get(file);
+    const refs = references.get(file);
+    if (refs.length) {
+      let text = data.toString('utf8');
+      for (const ref of [...refs].sort((a, b) => b.start - a.start)) {
+        const hashed = nameMap.get(ref.target);
+        let relative = toPosix(path.relative(path.dirname(file), hashed));
+        if (!relative.startsWith('.')) relative = `./${relative}`;
+        const suffix = ref.value.slice(stripQuery(ref.value).length);
+        text = text.slice(0, ref.start) + relative + suffix + text.slice(ref.end);
+      }
+      data = Buffer.from(text, 'utf8');
+    }
+    await rm(path.join(outDir, file));
+    await writeFile(path.join(outDir, nameMap.get(file)), data);
+    emitted.delete(file);
+    emitted.add(nameMap.get(file));
+  }
+  // index.html references.
+  const htmlFile = path.join(outDir, 'index.html');
+  let html = await readFile(htmlFile, 'utf8');
+  for (const record of htmlAssetRecords(html).sort((a, b) => b.start - a.start)) {
+    const target = toPosix(path.normalize(stripQuery(record.value))).replace(/^\.\//, '');
+    if (!nameMap.has(target)) continue;
+    html = html.slice(0, record.start) + `./${nameMap.get(target)}` + record.value.slice(stripQuery(record.value).length) + html.slice(record.end);
+  }
+  await writeFile(htmlFile, html);
+  return nameMap;
+}
+
+/**
+ * Add <link rel="modulepreload"> for every module statically imported
+ * (directly or not) by the page's module scripts.
+ */
+async function addModulePreloads(outDir, nameMap) {
+  const htmlFile = path.join(outDir, 'index.html');
+  let html = await readFile(htmlFile, 'utf8');
+  const entries = [];
+  const scriptPattern = /<script\b[^>]*type\s*=\s*["']module["'][^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = scriptPattern.exec(html))) entries.push(toPosix(path.normalize(stripQuery(match[1]))).replace(/^\.\//, ''));
+  const seen = new Set(entries);
+  const preload = [];
+  const queue = [...entries];
+  while (queue.length) {
+    const file = queue.shift();
+    let source;
+    try {
+      source = await readFile(path.join(outDir, file), 'utf8');
+    } catch {
+      continue;
+    }
+    for (const record of scanStaticModules(source)) {
+      if (record.keyword === 'dynamic-import' || !/^\.{1,2}\//.test(record.specifier)) continue;
+      const target = toPosix(path.join(path.dirname(file), stripQuery(record.specifier)));
+      if (seen.has(target)) continue;
+      seen.add(target);
+      preload.push(target);
+      queue.push(target);
+    }
+  }
+  if (preload.length === 0) return;
+  const links = preload.sort().map((file) => `<link rel="modulepreload" href="./${file}">`).join('\n');
+  html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${links}\n</head>`) : `${links}\n${html}`;
+  await writeFile(htmlFile, html);
+  void nameMap;
+}
+
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
@@ -740,7 +900,7 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   minifyEnabled = options.minify;
   if (options.entry) {
-    await buildApplication(options.entry, options.outDir);
+    await buildApplication(options.entry, options.outDir, options);
   } else {
     await buildLibrary(options.outDir);
   }
