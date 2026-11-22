@@ -378,6 +378,7 @@ async function runTests() {
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
+    const { Picker } = await import('./src/View/Control/Picker.js');
     const { Stepper } = await import('./src/View/Control/Stepper.js');
 
     // Test State
@@ -761,6 +762,48 @@ async function runTests() {
         } finally {
           globalThis.requestAnimationFrame = previousRAF;
         }
+      });
+
+      // #48 bridge: legacy containers render view descriptors.
+      it('NavigationStack renders a descriptor root and pushed descriptor screens', () => {
+        const count = new State(1);
+        let stack;
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => (stack = NavigationStack(VStack(ModifierText('Home'), ModifierText(count))))).mount(root);
+        // The test DOM's textContent does not include children, so collect it.
+        const text = () => {
+          const parts = [];
+          const walk = (node) => { if (node._textContent) parts.push(node._textContent); (node.children || []).forEach(walk); };
+          walk(root);
+          return parts.join(' ');
+        };
+        expect(text().includes('Home')).toBe(true);
+        expect(text().includes('1')).toBe(true);
+        count.value = 2;
+        Scheduler.flushSync();
+        expect(text().includes('2')).toBe(true);
+        stack.push(() => ModifierText('Detail'), '', false);
+        expect(text().includes('Detail')).toBe(true);
+        app.unmount();
+        root.remove();
+      });
+
+      it('Picker keeps Text options tagged with .tag(_:)', () => {
+        const flavor = new State('vanilla');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker('Flavor', flavor.binding,
+          ModifierText('Chocolate').tag('chocolate'),
+          ModifierText('Vanilla').tag('vanilla'))).mount(root);
+        const options = [];
+        const walk = (node) => { if (node.tagName === 'OPTION' || node.tagName === 'option') options.push(node); (node.children || []).forEach(walk); };
+        walk(root);
+        expect(options.map((option) => option.value)).toEqual(['chocolate', 'vanilla']);
+        expect(options.map((option) => option.textContent)).toEqual(['Chocolate', 'Vanilla']);
+        expect(options[1].selected).toBe(true);
+        app.unmount();
+        root.remove();
       });
 
       it('owns the effects of screens NavigationStack pushes and pops', () => {

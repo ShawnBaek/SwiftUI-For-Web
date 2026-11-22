@@ -16,6 +16,8 @@
  */
 
 import { View } from '../../Core/View.js';
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { State } from '../../Data/State.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 import { releaseChildren, releaseTree } from '../../Core/ElementPool.js';
@@ -35,18 +37,18 @@ export function getCurrentNavigationStack() {
 }
 
 /**
- * Render a stack entry: a View instance or a function returning one.
- * Preserves the existing behavior of rendering only legacy View results.
+ * Render a stack entry: a legacy View, a view descriptor (`VStack(...)`,
+ * `Text(...)`), or a function returning either (#48).
  *
- * @param {View|Function} entry
+ * @param {View|Object|Function} entry
  * @returns {HTMLElement|null}
  */
 function renderStackView(entry) {
-  if (entry instanceof View) return entry._render();
-  if (typeof entry === 'function') {
-    const result = entry();
-    if (result instanceof View) return result._render();
-  }
+  const view = typeof entry === 'function' && !(entry instanceof View) && !isDescriptor(entry)
+    ? entry()
+    : entry;
+  if (view instanceof View) return view._render();
+  if (isDescriptor(view)) return renderDescriptor(view);
   return null;
 }
 
@@ -342,6 +344,8 @@ class NavigationLinkView extends View {
     // Render label
     if (this._label instanceof View) {
       el.appendChild(this._label._render());
+    } else if (isDescriptor(this._label)) {
+      el.appendChild(renderDescriptor(this._label));
     } else {
       el.textContent = String(this._label);
     }

@@ -30,6 +30,19 @@
  */
 
 import { View } from '../Core/View.js';
+import { isDescriptor } from '../Core/ViewDescriptor.js';
+import { render as renderDescriptor } from '../Core/Renderer.js';
+
+// Render scene content that is a legacy View, a view descriptor, or a
+// function returning either (#48).
+function renderSceneContent(content) {
+  const view = typeof content === 'function' && !(content instanceof View) && !isDescriptor(content)
+    ? content()
+    : content;
+  if (view instanceof View) return view._render();
+  if (isDescriptor(view)) return renderDescriptor(view);
+  return null;
+}
 
 /**
  * WindowGroup - Scene container for app windows
@@ -130,14 +143,8 @@ export class WindowGroupView extends View {
 
     // Render content
     if (this._content) {
-      if (this._content instanceof View) {
-        container.appendChild(this._content._render());
-      } else if (typeof this._content === 'function') {
-        const view = this._content();
-        if (view instanceof View) {
-          container.appendChild(view._render());
-        }
-      }
+      const rendered = renderSceneContent(this._content);
+      if (rendered) container.appendChild(rendered);
     }
 
     return this._applyModifiers(container);
@@ -197,9 +204,8 @@ export class SettingsView extends View {
     container.dataset.scene = 'settings';
     container.style.padding = '20px';
 
-    if (this._content instanceof View) {
-      container.appendChild(this._content._render());
-    }
+    const rendered = this._content ? renderSceneContent(this._content) : null;
+    if (rendered) container.appendChild(rendered);
 
     return this._applyModifiers(container);
   }

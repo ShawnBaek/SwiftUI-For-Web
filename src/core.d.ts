@@ -389,6 +389,8 @@ export class EnvironmentObject<T extends ObservableObject> {
 
 /** Display text content */
 export function Text(content: string | number | Signal<string | number> | (() => string | number | null | undefined)): View & {
+  /** Identify this view inside a Picker or TabView, like SwiftUI's `.tag(_:)` */
+  tag(value: string | number): View;
   /** Set font style */
   font(font: Font): View;
   /** Set font weight */
