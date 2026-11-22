@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Every runtime export now has a declaration (#47): the 76 names that were
+  allowed untyped in `scripts/types-baseline.json` (legacy `*View` classes,
+  gesture recognizers, `AppInstance`, `ColorValue`, `FontValue`, scheduler
+  lanes and functions, the element pool, event delegation and the `extend*`
+  installers) are declared in `src/core.d.ts`, and the baseline list is
+  empty, so `check-package` fails on any new untyped export.
 - Size budget (#53): `npm run size` and CI fail when the gzipped `dist/`
   total passes 120 KB (`node scripts/size.js dist --budget-gzip-kb 120`).
 - GitHub Pages publishes only the site (#53): `index.html`, `README.md`,

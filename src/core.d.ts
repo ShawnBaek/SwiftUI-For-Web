@@ -1504,3 +1504,124 @@ import * as SwiftUICore from './core.js';
 declare const SwiftUI: Omit<typeof SwiftUICore, 'default'>;
 
 export default SwiftUI;
+
+// ---------------------------------------------------------------------------
+// Classes and functions behind the public API (#47). They are exported for
+// advanced use and tests; prefer the factory functions (Toggle(...), not
+// new ToggleView(...)). Legacy *View classes are replaced by descriptors in
+// #48 and keep minimal declarations until then.
+// ---------------------------------------------------------------------------
+
+/** Legacy view classes behind the factory functions. */
+export class ColorPickerView extends View {}
+export class DatePickerView extends View {}
+export class DisclosureGroupView extends View {}
+export class DocumentGroupView extends View {}
+export class FormView extends View {}
+export class GeometryReaderView extends View {}
+export class GridRowView extends View {}
+export class GridView extends View {}
+export class GroupView extends View {}
+export class ImageView extends View {}
+export class LabelView extends View {}
+export class LazyHGridView extends View {}
+export class LazyHStackView extends View {}
+export class LazyVGridView extends View {}
+export class LazyVStackView extends View {}
+export class ListView extends View {}
+export class MenuView extends View {}
+export class PickerView extends View {}
+export class ScrollViewView extends View {}
+export class SectionView extends View {}
+export class SettingsView extends View {}
+export class SliderView extends View {}
+export class StepperView extends View {}
+export class TabViewView extends View {}
+export class TextFieldView extends View {}
+export class ToggleView extends View {}
+export class WindowGroupView extends View {}
+/** Base class of the legacy shape views. */
+export class ShapeView extends View {}
+export class CapsuleView extends ShapeView {}
+export class CircleView extends ShapeView {}
+export class EllipseView extends ShapeView {}
+export class PathView extends ShapeView {}
+export class RectangleView extends ShapeView {}
+export class RoundedRectangleView extends ShapeView {}
+export class UnevenRoundedRectangleView extends ShapeView {}
+export class SecureFieldView extends TextFieldView {}
+
+/** A mounted app, returned by `App(...).mount(...)`. */
+export class AppInstance {
+  mount(selector: string | HTMLElement): AppInstance;
+  unmount(): AppInstance;
+}
+
+/** The value behind a `Color` (RGBA components). */
+export class ColorValue {
+  constructor(red: number, green: number, blue: number, alpha?: number);
+  rgba(): string;
+}
+
+/** The value behind a `Font`. */
+export class FontValue {}
+
+/** Base class of the gesture recognizers. */
+export class GestureBase {}
+export class DragGestureRecognizer extends GestureBase {}
+export class LongPressGestureRecognizer extends GestureBase {}
+export class MagnificationGestureRecognizer extends GestureBase {}
+export class RotationGestureRecognizer extends GestureBase {}
+export class TapGestureRecognizer extends GestureBase {}
+
+/** Observation tracking state used by `withObservationTracking`. */
+export class ObservationTracking {}
+/** Run `apply`, calling `onChange` once when an observed value it read changes. */
+export function withObservationTracking<T>(apply: () => T, onChange: () => void): T;
+/** Run `fn` with `context` recording the observable reads it makes. */
+export function withTracking<T>(context: object, fn: () => T): T;
+
+/** Built-in icon names for `Image(systemName:)`. */
+export const SystemIcons: Record<string, string>;
+
+/** Scheduler lanes, highest priority first. */
+export const SyncLane: number;
+export const DiscreteLane: number;
+export const DefaultLane: number;
+export const TransitionLane: number;
+export const IdleLane: number;
+/** Queue `work` in a scheduler lane. */
+export function scheduleWork(work: () => void, lane?: number): void;
+/** Run `fn` after the current flush. */
+export function schedulePostFlush(fn: () => void): void;
+/** Queue a DOM write for the next flush. */
+export function enqueueDOMWrite(write: () => void): void;
+/** Start coalescing updates into one flush; pair with endBatch(). */
+export function batchUpdates(): void;
+/** End a batch started with batchUpdates() and flush. */
+export function endBatch(): void;
+export function getSchedulerStats(): Record<string, number>;
+export function resetSchedulerStats(): void;
+
+/** Element pool used by the renderer. */
+export function acquireElement(tagName: string): HTMLElement;
+export function releaseElement(element: HTMLElement): void;
+export function releaseTree(root: Node): void;
+export function clearPools(): void;
+export function getPoolStats(): Record<string, number>;
+
+/** Event delegation used by the renderer. */
+export function initDelegation(root: HTMLElement, eventTypes?: string[]): void;
+export function teardownDelegation(root: HTMLElement): void;
+export function delegateEvent(element: HTMLElement, eventType: string, handler: (event: Event) => void, root?: HTMLElement): void;
+export function undelegateEvent(element: HTMLElement, eventType: string): void;
+
+/** Move an element to its own compositor layer during an animation, and back. */
+export function promoteToGPULayer(element: HTMLElement): void;
+export function demoteFromGPULayer(element: HTMLElement): void;
+
+/** Install the animation, environment, gesture and navigation-path methods on a class. */
+export function extendViewWithAnimation(ViewClass: Function): void;
+export function extendViewWithEnvironment(ViewClass: Function): void;
+export function extendViewWithGestures(ViewClass: Function): void;
+export function extendNavigationStackWithPath(NavigationStackClass: Function): void;
