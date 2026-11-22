@@ -10,7 +10,7 @@
  * ColorPicker($color, { supportsOpacity: false })
  */
 
-import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer } from '../../Core/Renderer.js';
 import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
@@ -33,7 +33,7 @@ export function ColorPicker(...args) {
     if (args[2]) props.supportsOpacity = args[2].supportsOpacity ?? true;
   } else if (args[0] && ('value' in args[0] || 'wrappedValue' in args[0])) {
     props.selection = args[0];
-    if (args[1] && !isLegacyView(args[1]) && !isDescriptor(args[1])) {
+    if (args[1] && !isView(args[1])) {
       props.supportsOpacity = args[1].supportsOpacity ?? true;
     }
   }

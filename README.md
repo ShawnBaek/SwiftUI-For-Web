@@ -536,7 +536,6 @@ src/
 │   ├── EventDelegate.js   Single root listener per event type, WeakMap
 │   ├── LifecycleObserver  Shared MutationObserver for onAppear/onDisappear
 │   ├── ViewDescriptor.js  Frozen descriptor objects, FNV-1a hashing
-│   └── ChangeTracker.js   Debug-mode change logs (legacy View only)
 ├── Data/                  State, Binding, ObservableObject, StateObject,
 │                          Observable, Environment, EnvironmentObject —
 │                          all wired into Signal's tracking via lazy

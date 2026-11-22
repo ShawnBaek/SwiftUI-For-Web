@@ -17,11 +17,12 @@
  * )
  */
 
-import { isDescriptor } from '../../Core/ViewDescriptor.js';
-import { View } from '../../Core/View.js';
+import { createDescriptor, isDescriptor, isView } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 import { getOwner, onCleanup } from '../../Data/Signal.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { registerRenderer, render as renderAny } from '../../Core/Renderer.js';
+import { Alignment } from '../Alignment.js';
 
 /**
  * Lazy rows (#50): like SwiftUI's lazy stacks, a row's view is built only
@@ -77,7 +78,7 @@ function renderLazyRows(container, children, { axis, estimate, overscan }) {
   }
 
   rows.forEach((child, index) => {
-    if (!(child instanceof View) && !isDescriptor(child)) return;
+    if (!isView(child)) return;
     // A reactive ForEach (For) or Show manages its own rows: render it in
     // place (display: contents keeps its rows in the stack's layout).
     if (isDescriptor(child) && (child.type === 'For' || child.type === 'Show')) {
@@ -125,118 +126,48 @@ function renderLazyRows(container, children, { axis, estimate, overscan }) {
   }
 }
 
-// A child that is a legacy View or a view descriptor.
-function renderAny(child) {
-  return isDescriptor(child) ? renderDescriptor(child) : child._render();
-}
-import { Alignment } from '../Alignment.js';
-
-/**
- * LazyVStack - A vertically stacked view that creates items lazily
- */
-export class LazyVStackView extends View {
-  constructor(options = {}, ...children) {
-    super();
-
-    // Handle case where first arg is a child
-    if (options instanceof View || isDescriptor(options) || Array.isArray(options)) {
-      children = [options, ...children];
-      options = {};
-    }
-
-    this._alignment = options.alignment ?? Alignment.center;
-    this._spacing = options.spacing ?? 8;
-    this._pinnedViews = options.pinnedViews ?? [];
-    this._children = children.flat();
-
-    // Virtual scrolling settings
-    this._itemHeight = options.itemHeight ?? 44; // Estimated item height
-    this._overscan = options.overscan ?? 5; // Extra items to render
+// LazyVStack/LazyHStack(options?, ...content). Options: alignment,
+// spacing, pinnedViews, and the placeholder size (itemHeight/itemWidth)
+// and overscan in rows.
+function lazyStack(type, options, children, estimateKey, estimate, overscan) {
+  if (isView(options) || Array.isArray(options) || options == null) {
+    children = [options, ...children];
+    options = {};
   }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'lazy-v-stack';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = `${this._spacing}px`;
-    container.style.alignItems = this._getAlignmentCSS();
-    container.style.minHeight = '0';
-
-    renderLazyRows(container, this._children, { axis: 'vertical', estimate: this._itemHeight, overscan: this._overscan });
-
-    return this._applyModifiers(container);
-  }
-
-  _getAlignmentCSS() {
-    switch (this._alignment) {
-      case Alignment.leading: return 'flex-start';
-      case Alignment.trailing: return 'flex-end';
-      case Alignment.center:
-      default: return 'center';
-    }
-  }
+  return chainable(createDescriptor(type, {
+    alignment: options.alignment ?? Alignment.center,
+    spacing: options.spacing ?? 8,
+    pinnedViews: options.pinnedViews ?? [],
+    estimate: options[estimateKey] ?? estimate,
+    overscan: options.overscan ?? overscan,
+  }, children.flat()));
 }
 
-/**
- * Factory function for LazyVStack
- */
+/** A vertical stack whose rows are built as they near the viewport. */
 export function LazyVStack(options, ...children) {
-  return new LazyVStackView(options, ...children);
+  return lazyStack('LazyVStack', options, children, 'itemHeight', 44, 5);
 }
 
-/**
- * LazyHStack - A horizontally stacked view that creates items lazily
- */
-export class LazyHStackView extends View {
-  constructor(options = {}, ...children) {
-    super();
-
-    // Handle case where first arg is a child
-    if (options instanceof View || isDescriptor(options) || Array.isArray(options)) {
-      children = [options, ...children];
-      options = {};
-    }
-
-    this._alignment = options.alignment ?? Alignment.center;
-    this._spacing = options.spacing ?? 8;
-    this._pinnedViews = options.pinnedViews ?? [];
-    this._children = children.flat();
-
-    // Virtual scrolling settings
-    this._itemWidth = options.itemWidth ?? 100; // Estimated item width
-    this._overscan = options.overscan ?? 3; // Extra items to render
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'lazy-h-stack';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'row';
-    container.style.gap = `${this._spacing}px`;
-    container.style.alignItems = this._getAlignmentCSS();
-    container.style.minWidth = '0';
-
-    renderLazyRows(container, this._children, { axis: 'horizontal', estimate: this._itemWidth, overscan: this._overscan });
-
-    return this._applyModifiers(container);
-  }
-
-  _getAlignmentCSS() {
-    switch (this._alignment) {
-      case Alignment.top: return 'flex-start';
-      case Alignment.bottom: return 'flex-end';
-      case Alignment.center:
-      default: return 'center';
-    }
-  }
-}
-
-/**
- * Factory function for LazyHStack
- */
+/** A horizontal stack whose items are built as they near the viewport. */
 export function LazyHStack(options, ...children) {
-  return new LazyHStackView(options, ...children);
+  return lazyStack('LazyHStack', options, children, 'itemWidth', 100, 3);
+}
+
+for (const [type, axis] of [['LazyVStack', 'vertical'], ['LazyHStack', 'horizontal']]) {
+  registerRenderer(type, (props, children) => {
+    const vertical = axis === 'vertical';
+    const container = document.createElement('div');
+    container.dataset.view = vertical ? 'lazy-v-stack' : 'lazy-h-stack';
+    container.style.display = 'flex';
+    container.style.flexDirection = vertical ? 'column' : 'row';
+    container.style.gap = `${props.spacing}px`;
+    // A VStack aligns horizontally (leading/trailing), an HStack vertically.
+    const align = vertical ? { leading: 'flex-start', trailing: 'flex-end' } : { top: 'flex-start', bottom: 'flex-end' };
+    container.style.alignItems = align[props.alignment] ?? 'center';
+    container.style[vertical ? 'minHeight' : 'minWidth'] = '0';
+    renderLazyRows(container, children, { axis, estimate: props.estimate, overscan: props.overscan });
+    return container;
+  });
 }
 
 /**

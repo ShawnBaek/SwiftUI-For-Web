@@ -2,6 +2,86 @@
 
 ## Unreleased
 
+- **BREAKING: every built-in view is a descriptor; one view model** (#48).
+  The containers, navigation, shapes and the rest of the former `View`
+  subclasses now build descriptors with `chainable(createDescriptor(...))`
+  and register their own renderers, like `Text` and the form controls:
+  `List`, `Section`, `Form`, `ScrollView`, `Group`, `DisclosureGroup`,
+  `NavigationStack`, `NavigationLink`, `BackButton`, `NavigationSplitView`,
+  `TabView`, `Menu`, `Label`, `Image` (and `Image.systemName`), `Rectangle`,
+  `RoundedRectangle`, `Circle`, `Ellipse`, `Capsule`, `Path`,
+  `UnevenRoundedRectangle`, `Grid`, `GridRow`, `LazyVGrid`, `LazyHGrid`,
+  `LazyVStack`, `LazyHStack`, `GeometryReader`, `ViewThatFits`,
+  `WindowGroup`, `Settings`, `DocumentGroup`, `LinearGradient`,
+  `RadialGradient`, `AngularGradient`, `EmptyView`/`Empty` and
+  `AnyView`/`Any`. Factory signatures, DOM, styles, ARIA and keyboard
+  behaviour are kept; each view's own methods (`.listStyle`, `.fill`,
+  `.resizable`, `.tabViewStyle`, …) return new descriptors, and every view
+  has the whole shared modifier table.
+  - Removed classes (named exports, the default namespace and `core.d.ts`):
+    `ListView`, `SectionView`, `FormView`, `ScrollViewView`, `GroupView`,
+    `DisclosureGroupView`, `TabViewView`, `MenuView`, `LabelView`,
+    `ImageView`, `ShapeView`, `RectangleView`, `RoundedRectangleView`,
+    `CircleView`, `EllipseView`, `CapsuleView`, `PathView`,
+    `UnevenRoundedRectangleView`, `GridView`, `GridRowView`,
+    `LazyVGridView`, `LazyHGridView`, `LazyVStackView`, `LazyHStackView`,
+    `GeometryReaderView`, `WindowGroupView`, `SettingsView`,
+    `DocumentGroupView` and `TupleView` (`ViewBuilder.buildBlock` returns a
+    `Group`). `ConditionalContent` is now a function, not a class.
+  - Removed functions: `extendViewWithAnimation` and
+    `extendViewWithGestures` (the legacy `View` has these modifiers built
+    in) and `extendNavigationStackWithPath` (it never worked; use the
+    `path` option below).
+  - Removed instance APIs with no descriptor equivalent: `ScrollView`'s
+    `scrollTo`, `scrollToTop` and `scrollToBottom`; the class-only
+    `getElement`/`rerender`/`_render` on the built-in views (render with
+    `render(view)` or mount them); `View._printChanges`, `_logChanges`,
+    `trackChanges` and `src/Core/ChangeTracker.js`; the `ProposedViewSize`
+    helper class of `ViewThatFits.js`; and the setter-only
+    `TabView._pageIndicatorVisibility`, replaced by
+    `.tabViewStyle(TabViewStyle.page, { indexDisplayMode: 'never' })` (SwiftUI's
+    `.page(indexDisplayMode: .never)`).
+  - Removed the sub-module barrels `src/View/index.js`,
+    `src/View/{Container,Control,List,Navigation}/index.js`,
+    `src/Layout/index.js` and `src/Layout/Stack/index.js`: nothing imported
+    them and none of them loaded (they re-exported names that no longer
+    existed).
+  - `View` (`src/Core/View.js`) stays only as a deprecated adapter for
+    user-defined class views: `class MyView extends View { body() { … } }`
+    still renders, and its modifiers are now the descriptor modifiers,
+    applied by the same renderer code (ordered layers included). Its
+    `.tag(_:)` is a TAG modifier, read by `List`, `Picker` and `TabView`.
+    Development builds warn once when a class extends it.
+  - Behaviour changes: `TabView` follows writes to its selection binding
+    made elsewhere, in both styles, and takes a descriptor as its first tab
+    when there is no selection (it dropped it before). `NavigationStack(root,
+    { path })` follows a `NavigationPath`, building screens with
+    `.navigationDestination(dataType, build)`; `pop`, `popToRoot` and
+    `BackButton` edit the path. `BackButton` now finds its stack (it read the
+    stack only during render before, so a click did nothing). `Menu` renders
+    a descriptor label from `{ label: () => View }`, implements
+    `.primaryAction(_:)` (a tap runs it, a secondary click opens the menu),
+    and removes its document listeners when its owner is disposed.
+    `NavigationSplitView` disposes the content it replaces (layout changes,
+    `navigate(view)`) and removes its resize and size-class listeners;
+    `ViewThatFits` renders its candidate through an owned slot and measures
+    candidates in a throwaway root, so measuring creates no lasting effects.
+    `Group` is transparent to the enclosing stack, as in SwiftUI: a `Spacer`
+    inside a `Group` in an `HStack` is horizontal. `Capsule` always uses
+    `border-radius: 9999px` (CSS caps it at half the shorter side), so it no
+    longer reads its `.frame` height. Built-in views are tagged with
+    `data-view` like the other descriptors (for example `data-view="Image"`,
+    `data-view="WindowGroup"`); the server snapshot `document.html` and
+    `Examples/AppleSampleCodeProof/out/index.html` changed only by that
+    attribute on the `WindowGroup` element.
+  - Migration: build views with the factory functions and keep the
+    returned descriptor (`const stack = NavigationStack(Root());
+    stack.push(Detail())` still works). Replace `new XView(...)` with
+    `X(...)`, `view._render()` with `render(view)`, `x instanceof XView`
+    with `x.type === 'X'`, and `ScrollView(...).scrollTo(...)` with a
+    `.modifier((element) => …)` that keeps the element and scrolls it.
+  - Size: the gzipped total went from 118.7 KB to about 112 KB.
+
 - Gesture composition (#50): `.simultaneousGesture(_:including:)`,
   `.highPriorityGesture(_:including:)` and `.gesture(_:including:)` with
   `GestureMask` (`all`, `gesture`, `subviews`, `none`), on every descriptor

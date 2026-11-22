@@ -94,8 +94,6 @@
   },
   "sideEffects": [
     "./src/runtime.js",
-    "./src/View/Control/Picker.js",
-    "./src/View/Navigation/TabView.js",
     "./src/styles/*.css"
   ],
   "directories": {

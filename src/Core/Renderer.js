@@ -199,6 +199,22 @@ function renderDescriptorBody(descriptor, renderer) {
 }
 
 /**
+ * Apply a legacy View's modifiers (descriptor modifiers or `{ apply }`
+ * objects) and bind its reactive ones, as render() does for a descriptor.
+ *
+ * @param {HTMLElement} element
+ * @param {Array} modifiers
+ * @param {string} type - Name for warnings
+ * @returns {HTMLElement} The outermost layer
+ */
+export function applyViewModifiers(element, modifiers, type) {
+  const list = modifiers.filter((modifier) => modifier && (modifier.type || typeof modifier.apply === 'function'));
+  const outer = applyModifiers(element, list);
+  bindReactive(element, { type, props: {}, modifiers: list });
+  return outer;
+}
+
+/**
  * Create the reactive bindings a descriptor declares, at the moment its
  * element is built. The effects belong to the current owner (the mount root,
  * a Show branch, or a For row), so they are disposed together with that
@@ -835,19 +851,15 @@ function ownElementResource(element, dispose) {
 }
 
 // The lower-case shape name of a shape value: 'circle', 'roundedrectangle',
-// … from a string, a descriptor's type or a Shape view's class.
+// … from a string or a shape descriptor's type.
 function shapeName(value) {
-  const name = typeof value === 'string' ? value : value?.type || value?.constructor?.name;
-  return typeof name === 'string' ? name.toLowerCase().replace(/view$/, '') : '';
+  return String(typeof value === 'string' ? value : value?.type ?? '').toLowerCase();
 }
 
-// A RoundedRectangle's radius. On a Shape view `cornerRadius` is the
-// modifier method, so only numbers count.
+// A RoundedRectangle's radius.
 function cornerRadiusOf(value) {
-  for (const candidate of [value?.cornerRadius, value?._cornerRadius, value?.props?.cornerRadius]) {
-    if (typeof candidate === 'number') return candidate;
-  }
-  return 10;
+  const radius = value?.props?.cornerRadius ?? value?.cornerRadius;
+  return typeof radius === 'number' ? radius : 10;
 }
 
 // The CSS clip-path for a shape, or null when it isn't a known shape.
@@ -901,30 +913,8 @@ function applyContentShape(element, { shape }) {
  * Apply clip shape modifier
  */
 function applyClipShape(element, value) {
-  const shapeName = typeof value === 'string' ? value : value?.type || value?.constructor?.name;
-
-  switch (shapeName?.toLowerCase?.() || shapeName) {
-    case 'circle':
-    case 'circleview':
-      element.style.borderRadius = '50%';
-      break;
-    case 'capsule':
-    case 'capsuleview':
-      element.style.borderRadius = '9999px';
-      break;
-    case 'roundedrectangle':
-    case 'roundedrectangleview':
-      element.style.borderRadius = `${cornerRadiusOf(value)}px`;
-      break;
-    case 'rectangle':
-    case 'rectangleview':
-      element.style.borderRadius = '0';
-      break;
-    case 'ellipse':
-    case 'ellipseview':
-      element.style.borderRadius = '50%';
-      break;
-  }
+  const radius = { circle: '50%', ellipse: '50%', capsule: '9999px', rectangle: '0', roundedrectangle: `${cornerRadiusOf(value)}px` }[shapeName(value)];
+  if (radius) element.style.borderRadius = radius;
   element.style.overflow = 'hidden';
 }
 
@@ -1266,49 +1256,6 @@ function applyButtonStyle(element, style) {
       break;
   }
 }
-
-// Image
-registerRenderer('Image', (props) => {
-  const element = acquireElement('img');
-  element.src = props.source || props.src || '';
-  element.alt = props.alt || '';
-
-  if (props.resizable) {
-    element.style.maxWidth = '100%';
-    element.style.height = 'auto';
-  }
-
-  return element;
-});
-
-// Group
-registerRenderer('Group', (props, children) => {
-  const element = acquireElement('div');
-  element.appendChild(renderChildren(children));
-  return element;
-});
-
-// ScrollView
-registerRenderer('ScrollView', (props, children) => {
-  const element = acquireElement('div');
-  element.style.overflow = 'auto';
-
-  if (props.axis === 'horizontal' || props.axes?.includes?.('horizontal')) {
-    element.style.overflowX = 'auto';
-    element.style.overflowY = 'hidden';
-  } else if (props.axis === 'vertical' || props.axes?.includes?.('vertical')) {
-    element.style.overflowX = 'hidden';
-    element.style.overflowY = 'auto';
-  }
-
-  if (props.showsIndicators === false) {
-    element.style.scrollbarWidth = 'none';
-    element.style.msOverflowStyle = 'none';
-  }
-
-  element.appendChild(renderChildren(children));
-  return element;
-});
 
 // ForEach
 registerRenderer('ForEach', (props, children) => {

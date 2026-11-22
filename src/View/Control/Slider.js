@@ -14,7 +14,7 @@
  * })
  */
 
-import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
@@ -59,7 +59,7 @@ function writeValue(binding, value) {
 function appendLabel(container, builder) {
   if (!builder) return;
   const view = builder();
-  if (isLegacyView(view) || isDescriptor(view)) container.appendChild(renderLabelView(view));
+  if (isView(view)) container.appendChild(renderLabelView(view));
 }
 
 const THUMB_CSS = `

@@ -12,7 +12,7 @@ import { fixtures } from './HydrationViews.js';
 import { hydrate, withoutHydration } from '../../src/Core/Hydration.js';
 import { applyShaderToElement } from '../../src/Core/Renderer.js';
 import { ShaderLibrary } from '../../src/Graphic/Shader.js';
-import { ViewThatFits } from '../../src/Layout/ViewThatFits.js';
+import { measureIdealSize } from '../../src/Layout/ViewThatFits.js';
 import { Text, Color, Stepper, State } from '../../src/index.js';
 
 // The browser runner (scripts/run-browser-tests.js) renders the fixture with
@@ -260,7 +260,7 @@ describe('Hydration (adopt mode, #39)', () => {
     const { element, claims } = hydrate(host, () => {
       const root = document.createElement('div');
       applyShaderToElement(root, shader);
-      measured = ViewThatFits(Text('measured'))._measureIdealSize(Text('measured'));
+      measured = measureIdealSize(Text('measured'));
       withoutHydration(() => document.createElement('span'));
       return root;
     });

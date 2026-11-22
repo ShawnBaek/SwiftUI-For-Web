@@ -632,49 +632,6 @@ export function dragGestureModifier(onChanged, onEnded) {
   return gestureModifier(gesture);
 }
 
-// Extend View with gesture methods
-const extendViewWithGestures = (ViewClass) => {
-  /**
-   * Attach a gesture recognizer to this view
-   * @param {GestureBase} gesture - Gesture recognizer to attach
-   */
-  ViewClass.prototype.gesture = function (gesture, options = {}) {
-    return this.modifier(gestureModifier(gesture, options));
-  };
-
-  /** Recognize `gesture` together with this view's own gestures. */
-  ViewClass.prototype.simultaneousGesture = function (gesture, options = {}) {
-    return this.modifier(simultaneousGestureModifier(gesture, options));
-  };
-
-  /** `gesture` wins over this view's and its subviews' gestures of the same kind. */
-  ViewClass.prototype.highPriorityGesture = function (gesture, options = {}) {
-    return this.modifier(highPriorityGestureModifier(gesture, options));
-  };
-
-  /**
-   * Add a long press gesture handler
-   * @param {Function} handler - Called when long press is recognized
-   * @param {Object} options - Long press options
-   */
-  ViewClass.prototype.onLongPressGesture = function (handler, options = {}) {
-    return this.modifier(longPressGestureModifier(handler, options));
-  };
-
-  /**
-   * Add a drag gesture handler
-   * @param {Function} onChanged - Called during drag
-   * @param {Function} onEnded - Called when drag ends
-   */
-  ViewClass.prototype.onDrag = function (onChanged, onEnded) {
-    return this.modifier(dragGestureModifier(onChanged, onEnded));
-  };
-};
-
-export {
-  extendViewWithGestures
-};
-
 export default {
   TapGesture,
   LongPressGesture,

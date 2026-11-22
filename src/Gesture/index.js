@@ -13,6 +13,5 @@ export {
   MagnificationGesture,
   MagnificationGestureRecognizer,
   RotationGesture,
-  RotationGestureRecognizer,
-  extendViewWithGestures
+  RotationGestureRecognizer
 } from './Gesture.js';

@@ -95,6 +95,31 @@ export function isLegacyView(value) {
  * @param {Object} modifier - Modifier to add
  * @returns {Object} New descriptor with modifier added
  */
+/**
+ * Whether a value is a view: a descriptor or a legacy View instance.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+export function isView(value) {
+  return isDescriptor(value) || isLegacyView(value);
+}
+
+/**
+ * The value of a view's last `.tag(_:)`, or undefined. Legacy Views keep
+ * their modifiers in `_modifiers`.
+ *
+ * @param {Object} view
+ * @returns {*}
+ */
+export function tagOf(view) {
+  const modifiers = view?.modifiers ?? view?._modifiers ?? [];
+  for (let i = modifiers.length - 1; i >= 0; i--) {
+    if (modifiers[i]?.type === ModifierType.TAG) return modifiers[i].value;
+  }
+  return undefined;
+}
+
 export function addModifier(descriptor, modifier) {
   if (!isDescriptor(descriptor)) {
     throw new Error('addModifier requires a view descriptor');

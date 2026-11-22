@@ -24,7 +24,6 @@ import { View } from './Core/View.js';
 import {
   ViewBuilder,
   EmptyView, Empty,
-  TupleView,
   ConditionalContent,
   AnyView, Any,
   buildView
@@ -60,8 +59,8 @@ import {
 // View Components
 // =============================================================================
 import { Text, AccessibilityHeadingLevel } from './View/Text.js';
-import { Image, ImageView, ContentMode } from './View/Image.js';
-import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
+import { Image, ContentMode } from './View/Image.js';
+import { Label, LabelStyle, SystemIcons } from './View/Label.js';
 import { SearchFieldPlacement } from './View/Search.js';
 
 // Controls
@@ -71,12 +70,12 @@ import { Toggle } from './View/Control/Toggle.js';
 import { Slider } from './View/Control/Slider.js';
 import { Stepper } from './View/Control/Stepper.js';
 import { Picker, PickerStyle } from './View/Control/Picker.js';
-import { Menu, MenuView } from './View/Control/Menu.js';
+import { Menu } from './View/Control/Menu.js';
 import { DatePicker, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
 import { ColorPicker } from './View/Control/ColorPicker.js';
 
 // Lists
-import { List, ListView, ListStyle } from './View/List/List.js';
+import { List, ListStyle } from './View/List/List.js';
 import { ForEach, Range } from './View/List/ForEach.js';
 
 // Reactive control flow (signal engine)
@@ -89,20 +88,19 @@ import { For } from './View/ControlFlow/For.js';
 import { createEffect as effect, untrack } from './Data/Signal.js';
 
 // Containers
-import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
-import { Group, GroupView } from './View/Container/Group.js';
-import { Form, FormView, FormStyle, Section, SectionView } from './View/Container/Form.js';
-import { DisclosureGroup, DisclosureGroupView } from './View/Container/DisclosureGroup.js';
+import { ScrollView, Axis } from './View/Container/ScrollView.js';
+import { Group } from './View/Container/Group.js';
+import { Form, FormStyle, Section } from './View/Container/Form.js';
+import { DisclosureGroup } from './View/Container/DisclosureGroup.js';
 
 // Navigation
 import { NavigationStack, NavigationLink, BackButton } from './View/Navigation/NavigationStack.js';
 import { NavigationSplitView, NavigationSplitViewVisibility } from './View/Navigation/NavigationSplitView.js';
-import { TabView, TabViewView, TabViewStyle } from './View/Navigation/TabView.js';
+import { TabView, TabViewStyle } from './View/Navigation/TabView.js';
 import {
   NavigationPath,
   CodableRepresentation,
-  NavigationDestination,
-  extendNavigationStackWithPath
+  NavigationDestination
 } from './View/Navigation/NavigationPath.js';
 
 // =============================================================================
@@ -113,18 +111,18 @@ import { HStack } from './Layout/Stack/HStack.js';
 import { ZStack } from './Layout/Stack/ZStack.js';
 import { Spacer } from './Layout/Spacer.js';
 import { Divider } from './Layout/Divider.js';
-import { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
+import { GeometryReader, GeometryProxy } from './Layout/GeometryReader.js';
 import { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
 import {
-  Grid, GridView,
-  GridRow, GridRowView,
+  Grid,
+  GridRow,
   GridItem, GridItemSize,
-  LazyVGrid, LazyVGridView,
-  LazyHGrid, LazyHGridView
+  LazyVGrid,
+  LazyHGrid
 } from './Layout/Grid.js';
 import {
-  LazyVStack, LazyVStackView,
-  LazyHStack, LazyHStackView,
+  LazyVStack,
+  LazyHStack,
   PinnedScrollableViews
 } from './Layout/Stack/LazyStack.js';
 import { ViewThatFits, Axis as ViewThatFitsAxis } from './Layout/ViewThatFits.js';
@@ -133,14 +131,13 @@ import { ViewThatFits, Axis as ViewThatFitsAxis } from './Layout/ViewThatFits.js
 // Shapes
 // =============================================================================
 import {
-  ShapeView,
-  Rectangle, RectangleView,
-  RoundedRectangle, RoundedRectangleView,
-  Circle, CircleView,
-  Ellipse, EllipseView,
-  Capsule, CapsuleView,
-  Path, PathView,
-  UnevenRoundedRectangle, UnevenRoundedRectangleView
+  Rectangle,
+  RoundedRectangle,
+  Circle,
+  Ellipse,
+  Capsule,
+  Path,
+  UnevenRoundedRectangle
 } from './Shape/Shape.js';
 
 // =============================================================================
@@ -163,7 +160,6 @@ import {
   withAnimation,
   isAnimating,
   currentAnimation,
-  extendViewWithAnimation,
   isViewTransitionSupported,
   prefersReducedMotion
 } from './Animation/Animation.js';
@@ -188,8 +184,7 @@ import {
   DragGesture, DragGestureRecognizer,
   MagnificationGesture, MagnificationGestureRecognizer,
   RotationGesture, RotationGestureRecognizer,
-  GestureMask,
-  extendViewWithGestures
+  GestureMask
 } from './Gesture/Gesture.js';
 
 // =============================================================================
@@ -197,12 +192,12 @@ import {
 // =============================================================================
 import { App, AppInstance } from './App/App.js';
 import {
-  WindowGroup, WindowGroupView,
+  WindowGroup,
   WindowResizability,
   WindowStyle,
   Scene,
-  Settings, SettingsView,
-  DocumentGroup, DocumentGroupView
+  Settings,
+  DocumentGroup
 } from './App/WindowGroup.js';
 
 // =============================================================================
@@ -222,7 +217,6 @@ export {
   View,
   ViewBuilder,
   EmptyView, Empty,
-  TupleView,
   ConditionalContent,
   AnyView, Any,
   buildView,
@@ -242,8 +236,8 @@ export {
   // Views
   Text,
   AccessibilityHeadingLevel,
-  Image, ImageView, ContentMode,
-  Label, LabelView, LabelStyle, SystemIcons,
+  Image, ContentMode,
+  Label, LabelStyle, SystemIcons,
   SearchFieldPlacement,
 
   // Controls
@@ -254,12 +248,12 @@ export {
   Slider,
   Stepper,
   Picker, PickerStyle,
-  Menu, MenuView,
+  Menu,
   DatePicker, DatePickerComponents, DatePickerStyle,
   ColorPicker,
 
   // Lists
-  List, ListView, ListStyle,
+  List, ListStyle,
   ForEach, Range,
 
   // Reactive control flow (signal engine)
@@ -269,18 +263,17 @@ export {
   untrack,
 
   // Containers
-  ScrollView, ScrollViewView, Axis,
-  Group, GroupView,
-  Form, FormView, FormStyle,
-  Section, SectionView,
-  DisclosureGroup, DisclosureGroupView,
+  ScrollView, Axis,
+  Group,
+  Form, FormStyle,
+  Section,
+  DisclosureGroup,
 
   // Navigation
   NavigationStack, NavigationLink, BackButton,
   NavigationSplitView, NavigationSplitViewVisibility,
   NavigationPath, CodableRepresentation, NavigationDestination,
-  extendNavigationStackWithPath,
-  TabView, TabViewView, TabViewStyle,
+  TabView, TabViewStyle,
 
   // Layout
   VStack,
@@ -288,27 +281,26 @@ export {
   ZStack,
   Spacer,
   Divider,
-  GeometryReader, GeometryReaderView, GeometryProxy,
+  GeometryReader, GeometryProxy,
   Alignment, HorizontalAlignment, VerticalAlignment,
-  Grid, GridView,
-  GridRow, GridRowView,
+  Grid,
+  GridRow,
   GridItem, GridItemSize,
-  LazyVGrid, LazyVGridView,
-  LazyHGrid, LazyHGridView,
-  LazyVStack, LazyVStackView,
-  LazyHStack, LazyHStackView,
+  LazyVGrid,
+  LazyHGrid,
+  LazyVStack,
+  LazyHStack,
   PinnedScrollableViews,
   ViewThatFits, ViewThatFitsAxis,
 
   // Shapes
-  ShapeView,
-  Rectangle, RectangleView,
-  RoundedRectangle, RoundedRectangleView,
-  Circle, CircleView,
-  Ellipse, EllipseView,
-  Capsule, CapsuleView,
-  Path, PathView,
-  UnevenRoundedRectangle, UnevenRoundedRectangleView,
+  Rectangle,
+  RoundedRectangle,
+  Circle,
+  Ellipse,
+  Capsule,
+  Path,
+  UnevenRoundedRectangle,
 
   // Graphics
   Color, ColorValue,
@@ -321,7 +313,6 @@ export {
   Animation, AnyTransition, Namespace,
   animate, animateStyles,
   withAnimation, isAnimating, currentAnimation,
-  extendViewWithAnimation,
   isViewTransitionSupported, prefersReducedMotion,
 
   // Gestures
@@ -332,14 +323,13 @@ export {
   MagnificationGesture, MagnificationGestureRecognizer,
   RotationGesture, RotationGestureRecognizer,
   GestureMask,
-  extendViewWithGestures,
 
   // App
   App, AppInstance,
-  WindowGroup, WindowGroupView,
+  WindowGroup,
   WindowResizability, WindowStyle,
-  Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView,
+  Scene, Settings,
+  DocumentGroup,
 
   // Batching (the scheduler, element pool, event delegation and GPU-layer
   // helpers moved to 'swiftui-for-web/performance' in 3.0)

@@ -38,6 +38,9 @@ const DEFAULT_COLORS = [
 ];
 
 export class Chart extends View {
+  // Built in: no deprecation warning for the legacy View base (#48).
+  static builtIn = true;
+
   /**
    * Create a Chart
    * @param {Array|Function} dataOrContent - Data array or content builder function

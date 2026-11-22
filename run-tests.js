@@ -421,7 +421,18 @@ async function runTests() {
     const { For } = await import('./src/View/ControlFlow/For.js');
     const { TabView, TabViewStyle } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
-    const { GroupView } = await import('./src/View/Container/Group.js');
+    const { Group } = await import('./src/View/Container/Group.js');
+    const { View: LegacyView } = await import('./src/Core/View.js');
+    // A user-defined class view on the deprecated View base (#48).
+    class LegacyGroup extends LegacyView {
+      static builtIn = true; // no deprecation warning in these tests
+      constructor(...children) { super(); this._children = children; }
+      _render() {
+        const el = document.createElement('div');
+        for (const child of this._children) el.appendChild(render(child));
+        return this._applyModifiers(el);
+      }
+    }
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
     const { Picker, PickerStyle } = await import('./src/View/Control/Picker.js');
     const { List: A11yList } = await import('./src/View/List/List.js');
@@ -1365,8 +1376,8 @@ async function runTests() {
       });
 
       it('a selectable List makes untagged rows disabled options, and a page TabView without dots has no tab roles', () => {
-        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two')).tabViewStyle(TabViewStyle.page);
-        hiddenDots._pageIndicatorVisibility = 'never';
+        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two'))
+          .tabViewStyle(TabViewStyle.page, { indexDisplayMode: 'never' });
         const root = document.createElement('div');
         document.body.appendChild(root);
         const app = App(() => VStack(
@@ -1734,13 +1745,13 @@ async function runTests() {
       it('owns the effects of screens NavigationStack pushes and pops', () => {
         const n = new State(0);
         const actions = [];
-        const detail = () => new GroupView(
+        const detail = () => Group(
           ModifierText(() => 'd' + n.value).onChange(() => n.value, (_, value) => actions.push(value))
         );
         let stack;
         const root = document.createElement('div');
         document.body.appendChild(root);
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root'))))).mount(root);
 
         stack.push(detail(), '', false);
         stack.pop(false);
@@ -1767,18 +1778,18 @@ async function runTests() {
         try {
           // Rendered from a callback with no owner (as NavigationSplitView does
           // for its detail): content stays static, no effects are created.
-          TabView(new State(0), reactive('B'), VStack(ModifierText('y')))._render();
+          render(TabView(new State(0), reactive('B'), VStack(ModifierText('y'))));
           n.value = 1;
           Scheduler.flushSync();
           expect(actions).toEqual([]);
 
-          // View.rerender() of a mounted NavigationStack (as NavigationPath
-          // does): nothing keeps firing after the app unmounts.
+          // A mounted NavigationStack rendered again from outside any owner:
+          // nothing keeps firing after the app unmounts.
           let stack;
           const root = document.createElement('div');
           document.body.appendChild(root);
-          const app = App(() => (stack = NavigationStack(new GroupView(reactive('C'))))).mount(root);
-          stack.rerender();
+          const app = App(() => (stack = NavigationStack(Group(reactive('C'))))).mount(root);
+          render(stack);
           app.unmount();
           root.remove();
           actions.length = 0;
@@ -1992,8 +2003,8 @@ async function runTests() {
         const actions = [];
         let stack;
         const root = attachedRoot();
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root'))))).mount(root);
-        stack.push(new GroupView(Button('Save', () => actions.push('save'))), '', false);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root'))))).mount(root);
+        stack.push(Group(Button('Save', () => actions.push('save'))), '', false);
         const saveButton = findTag(root, 'BUTTON');
         stack.pop(false);
 
@@ -2270,8 +2281,8 @@ async function runTests() {
         let stack;
         const first = document.createElement('div');
         document.body.appendChild(first);
-        const app = App(() => (stack = NavigationStack(new GroupView(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
-        stack.push(new GroupView(ModifierText('detail')), '', true);
+        const app = App(() => (stack = NavigationStack(Group(ModifierText('root')), { transitionDuration: 10 }))).mount(first);
+        stack.push(Group(ModifierText('detail')), '', true);
         app.unmount();
         first.remove();
 
@@ -2842,7 +2853,7 @@ async function runTests() {
             TaskSpacer().task(run('Spacer')),
             TaskDivider().task(run('Divider')),
             TaskForEach([1], () => ModifierText('row')).task(run('ForEach')),
-            new GroupView(ModifierText('legacy')).task(run('legacy View'))
+            new LegacyGroup(ModifierText('legacy')).task(run('legacy View'))
           )).mount(attachedRoot());
           appear();
           await tick();
@@ -3278,12 +3289,12 @@ async function runTests() {
       });
 
       it('legacy View.environment scopes its subtree too', () => {
-        // GroupView extends the legacy View base class; install .environment on it.
-        extendViewWithEnvironment(Object.getPrototypeOf(GroupView));
+        // Install .environment on the legacy View base class.
+        extendViewWithEnvironment(LegacyView);
         const root = document.createElement('div');
         document.body.appendChild(root);
         const app = App(() => VStack(
-          new GroupView(ModifierText(() => String(EnvStore.get('theme') ?? 'global'))).environment('theme', 'legacy'),
+          new LegacyGroup(ModifierText(() => String(EnvStore.get('theme') ?? 'global'))).environment('theme', 'legacy'),
           ModifierText(() => String(EnvStore.get('theme') ?? 'global'))
         )).mount(root);
         const texts = [];
@@ -3761,7 +3772,7 @@ async function runTests() {
       // #51: the switch is a native button with role="switch".
       // #51: no control suppresses the :focus-visible ring with inline styles.
       it('DisclosureGroup exposes aria-expanded and hides collapsed content', () => {
-        const element = A11yDisclosureGroup('Details', new GroupView(ModifierText('Body')))._render();
+        const element = render(A11yDisclosureGroup('Details', Group(ModifierText('Body'))));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const header = find(element, (node) => node.dataset?.disclosurePart === 'header');
         const content = find(element, (node) => node.dataset?.disclosurePart === 'content');
@@ -3782,7 +3793,7 @@ async function runTests() {
         if (!hadListener) document.addEventListener = () => {};
         let element;
         try {
-          element = A11yMenu('Actions', new GroupView(ModifierText('Copy')))._render();
+          element = render(A11yMenu('Actions', Group(ModifierText('Copy'))));
         } finally {
           if (!hadListener) delete document.addEventListener;
         }
@@ -3807,12 +3818,12 @@ async function runTests() {
         const calls = [];
         let element;
         try {
-          element = A11yMenu('Actions',
+          element = render(A11yMenu('Actions',
             MenuButton('Copy', () => calls.push('copy')),
             MenuDivider(),
             MenuButton('Delete', () => calls.push('delete')).disabled(),
             MenuButton(() => calls.push('share'), ModifierText('Share')).foregroundColor('red')
-          )._render();
+          ));
         } finally {
           if (!hadListener) delete document.addEventListener;
         }
@@ -3978,7 +3989,6 @@ async function runTests() {
     const { DatePicker: ParityDatePicker } = await import('./src/View/Control/DatePicker.js');
     const { ColorPicker: ParityColorPicker } = await import('./src/View/Control/ColorPicker.js');
     const { Color: ParityColor } = await import('./src/Graphic/Color.js');
-    const { View: LegacyView } = await import('./src/Core/View.js');
     await import('./src/runtime.js');
     const mouse = (type, x, y) => Object.assign(new MockEvent(type), { clientX: x, clientY: y });
     const touch = (type, points) => Object.assign(new MockEvent(type), {
@@ -4248,6 +4258,185 @@ async function runTests() {
       expect(presses).toBe(1);
     });
 
+    // #48: containers, navigation, shapes and the other former View
+    // subclasses are descriptors with their own renderers.
+    {
+      const { isDescriptor: isContainerDescriptor } = await import('./src/Core/ViewDescriptor.js');
+      const { NavigationPath } = await import('./src/View/Navigation/NavigationPath.js');
+      const { BackButton } = await import('./src/View/Navigation/NavigationStack.js');
+      const { NavigationSplitView } = await import('./src/View/Navigation/NavigationSplitView.js');
+      const containers = {
+        ...(await import('./src/View/Container/Form.js')),
+        ...(await import('./src/View/Container/ScrollView.js')),
+        ...(await import('./src/Layout/Grid.js')),
+        ...(await import('./src/Layout/Stack/LazyStack.js')),
+        ...(await import('./src/Layout/GeometryReader.js')),
+        ...(await import('./src/Layout/ViewThatFits.js')),
+        ...(await import('./src/View/Label.js')),
+        ...(await import('./src/View/Image.js')),
+        ...(await import('./src/Shape/Shape.js')),
+        ...(await import('./src/Graphic/Gradient.js')),
+        ...(await import('./src/App/WindowGroup.js')),
+        ...(await import('./src/Core/ViewBuilder.js')),
+      };
+      const textOf = (node) => (node._textContent ?? '') + (node.children || []).map(textOf).join('');
+      const findNode = (node, test) => test(node) ? node : (node.children || []).map((child) => findNode(child, test)).find(Boolean);
+      const mountView = (factory) => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(factory).mount(root);
+        return { root, done: () => { app.unmount(); root.remove(); } };
+      };
+
+      describe('Containers are descriptors (#48)', () => {
+        it('every former View subclass factory returns a frozen descriptor with the shared modifiers', () => {
+          const c = containers;
+          const views = [
+            Group(ModifierText('a')), A11yList(ModifierText('a')), c.Section(ModifierText('a')), c.Form(ModifierText('a')),
+            c.ScrollView(ModifierText('a')), A11yDisclosureGroup('d', ModifierText('a')), A11yMenu('m', ModifierText('a')),
+            TabView(ModifierText('a')), NavigationStack(ModifierText('a')), NavigationLink('l', ModifierText('a')),
+            BackButton(), NavigationSplitView({ sidebar: () => ModifierText('s'), detail: () => ModifierText('d') }),
+            c.Label('l', { systemImage: 'star' }), c.Image('/a.png'), c.Image.systemName('star'), c.Rectangle(), c.Circle(),
+            c.RoundedRectangle(4), c.Capsule(), c.Ellipse(), c.UnevenRoundedRectangle({}), c.Path((p) => p.move({ x: 0, y: 0 })),
+            c.Grid(c.GridRow(ModifierText('a'))), c.LazyVGrid({}, ModifierText('a')), c.LazyHGrid({}, ModifierText('a')),
+            c.LazyVStack(ModifierText('a')), c.LazyHStack(ModifierText('a')), c.GeometryReader(() => ModifierText('a')),
+            c.ViewThatFits(ModifierText('a')), c.LinearGradient(['red', 'blue']), c.WindowGroup(ModifierText('a')),
+            c.Settings(ModifierText('a')), c.DocumentGroup('doc', () => ModifierText('a')), c.EmptyView(), c.AnyView(ModifierText('a')),
+          ];
+          for (const view of views) {
+            expect(isContainerDescriptor(view)).toBe(true);
+            expect(Object.isFrozen(view)).toBe(true);
+            expect(typeof view.padding).toBe('function');
+            expect(typeof view.gesture).toBe('function');
+          }
+        });
+
+        it('their own methods return new descriptors and keep the original unchanged', () => {
+          const list = A11yList(ModifierText('a'));
+          const inset = list.listStyle('inset').padding(4);
+          expect(list.props.listStyle).toBe('automatic');
+          expect(inset.props.listStyle).toBe('inset');
+          const circle = containers.Circle();
+          expect(circle.fill('red').props.fill).toBe('red');
+          expect(circle.props.fill).toBe(null);
+          expect(containers.LinearGradient(['red', 'blue']).css()).toBe('linear-gradient(to bottom, red, blue)');
+          expect(containers.ScrollView(ModifierText('a')).pagingEnabled().props.paging).toBe(true);
+        });
+
+        it('a Section renders its header, rows and footer; a Path its commands', () => {
+          const section = render(containers.Section({ header: 'Head', footer: () => ModifierText('Foot') }, ModifierText('One'), ModifierText('Two')));
+          expect(section.children.map((part) => part.dataset.sectionPart)).toEqual(['header', 'content', 'footer']);
+          expect(section.children[1].children.length).toBe(2);
+          expect(textOf(section)).toBe('HeadOneTwoFoot');
+          const path = render(containers.Path((p) => { p.move({ x: 0, y: 0 }); p.addLine({ x: 10, y: 0 }); p.closeSubpath(); }).stroke('red', 2));
+          expect(path.children[0].getAttribute('d')).toBe('M 0 0 L 10 0 Z');
+          expect(path.children[0].getAttribute('stroke-width')).toBe('2');
+        });
+
+        it('TabView takes a descriptor as its first tab when there is no selection', () => {
+          const element = render(TabView(ModifierText('First').tabItem(() => ModifierText('1')), ModifierText('Second')));
+          const tabBar = element.children.find((child) => child.dataset.tabviewPart === 'tabbar');
+          expect(tabBar.children.length).toBe(2);
+          expect(textOf(element.children[0])).toBe('First');
+        });
+
+        it('TabView follows writes to its selection made elsewhere, in both styles', () => {
+          const selection = new State('a');
+          const tabs = () => [ModifierText('Alpha').tag('a'), ModifierText('Beta').tag('b')];
+          const bar = mountView(() => TabView(selection, ...tabs()));
+          const pages = mountView(() => TabView(selection, ...tabs()).tabViewStyle(TabViewStyle.page));
+          selection.value = 'b';
+          Scheduler.flushSync();
+          const content = bar.root.children[0].children[0];
+          expect(textOf(content)).toBe('Beta');
+          const buttons = bar.root.children[0].children[1].children;
+          expect(buttons.map((button) => button.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+          const dots = pages.root.children[0].children[1].children;
+          expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+          bar.done();
+          pages.done();
+          // Unmounted: a later write renders nothing.
+          const before = content.children.length;
+          selection.value = 'a';
+          Scheduler.flushSync();
+          expect(content.children.length).toBe(before);
+        });
+
+        it('NavigationStack follows a NavigationPath through its navigationDestination', () => {
+          const path = new NavigationPath();
+          const view = mountView(() => NavigationStack(ModifierText('Home'), { path, transitionStyle: 'none' })
+            .navigationDestination('number', (value) => VStack(ModifierText(`Item ${value}`), BackButton())));
+          const stack = findNode(view.root, (node) => node.dataset?.view === 'NavigationStack').children[0];
+          path.append(7);
+          expect(textOf(stack)).toBe('Item 7‹ Back');
+          findNode(stack, (node) => node.dataset?.view === 'BackButton').click();
+          expect(path.count).toBe(0);
+          expect(textOf(stack)).toBe('Home');
+          view.done();
+          // Unmounted: the stack no longer follows the path.
+          const before = stack.children.length;
+          path.append(8);
+          expect(stack.children.length).toBe(before);
+        });
+
+        it('Menu and NavigationSplitView remove their document and window listeners on unmount', () => {
+          const listeners = new Map();
+          const target = (object) => {
+            const saved = [object.addEventListener, object.removeEventListener];
+            object.addEventListener = (type, fn) => listeners.set(fn, type);
+            object.removeEventListener = (type, fn) => listeners.delete(fn);
+            return () => { [object.addEventListener, object.removeEventListener] = saved; };
+          };
+          const restoreDocument = target(document);
+          const hadWindow = 'window' in globalThis;
+          if (!hadWindow) globalThis.window = { innerWidth: 1024 };
+          const restoreWindow = target(globalThis.window);
+          try {
+            const view = mountView(() => VStack(
+              A11yMenu('Actions', MenuButton('Copy', () => {})),
+              NavigationSplitView({ sidebar: () => ModifierText('Side'), detail: () => ModifierText('Detail') })
+            ));
+            expect(listeners.size).toBe(3);
+            view.done();
+            expect(listeners.size).toBe(0);
+          } finally {
+            restoreDocument();
+            restoreWindow();
+            if (!hadWindow) delete globalThis.window;
+          }
+        });
+
+        it('a user-defined View subclass gets one deprecation warning in development', () => {
+          if (!DEV_BUILD) return; // compiled out of the optimized build
+          const warnings = [];
+          const previousWarn = console.warn;
+          console.warn = (message) => warnings.push(String(message));
+          try {
+            class Card extends LegacyView {}
+            class Badge extends LegacyView {}
+            new Card();
+            new Card();
+            new Badge();
+          } finally {
+            console.warn = previousWarn;
+          }
+          expect(warnings.length).toBe(1);
+          expect(warnings[0].includes('Card extends the deprecated View class')).toBe(true);
+        });
+
+        it('a legacy View subclass renders its modifiers through the descriptor pipeline', () => {
+          const tags = [];
+          const legacy = new LegacyGroup(ModifierText('x')).padding(8).tag('t').onTapGesture(() => tags.push('tap'));
+          const element = render(legacy);
+          expect(element.style.padding).toBe('8px');
+          expect(element.style.cursor).toBe('pointer');
+          // .tag(_:) is a descriptor modifier, read by List, Picker and TabView.
+          const list = render(A11yList({ selection: new State(null).binding }, legacy));
+          expect(list.children[0]._listId).toBe('t');
+        });
+      });
+    }
+
     // Gesture composition (#50): .simultaneousGesture, .highPriorityGesture,
     // .gesture(_:including:).
     describe('Gesture composition: simultaneous, high priority, GestureMask', () => {
@@ -4466,7 +4655,8 @@ async function runTests() {
         const app = App(() => (stack = NavigationStack(ModifierText('Home'), { transitionStyle: 'none' }))).mount(root);
         const fade = AnyTransition.opacity.animation(Animation.linear(0.02));
         stack.push(() => ModifierText('Detail').transition(fade), '', false);
-        const container = stack._container;
+        const findStack = (node) => node.dataset?.view === 'NavigationStack' ? node : (node.children || []).map(findStack).find(Boolean);
+        const container = findStack(root).children[0];
         const detail = container.children[0];
         stack.pop(false);
         expect(container.children.length).toBe(2);

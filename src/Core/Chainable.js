@@ -54,14 +54,14 @@ export function chainable(descriptor, extras = null) {
 
   // Layout and style
   chain.padding = (value) => add(ModifierType.PADDING, value);
-  chain.frame = (options) => add(ModifierType.FRAME, options);
+  chain.frame = (options = {}) => add(ModifierType.FRAME, options);
   chain.foregroundColor = (color) => add(ModifierType.FOREGROUND_COLOR, color);
   chain.background = (color) => add(ModifierType.BACKGROUND, color);
   chain.font = (font) => add(ModifierType.FONT, font);
   chain.opacity = (value) => add(ModifierType.OPACITY, value);
   chain.cornerRadius = (radius) => add(ModifierType.CORNER_RADIUS, radius);
   chain.border = (color, width = 1) => add(ModifierType.BORDER, { color, width });
-  chain.shadow = (options) => add(ModifierType.SHADOW, options);
+  chain.shadow = (options = {}) => add(ModifierType.SHADOW, options);
   chain.clipShape = (shape) => add(ModifierType.CLIP_SHAPE, shape);
   chain.mask = (mask, alignment = 'center') => add(ModifierType.MASK, { shape: mask, alignment });
   chain.contentShape = (shape, eoFill = false) => add(ModifierType.CONTENT_SHAPE, { shape, eoFill });
@@ -117,7 +117,9 @@ export function chainable(descriptor, extras = null) {
 
   chain.modifier = (mod) => add(ModifierType.CUSTOM, mod);
 
-  if (extras) Object.assign(chain, extras({ descriptor, wrap, add, withProps }));
+  // Property descriptors, so a view type can add getters (NavigationStack's
+  // depth).
+  if (extras) Object.defineProperties(chain, Object.getOwnPropertyDescriptors(extras({ descriptor, wrap, add, withProps })));
 
   return Object.freeze(chain);
 }

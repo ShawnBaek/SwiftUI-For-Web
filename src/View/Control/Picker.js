@@ -19,8 +19,7 @@
  * .pickerStyle(PickerStyle.wheel)
  */
 
-import { View } from '../../Core/View.js';
-import { isDescriptor, isLegacyView, createDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
+import { isView, tagOf, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderDescriptor } from '../../Core/Renderer.js';
 import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
@@ -71,25 +70,16 @@ export function Picker(...args) {
   }), pickerModifiers);
 }
 
-// Whether an option is a view: a legacy View or a view descriptor such as
-// `Text('A').tag('a')` (#48).
-function isOption(option) {
-  return isLegacyView(option) || isDescriptor(option);
-}
+// Whether an option is a view, such as `Text('A').tag('a')` (#48).
+const isOption = isView;
 
 function renderOption(option) {
   return renderDescriptor(option);
 }
 
+// The last .tag(_:) wins, as in SwiftUI (#48).
 function getTag(view) {
-  if (isDescriptor(view)) {
-    // The last .tag(_:) wins, as in SwiftUI (#48).
-    for (let i = view.modifiers.length - 1; i >= 0; i--) {
-      if (view.modifiers[i].type === ModifierType.TAG) return view.modifiers[i].value;
-    }
-    return null;
-  }
-  return view._tag ?? null;
+  return tagOf(view) ?? null;
 }
 
 function selectionAccessors(selection) {
@@ -456,11 +446,5 @@ registerRenderer('Picker', (props) => {
       return renderMenu(ctx);
   }
 });
-
-// Legacy views get .tag(_:) too, so they can be Picker and TabView options.
-View.prototype.tag = function (value) {
-  this._tag = value;
-  return this;
-};
 
 export default Picker;

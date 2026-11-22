@@ -20,54 +20,12 @@
  */
 
 import { nextElementId } from '../../Core/ElementID.js';
-import { View } from '../../Core/View.js';
-import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR, ModifierType } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { createDescriptor, isView, tagOf } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, render } from '../../Core/Renderer.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 import { releaseChildren } from '../../Core/ElementPool.js';
-
-/**
- * Helper to check if something is a descriptor
- */
-function isDescriptor(obj) {
-  return obj && obj.$$typeof === VIEW_DESCRIPTOR;
-}
-
-/**
- * Helper to get tabItem from view or descriptor
- */
-function getTabItem(tab) {
-  if (isDescriptor(tab)) {
-    return tab.props._tabItem;
-  }
-  return tab._tabItem;
-}
-
-/**
- * Helper to get tag from view or descriptor
- */
-function getTag(tab, index) {
-  if (isDescriptor(tab)) {
-    // The last .tag(_:) modifier wins, as in SwiftUI (#48); props._tag is the
-    // older descriptor form.
-    for (let i = tab.modifiers.length - 1; i >= 0; i--) {
-      if (tab.modifiers[i].type === ModifierType.TAG) return tab.modifiers[i].value;
-    }
-    return tab.props._tag ?? index;
-  }
-  return tab._tag ?? index;
-}
-
-/**
- * Helper to render a view or descriptor
- */
-function renderTab(tab) {
-  if (isDescriptor(tab)) {
-    return renderDescriptor(tab);
-  }
-  return tab._render();
-}
+import { createEffect, getOwner, untrack } from '../../Data/Signal.js';
 
 /**
  * TabView style enum
@@ -78,402 +36,301 @@ export const TabViewStyle = {
   tabBar: 'tabBar'      // Bottom tab bar (default)
 };
 
-/**
- * Give the first tab the Tab stop when no tab is selected (#51), so the
- * tablist stays reachable from the keyboard.
- */
-function ensureTabStop(tabList) {
-  const tabs = Array.from(tabList.children);
-  if (tabs.length > 0 && !tabs.some((tab) => tab.tabIndex === 0)) tabs[0].tabIndex = 0;
-}
+const isBinding = (value) => value && typeof value === 'object' && !isView(value) && ('value' in value || 'wrappedValue' in value);
 
-function nextTabViewId() {
-  return nextElementId('swiftui-tabview');
-}
+// A tab's .tag(_:) (the last wins, as in SwiftUI), or its index.
+const tagAt = (tab, index) => tagOf(tab) ?? tab.props?._tag ?? index;
+
+// A tab's .tabItem(_:) builder.
+const tabItemOf = (tab) => tab.props?._tabItem ?? tab._tabItem;
 
 /**
- * TabView view class
+ * TabView($selection?, ...tabs)
+ *
+ * Each tab is a view with `.tabItem(() => Label(...))` and `.tag(value)`.
+ * The selection binding follows clicks, and the TabView follows writes to
+ * it made elsewhere.
+ *
+ * @returns {Object} Chainable view descriptor
  */
-export class TabViewView extends View {
-  constructor(selectionOrChildren, ...children) {
-    super();
+export function TabView(...args) {
+  const selection = isBinding(args[0]) ? args.shift() : null;
+  return chainable(createDescriptor('TabView', {
+    selection,
+    tabViewStyle: TabViewStyle.automatic,
+    indexDisplayMode: 'automatic',
+  }, args.flat()), ({ withProps }) => ({
+    // .tabViewStyle(TabViewStyle.page, { indexDisplayMode: 'never' }) hides
+    // the page dots, like SwiftUI's .page(indexDisplayMode: .never).
+    tabViewStyle: (style, options = {}) => withProps({ tabViewStyle: style, indexDisplayMode: options.indexDisplayMode ?? 'automatic' }),
+  }));
+}
 
-    this._selection = null;
-    this._tabs = [];
-    this._tabViewStyle = TabViewStyle.automatic;
-    this._pageIndicatorVisibility = 'automatic';
+registerRenderer('TabView', (props, tabs) => {
+  const { selection } = props;
+  const readSelection = () => (selection ? selection.value ?? selection.wrappedValue ?? null : tabs.length ? tagAt(tabs[0], 0) : null);
+  const writeSelection = (value) => {
+    if (!selection) return;
+    if ('value' in selection) selection.value = value;
+    else selection.wrappedValue = value;
+  };
+  const container = document.createElement('div');
+  container.dataset.view = 'tabview';
+  const idBase = nextElementId('swiftui-tabview');
+  // #51: WAI-ARIA tabs pattern in both styles; show(tag) updates it.
+  const show = props.tabViewStyle === TabViewStyle.page
+    ? renderPages(container, props, tabs, idBase, writeSelection)
+    : renderTabBar(container, tabs, idBase, writeSelection);
+  show(untrack(readSelection));
+  // Follow writes to the selection made elsewhere.
+  if (selection && getOwner()) createEffect(() => { const tag = readSelection(); untrack(() => show(tag)); });
+  return container;
+});
 
-    // Parse arguments
-    if (selectionOrChildren && ('value' in selectionOrChildren || 'wrappedValue' in selectionOrChildren)) {
-      // TabView($selection, tab1, tab2, ...)
-      this._selection = selectionOrChildren;
-      this._tabs = children.flat();
-    } else if (selectionOrChildren instanceof View) {
-      // TabView(tab1, tab2, ...)
-      this._tabs = [selectionOrChildren, ...children].flat();
-    } else if (Array.isArray(selectionOrChildren)) {
-      this._tabs = selectionOrChildren.flat();
-    }
-  }
+// Bottom tab bar (iOS style). Returns show(tag).
+function renderTabBar(container, tabs, idBase, writeSelection) {
+  // Tab content is replaced later from click handlers, where there is no
+  // current owner. The slot keeps each tab's effects owned and disposes them
+  // on every switch and when the app unmounts.
+  const contentSlot = createOwnedSlot();
+  container.style.display = 'flex';
+  container.style.flexDirection = 'column';
+  container.style.height = '100%';
 
-  /**
-   * Set the tab view style
-   * @param {string} style - TabViewStyle value
-   * @returns {TabViewView} Returns this for chaining
-   */
-  tabViewStyle(style) {
-    this._tabViewStyle = style;
-    return this;
-  }
+  const contentArea = document.createElement('div');
+  contentArea.dataset.tabviewPart = 'content';
+  contentArea.style.flex = '1';
+  contentArea.style.overflow = 'auto';
+  contentArea.style.position = 'relative';
 
-  /**
-   * Get current selection
-   * @private
-   */
-  _getSelection() {
-    if (this._selection) {
-      return this._selection.value ?? this._selection.wrappedValue ?? null;
-    }
-    // Default to first tab's tag
-    if (this._tabs.length > 0) {
-      return getTag(this._tabs[0], 0);
-    }
-    return null;
-  }
+  // The tab bar is a tablist, each button a tab with aria-selected and a
+  // roving tabindex, and the content area a tabpanel labelled by the
+  // selected tab.
+  const tabBar = document.createElement('div');
+  tabBar.dataset.tabviewPart = 'tabbar';
+  contentArea.id = `${idBase}-panel`;
+  contentArea.setAttribute('role', 'tabpanel');
+  tabBar.setAttribute('role', 'tablist');
+  tabBar.addEventListener('keydown', (e) => {
+    const buttons = Array.from(tabBar.children);
+    const current = buttons.indexOf(document.activeElement);
+    if (current < 0 || buttons.length === 0) return;
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (current + 1) % buttons.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + buttons.length) % buttons.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = buttons.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    buttons[next].focus();
+    buttons[next].click();
+  });
+  Object.assign(tabBar.style, {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    padding: '8px 0 20px 0', // Extra bottom padding for the safe area
+    backgroundColor: 'rgba(249, 249, 249, 0.94)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderTop: '1px solid rgba(60, 60, 67, 0.1)',
+  });
 
-  /**
-   * Set selection
-   * @private
-   */
-  _setSelection(value) {
-    if (this._selection) {
-      if ('value' in this._selection) {
-        this._selection.value = value;
-      } else if ('wrappedValue' in this._selection) {
-        this._selection.wrappedValue = value;
-      }
-    }
-  }
-
-  _render() {
-    if (this._tabViewStyle === TabViewStyle.page) {
-      return this._renderPageStyle();
-    }
-    return this._renderTabBar();
-  }
-
-  /**
-   * Render as tab bar (iOS style bottom tabs)
-   * @private
-   */
-  _renderTabBar() {
-    // Tab content is replaced later from click handlers, where there is no
-    // current owner. The slot keeps each tab's effects owned and disposes them
-    // on every switch and when the app unmounts.
-    const contentSlot = createOwnedSlot();
-    const container = document.createElement('div');
-    container.dataset.view = 'tabview';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.height = '100%';
-
-    // Content area
-    const contentArea = document.createElement('div');
-    contentArea.dataset.tabviewPart = 'content';
-    contentArea.style.flex = '1';
-    contentArea.style.overflow = 'auto';
-    contentArea.style.position = 'relative';
-
-    // Tab bar
-    const tabBar = document.createElement('div');
-    tabBar.dataset.tabviewPart = 'tabbar';
-
-    // #51: WAI-ARIA tabs pattern. The tab bar is a tablist, each button a tab
-    // with aria-selected and roving tabindex, and the content area a tabpanel
-    // labelled by the selected tab.
-    const tabIdBase = nextTabViewId();
-    contentArea.id = `${tabIdBase}-panel`;
-    contentArea.setAttribute('role', 'tabpanel');
-    tabBar.setAttribute('role', 'tablist');
-    tabBar.addEventListener('keydown', (e) => {
-      const tabs = Array.from(tabBar.children);
-      const current = tabs.indexOf(document.activeElement);
-      if (current < 0 || tabs.length === 0) return;
-      let next = -1;
-      if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
-      else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
-      else if (e.key === 'Home') next = 0;
-      else if (e.key === 'End') next = tabs.length - 1;
-      if (next < 0) return;
-      e.preventDefault();
-      tabs[next].focus();
-      tabs[next].click();
+  const buttons = tabs.map((tab, index) => {
+    const tag = tagAt(tab, index);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = `${idBase}-tab-${index}`;
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-controls', contentArea.id);
+    Object.assign(button.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '4px 20px',
+      border: 'none',
+      background: 'transparent',
+      cursor: 'pointer',
+      transition: 'opacity 0.2s ease',
     });
-    tabBar.style.display = 'flex';
-    tabBar.style.justifyContent = 'space-around';
-    tabBar.style.alignItems = 'center';
-    tabBar.style.padding = '8px 0 20px 0'; // Extra bottom padding for safe area
-    tabBar.style.backgroundColor = 'rgba(249, 249, 249, 0.94)';
-    tabBar.style.backdropFilter = 'blur(20px)';
-    tabBar.style.WebkitBackdropFilter = 'blur(20px)';
-    tabBar.style.borderTop = '1px solid rgba(60, 60, 67, 0.1)';
-
-    const currentSelection = this._getSelection();
-
-    // Render tabs
-    this._tabs.forEach((tab, index) => {
-      const tag = getTag(tab, index);
-      const isSelected = tag === currentSelection;
-
-      // Tab button
-      const tabButton = document.createElement('button');
-      tabButton.type = 'button';
-      tabButton.id = `${tabIdBase}-tab-${index}`;
-      tabButton.setAttribute('role', 'tab');
-      tabButton.setAttribute('aria-controls', contentArea.id);
-      tabButton.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-      tabButton.tabIndex = isSelected ? 0 : -1;
-      if (isSelected) contentArea.setAttribute('aria-labelledby', tabButton.id);
-      tabButton.style.display = 'flex';
-      tabButton.style.flexDirection = 'column';
-      tabButton.style.alignItems = 'center';
-      tabButton.style.gap = '4px';
-      tabButton.style.padding = '4px 20px';
-      tabButton.style.border = 'none';
-      tabButton.style.background = 'transparent';
-      tabButton.style.cursor = 'pointer';
-      tabButton.style.transition = 'opacity 0.2s ease';
-      tabButton.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
-
-      // Render tab item content
-      const tabItemBuilder = getTabItem(tab);
-      if (tabItemBuilder) {
-        const tabItemView = tabItemBuilder();
-        if (tabItemView instanceof View) {
-          const rendered = tabItemView._render();
-          rendered.style.color = 'inherit';
-          rendered.style.fontSize = '10px';
-          tabButton.appendChild(rendered);
-        } else if (isDescriptor(tabItemView)) {
-          const rendered = renderDescriptor(tabItemView);
-          rendered.style.color = 'inherit';
-          rendered.style.fontSize = '10px';
-          tabButton.appendChild(rendered);
-        }
-      } else {
-        const defaultLabel = document.createElement('span');
-        defaultLabel.textContent = `Tab ${index + 1}`;
-        defaultLabel.style.fontSize = '10px';
-        tabButton.appendChild(defaultLabel);
-      }
-
-      tabButton.addEventListener('click', () => {
-        this._setSelection(tag);
-        this._updateTabView(contentSlot, contentArea, tabBar, tag);
-      });
-
-      tabBar.appendChild(tabButton);
-
-      // Show content for selected tab
-      if (isSelected) {
-        const rendered = contentSlot.render(() => renderTab(tab));
-        if (rendered) {
-          rendered.style.height = '100%';
-          contentArea.appendChild(rendered);
-        }
-      }
+    const item = tabItemOf(tab)?.();
+    if (isView(item)) {
+      const rendered = render(item);
+      rendered.style.color = 'inherit';
+      rendered.style.fontSize = '10px';
+      button.appendChild(rendered);
+    } else {
+      const fallback = document.createElement('span');
+      fallback.textContent = `Tab ${index + 1}`;
+      fallback.style.fontSize = '10px';
+      button.appendChild(fallback);
+    }
+    button.addEventListener('click', () => {
+      writeSelection(tag);
+      show(tag);
     });
+    tabBar.appendChild(button);
+    return button;
+  });
 
-    // With no tab matching the selection, keep the tablist reachable by Tab.
-    ensureTabStop(tabBar);
+  container.appendChild(contentArea);
+  container.appendChild(tabBar);
 
-    container.appendChild(contentArea);
-    container.appendChild(tabBar);
-
-    return this._applyModifiers(container);
-  }
-
-  /**
-   * Update tab view when selection changes
-   * @private
-   */
-  _updateTabView(contentSlot, contentArea, tabBar, newSelection) {
-    if (contentSlot.isDisposed()) return;
-
-    // Update content: dispose the previous tab's effects, then release its
-    // elements to the pool (handlers and lifecycle callbacks included).
+  let shown;
+  const show = (selected) => {
+    if (selected === shown || contentSlot.isDisposed()) return;
+    shown = selected;
+    // Dispose the previous tab's effects, then release its elements to the
+    // pool (handlers and lifecycle callbacks included).
     contentSlot.clear();
     releaseChildren(contentArea);
-    const selectedTab = this._tabs.find((tab, index) => getTag(tab, index) === newSelection);
-    if (selectedTab) {
-      const rendered = contentSlot.render(() => renderTab(selectedTab));
-      if (rendered) {
-        rendered.style.height = '100%';
-        contentArea.appendChild(rendered);
-      }
-    } else {
-      contentSlot.render(() => null);
+    const index = tabs.findIndex((tab, i) => tagAt(tab, i) === selected);
+    const rendered = contentSlot.render(() => (index >= 0 ? render(tabs[index]) : null));
+    if (rendered) {
+      rendered.style.height = '100%';
+      contentArea.appendChild(rendered);
     }
-
-    // Update tab bar colors
-    Array.from(tabBar.children).forEach((tabButton, index) => {
-      const tag = this._tabs[index] ? getTag(this._tabs[index], index) : index;
-      const isSelected = tag === newSelection;
-      tabButton.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
-      tabButton.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-      tabButton.tabIndex = isSelected ? 0 : -1;
-      if (isSelected && tabButton.id) contentArea.setAttribute('aria-labelledby', tabButton.id);
+    buttons.forEach((button, i) => {
+      const isSelected = i === index;
+      button.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
+      button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      button.tabIndex = isSelected ? 0 : -1;
+      if (isSelected) contentArea.setAttribute('aria-labelledby', button.id);
     });
-    ensureTabStop(tabBar);
-  }
-
-  /**
-   * Render as page style (swipeable pages)
-   * @private
-   */
-  _renderPageStyle() {
-    const container = document.createElement('div');
-    container.dataset.view = 'tabview';
-    container.dataset.style = 'page';
-    container.style.position = 'relative';
-    container.style.height = '100%';
-    container.style.overflow = 'hidden';
-
-    // Pages container
-    const pagesContainer = document.createElement('div');
-    pagesContainer.style.display = 'flex';
-    pagesContainer.style.height = '100%';
-    pagesContainer.style.transition = 'transform 0.3s ease';
-    pagesContainer.style.willChange = 'transform';
-
-    // #51: the page indicator is a WAI-ARIA tablist. Each dot is a tab that
-    // controls its page (a tabpanel). Off-screen pages are inert and hidden
-    // from assistive technology, so Tab never lands on content you can't see.
-    const tabIdBase = nextTabViewId();
-    const count = this._tabs.length;
-    // With the indicator hidden there are no tabs, so the pages are plain
-    // regions (still inert when off-screen).
-    const showsIndicator = this._pageIndicatorVisibility !== 'never';
-    const currentSelection = this._getSelection();
-    let selectedIndex = this._tabs.findIndex((tab, index) => getTag(tab, index) === currentSelection);
-    if (selectedIndex === -1) selectedIndex = 0;
-
-    const pages = this._tabs.map((tab, index) => {
-      const page = document.createElement('div');
-      page.id = `${tabIdBase}-panel-${index}`;
-      if (showsIndicator) page.setAttribute('role', 'tabpanel');
-      page.style.flexShrink = '0';
-      page.style.width = '100%';
-      page.style.height = '100%';
-      page.style.overflow = 'auto';
-      const rendered = renderTab(tab);
-      if (rendered) page.appendChild(rendered);
-      pagesContainer.appendChild(page);
-      return page;
-    });
-
-    const pageIndicator = document.createElement('div');
-    pageIndicator.dataset.tabviewPart = 'pageindicator';
-    pageIndicator.setAttribute('role', 'tablist');
-    pageIndicator.setAttribute('aria-label', 'Pages');
-    pageIndicator.style.position = 'absolute';
-    pageIndicator.style.bottom = '20px';
-    pageIndicator.style.left = '50%';
-    pageIndicator.style.transform = 'translateX(-50%)';
-    pageIndicator.style.display = 'flex';
-    pageIndicator.style.gap = '8px';
-
-    const dots = this._tabs.map((_, index) => {
-      const dot = document.createElement('button');
-      dot.type = 'button';
-      dot.id = `${tabIdBase}-tab-${index}`;
-      dot.setAttribute('role', 'tab');
-      dot.setAttribute('aria-controls', pages[index].id);
-      dot.setAttribute('aria-label', `Page ${index + 1} of ${count}`);
-      if (showsIndicator) pages[index].setAttribute('aria-labelledby', dot.id);
-      dot.style.width = '8px';
-      dot.style.height = '8px';
-      dot.style.padding = '0';
-      dot.style.border = 'none';
-      dot.style.borderRadius = '50%';
-      dot.style.transition = 'background-color 0.2s ease';
-      dot.style.cursor = 'pointer';
-      dot.addEventListener('click', () => goTo(index));
-      pageIndicator.appendChild(dot);
-      return dot;
-    });
-
-    const show = (index) => {
-      pagesContainer.style.transform = `translateX(-${index * 100}%)`;
-      pages.forEach((page, i) => {
-        const hidden = i !== index;
-        page.inert = hidden;
-        if (hidden) page.setAttribute('aria-hidden', 'true');
-        else page.removeAttribute('aria-hidden');
-      });
-      dots.forEach((dot, i) => {
-        const selected = i === index;
-        dot.setAttribute('aria-selected', selected ? 'true' : 'false');
-        dot.tabIndex = selected ? 0 : -1;
-        dot.style.backgroundColor = selected ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.3)';
-      });
-    };
-
-    const goTo = (index) => {
-      selectedIndex = index;
-      this._setSelection(getTag(this._tabs[index], index));
-      show(index);
-    };
-
-    pageIndicator.addEventListener('keydown', (e) => {
-      if (count === 0) return;
-      const current = dots.indexOf(document.activeElement);
-      const from = current < 0 ? selectedIndex : current;
-      let next = -1;
-      if (e.key === 'ArrowRight') next = (from + 1) % count;
-      else if (e.key === 'ArrowLeft') next = (from - 1 + count) % count;
-      else if (e.key === 'Home') next = 0;
-      else if (e.key === 'End') next = count - 1;
-      if (next < 0) return;
-      e.preventDefault();
-      goTo(next);
-      dots[next].focus();
-    });
-
-    if (count > 0) show(selectedIndex);
-
-    container.appendChild(pagesContainer);
-    if (showsIndicator) container.appendChild(pageIndicator);
-
-    // Touch handling for swiping
-    let touchStartX = 0;
-
-    container.addEventListener('touchstart', (e) => {
-      touchStartX = e.touches[0].clientX;
-    });
-
-    container.addEventListener('touchend', (e) => {
-      const diff = touchStartX - e.changedTouches[0].clientX;
-      if (Math.abs(diff) <= 50) return;
-      if (diff > 0 && selectedIndex < count - 1) goTo(selectedIndex + 1);
-      else if (diff < 0 && selectedIndex > 0) goTo(selectedIndex - 1);
-    });
-
-    return this._applyModifiers(container);
-  }
+    // With no tab selected, the first tab keeps the tablist reachable by Tab.
+    if (index < 0 && buttons.length) buttons[0].tabIndex = 0;
+  };
+  return show;
 }
 
-/**
- * Factory function for TabView
- */
-export function TabView(selectionOrChildren, ...children) {
-  return new TabViewView(selectionOrChildren, ...children);
-}
+// Page style (swipeable pages). Returns show(tag).
+function renderPages(container, props, tabs, idBase, writeSelection) {
+  container.dataset.style = 'page';
+  container.style.position = 'relative';
+  container.style.height = '100%';
+  container.style.overflow = 'hidden';
 
-// Add tabItem method to View class
-View.prototype.tabItem = function (builder) {
-  this._tabItem = builder;
-  return this;
-};
+  const pagesContainer = document.createElement('div');
+  pagesContainer.style.display = 'flex';
+  pagesContainer.style.height = '100%';
+  pagesContainer.style.transition = 'transform 0.3s ease';
+  pagesContainer.style.willChange = 'transform';
+
+  // The page indicator is a tablist. Each dot is a tab that controls its
+  // page (a tabpanel). Off-screen pages are inert and hidden from assistive
+  // technology, so Tab never lands on content you can't see. With the
+  // indicator hidden there are no tabs, so the pages are plain regions
+  // (still inert when off-screen).
+  const count = tabs.length;
+  const showsIndicator = props.indexDisplayMode !== 'never';
+  let selectedIndex = 0;
+
+  const pages = tabs.map((tab, index) => {
+    const page = document.createElement('div');
+    page.id = `${idBase}-panel-${index}`;
+    if (showsIndicator) page.setAttribute('role', 'tabpanel');
+    page.style.flexShrink = '0';
+    page.style.width = '100%';
+    page.style.height = '100%';
+    page.style.overflow = 'auto';
+    page.appendChild(render(tab));
+    pagesContainer.appendChild(page);
+    return page;
+  });
+
+  const pageIndicator = document.createElement('div');
+  pageIndicator.dataset.tabviewPart = 'pageindicator';
+  pageIndicator.setAttribute('role', 'tablist');
+  pageIndicator.setAttribute('aria-label', 'Pages');
+  Object.assign(pageIndicator.style, {
+    position: 'absolute',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    display: 'flex',
+    gap: '8px',
+  });
+
+  const showIndex = (index) => {
+    selectedIndex = index;
+    pagesContainer.style.transform = `translateX(-${index * 100}%)`;
+    pages.forEach((page, i) => {
+      const hidden = i !== index;
+      page.inert = hidden;
+      if (hidden) page.setAttribute('aria-hidden', 'true');
+      else page.removeAttribute('aria-hidden');
+    });
+    dots.forEach((dot, i) => {
+      const selected = i === index;
+      dot.setAttribute('aria-selected', selected ? 'true' : 'false');
+      dot.tabIndex = selected ? 0 : -1;
+      dot.style.backgroundColor = selected ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.3)';
+    });
+  };
+
+  const goTo = (index) => {
+    showIndex(index);
+    writeSelection(tagAt(tabs[index], index));
+  };
+
+  const dots = tabs.map((_, index) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.id = `${idBase}-tab-${index}`;
+    dot.setAttribute('role', 'tab');
+    dot.setAttribute('aria-controls', pages[index].id);
+    dot.setAttribute('aria-label', `Page ${index + 1} of ${count}`);
+    if (showsIndicator) pages[index].setAttribute('aria-labelledby', dot.id);
+    Object.assign(dot.style, {
+      width: '8px',
+      height: '8px',
+      padding: '0',
+      border: 'none',
+      borderRadius: '50%',
+      transition: 'background-color 0.2s ease',
+      cursor: 'pointer',
+    });
+    dot.addEventListener('click', () => goTo(index));
+    pageIndicator.appendChild(dot);
+    return dot;
+  });
+
+  pageIndicator.addEventListener('keydown', (e) => {
+    if (count === 0) return;
+    const current = dots.indexOf(document.activeElement);
+    const from = current < 0 ? selectedIndex : current;
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (from + 1) % count;
+    else if (e.key === 'ArrowLeft') next = (from - 1 + count) % count;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = count - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    goTo(next);
+    dots[next].focus();
+  });
+
+  container.appendChild(pagesContainer);
+  if (showsIndicator) container.appendChild(pageIndicator);
+
+  // Swipe between pages.
+  let touchStartX = 0;
+  container.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+  });
+  container.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) <= 50) return;
+    if (diff > 0 && selectedIndex < count - 1) goTo(selectedIndex + 1);
+    else if (diff < 0 && selectedIndex > 0) goTo(selectedIndex - 1);
+  });
+
+  return (tag) => {
+    if (count === 0) return;
+    const index = tabs.findIndex((tab, i) => tagAt(tab, i) === tag);
+    showIndex(index < 0 ? 0 : index);
+  };
+}
 
 export default TabView;

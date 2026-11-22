@@ -16,9 +16,10 @@
  * )
  */
 
-import { View } from '../Core/View.js';
-import { VIEW_DESCRIPTOR } from '../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../Core/Renderer.js';
+import { createDescriptor, isView } from '../Core/ViewDescriptor.js';
+import { chainable } from '../Core/Chainable.js';
+import { registerRenderer, render } from '../Core/Renderer.js';
+import { getOwner, onCleanup } from '../Data/Signal.js';
 import { createOwnedSlot } from '../Core/OwnedSlot.js';
 import { releaseChildren } from '../Core/ElementPool.js';
 
@@ -112,94 +113,57 @@ export class GeometryProxy {
 }
 
 /**
- * GeometryReader view class
- */
-export class GeometryReaderView extends View {
-  constructor(builder) {
-    super();
-    this._builder = builder;
-    this._geometry = null;
-    this._resizeObserver = null;
-  }
-
-  _render() {
-    const container = document.createElement('div');
-    container.dataset.view = 'geometry-reader';
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.position = 'relative';
-
-    // Create geometry proxy
-    this._geometry = new GeometryProxy(container);
-
-    // Content is rendered later from requestAnimationFrame and ResizeObserver
-    // callbacks, where there is no current owner. The slot keeps its effects
-    // owned, disposes them on each re-render, and stops rendering once the
-    // owner (for example, the app) is disposed.
-    const contentSlot = createOwnedSlot();
-
-    // We need to render content after the container is in the DOM
-    // so we can measure its size
-    const renderContent = () => {
-      if (contentSlot.isDisposed()) {
-        this.destroy();
-        return;
-      }
-
-      // Dispose the previous content's effects, then release its elements
-      contentSlot.clear();
-      releaseChildren(container);
-
-      // Invalidate cached measurements
-      this._geometry._invalidate();
-
-      // Build content with geometry
-      const node = contentSlot.render(() => {
-        if (typeof this._builder !== 'function') return null;
-        const content = this._builder(this._geometry);
-        if (content instanceof View) {
-          return content._render();
-        }
-        if (content && content.$$typeof === VIEW_DESCRIPTOR) {
-          return renderDescriptor(content);
-        }
-        return null;
-      });
-      if (node) container.appendChild(node);
-    };
-
-    // Initial render with requestAnimationFrame to ensure container is in DOM
-    requestAnimationFrame(() => {
-      renderContent();
-    });
-
-    // Set up resize observer for dynamic updates
-    if (typeof ResizeObserver !== 'undefined') {
-      this._resizeObserver = new ResizeObserver(() => {
-        renderContent();
-      });
-      this._resizeObserver.observe(container);
-    }
-
-    return this._applyModifiers(container);
-  }
-
-  /**
-   * Clean up resources
-   */
-  destroy() {
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
-  }
-}
-
-/**
- * Factory function for GeometryReader
+ * GeometryReader((geometry) => View): content built from the size of the
+ * space it is offered, rebuilt when that size changes.
+ *
+ * @param {(geometry: GeometryProxy) => Object} builder
+ * @returns {Object} Chainable view descriptor
  */
 export function GeometryReader(builder) {
-  return new GeometryReaderView(builder);
+  return chainable(createDescriptor('GeometryReader', { builder }));
 }
+
+registerRenderer('GeometryReader', ({ builder }) => {
+  const container = document.createElement('div');
+  container.dataset.view = 'geometry-reader';
+  container.style.width = '100%';
+  container.style.height = '100%';
+  container.style.position = 'relative';
+  const geometry = new GeometryProxy(container);
+
+  // Content is rendered later from requestAnimationFrame and ResizeObserver
+  // callbacks, where there is no current owner. The slot keeps its effects
+  // owned, disposes them on each re-render, and stops rendering once the
+  // owner (for example, the app) is disposed.
+  const contentSlot = createOwnedSlot();
+  let observer = null;
+  const stop = () => {
+    observer?.disconnect();
+    observer = null;
+  };
+
+  // Rendered once the container is in the document and can be measured.
+  const renderContent = () => {
+    if (contentSlot.isDisposed()) return stop();
+    // Dispose the previous content's effects, then release its elements.
+    contentSlot.clear();
+    releaseChildren(container);
+    geometry._invalidate();
+    const node = contentSlot.render(() => {
+      const content = typeof builder === 'function' ? builder(geometry) : null;
+      return isView(content) ? render(content) : null;
+    });
+    if (node) container.appendChild(node);
+  };
+
+  requestAnimationFrame(renderContent);
+  if (typeof ResizeObserver !== 'undefined') {
+    observer = new ResizeObserver(renderContent);
+    observer.observe(container);
+  }
+  if (getOwner()) onCleanup(stop);
+
+  return container;
+});
 
 export default GeometryReader;

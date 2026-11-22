@@ -17,14 +17,10 @@
  * })
  */
 
-import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
 import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
-
-function isView(value) {
-  return isLegacyView(value) || isDescriptor(value);
-}
 
 function parseRange(props, options) {
   props.min = options.in?.[0] ?? options.min ?? null;

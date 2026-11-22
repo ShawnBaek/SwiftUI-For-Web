@@ -17,7 +17,7 @@
  * })
  */
 
-import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer } from '../../Core/Renderer.js';
 import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
@@ -76,7 +76,7 @@ export function DatePicker(...args) {
     if (args[2]) parseOptions(props, args[2]);
   } else if (args[0] && ('value' in args[0] || 'wrappedValue' in args[0])) {
     props.selection = args[0];
-    if (args[1] && !isLegacyView(args[1]) && !isDescriptor(args[1])) parseOptions(props, args[1]);
+    if (args[1] && !isView(args[1])) parseOptions(props, args[1]);
   }
 
   return chainable(createDescriptor('DatePicker', props), datePickerModifiers);

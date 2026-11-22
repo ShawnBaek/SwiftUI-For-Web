@@ -12,7 +12,7 @@
  */
 
 import { nextElementId } from '../../Core/ElementID.js';
-import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { isView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
 import { Binding } from '../../Data/Binding.js';
@@ -20,10 +20,6 @@ import { createEffect, untrack } from '../../Data/Signal.js';
 
 function nextToggleLabelId() {
   return nextElementId('swiftui-toggle-label');
-}
-
-function isView(value) {
-  return isLegacyView(value) || isDescriptor(value);
 }
 
 // Toggle's own modifiers (#48: everything else comes from the shared table).

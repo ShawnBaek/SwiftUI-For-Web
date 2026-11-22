@@ -1,19 +1,13 @@
 {
   "_comment": [
     "Read by scripts/check-package.js (#47).",
-    "untyped: runtime exports that src/index.d.ts does not declare yet. Most are legacy *View classes (#48), gesture recognizer classes, and scheduler, pool and event-delegation internals that #47 plans to move behind a subpath. This list may only shrink: the check fails for a new untyped export, and for a name here that is now typed or no longer exported.",
-    "descriptorOnlyMembers: members the .d.ts declares on a class that only descriptor views implement; the legacy class lacks them until #48."
+    "untyped: runtime exports that src/index.d.ts does not declare yet. This list may only shrink: the check fails for a new untyped export, and for a name here that is now typed or no longer exported.",
+    "descriptorOnlyMembers: members the .d.ts declares on a class that only descriptor views implement. Empty since #48: the legacy View class has the descriptor modifiers too."
   ],
   "untyped": {
     ".": [],
     "./charts": [],
     "./core": []
   },
-  "descriptorOnlyMembers": {
-    "View": [
-      "colorEffect",
-      "distortionEffect",
-      "layerEffect"
-    ]
-  }
+  "descriptorOnlyMembers": {}
 }

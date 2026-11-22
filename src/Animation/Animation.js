@@ -952,25 +952,6 @@ export function matchedGeometryModifier(id, namespace, options = {}) {
   };
 }
 
-/**
- * Adds animation modifiers to a View class.
- *
- * @param {Function} ViewClass - The View class to extend
- */
-export function extendViewWithAnimation(ViewClass) {
-  ViewClass.prototype.animation = function(animation, value) {
-    return this.modifier(animationModifier(animation, value));
-  };
-
-  ViewClass.prototype.transition = function(transition) {
-    return this.modifier(transitionModifier(transition));
-  };
-
-  ViewClass.prototype.matchedGeometryEffect = function(id, namespace, options = {}) {
-    return this.modifier(matchedGeometryModifier(id, namespace, options));
-  };
-}
-
 // =============================================================================
 // Utility Functions
 // =============================================================================
@@ -1155,7 +1136,6 @@ export default {
   withAnimation,
   isAnimating,
   currentAnimation,
-  extendViewWithAnimation,
   isViewTransitionSupported,
   prefersReducedMotion,
   getAnimationStyles,
