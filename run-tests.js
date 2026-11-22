@@ -696,6 +696,17 @@ async function runTests() {
         teardown();
       });
 
+      it('ForEach rows share the enclosing stack axis', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ReactiveForEach(['a', 'b'], (item) => ModifierText(item).frame({ maxWidth: Infinity })), LayerSpacer({ minLength: 10 }))
+        ));
+        const hstack = root.children[0].children[0];
+        const rows = hstack.children[0].children;
+        expect(rows.map((row) => row.style.flexGrow)).toEqual(['1', '1']);
+        expect(hstack.children[1].style.minHeight || '').toBe('');
+        teardown();
+      });
+
       it('Spacer(minLength:) applies on the stack axis only', () => {
         const { root, teardown } = mountInRoot(() => VStack(
           LayerHStack(LayerSpacer({ minLength: 20 })),
@@ -3429,7 +3440,8 @@ async function runTests() {
           element = A11yMenu('Actions',
             MenuButton('Copy', () => calls.push('copy')),
             MenuDivider(),
-            MenuButton('Delete', () => calls.push('delete')).disabled()
+            MenuButton('Delete', () => calls.push('delete')).disabled(),
+            MenuButton(() => calls.push('share'), ModifierText('Share')).foregroundColor('red')
           )._render();
         } finally {
           if (!hadListener) delete document.addEventListener;
@@ -3437,14 +3449,18 @@ async function runTests() {
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const menu = find(element, (node) => node.dataset?.menuPart === 'dropdown');
         const roles = menu.children.map((item) => item.getAttribute('role'));
-        expect(roles).toEqual(['menuitem', 'separator', 'menuitem']);
+        expect(roles).toEqual(['menuitem', 'separator', 'menuitem', 'menuitem']);
+        // A label view (SwiftUI's Button(action:label:)) renders, with its tint.
+        expect(find(menu.children[3], (node) => node._textContent === 'Share') ? true : false).toBe(true);
+        expect(menu.children[3].style.color).toBe('red');
+        menu.children[3].click();
         expect(menu.children[0].textContent).toBe('Copy');
         expect(menu.children[2].getAttribute('aria-disabled')).toBe('true');
         // No nested <button> inside a menu item.
         expect(find(menu.children[0], (node) => node.tagName === 'BUTTON') || null).toBe(null);
         menu.children[0].click();
         menu.children[2].click();
-        expect(calls).toEqual(['copy']);
+        expect(calls).toEqual(['share', 'copy']);
       });
 
       // #48: DisclosureGroup follows outside writes to its binding.

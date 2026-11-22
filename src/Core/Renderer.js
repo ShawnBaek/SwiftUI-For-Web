@@ -128,6 +128,10 @@ export function render(descriptor) {
   return renderDescriptorBody(descriptor, renderer);
 }
 
+// Views whose children are laid out by the enclosing stack, as in SwiftUI
+// (ForEach and Group are transparent; Spacer reads its parent's axis).
+const AXIS_TRANSPARENT = new Set(['Spacer', 'ForEach', 'Group']);
+
 // Errors thrown while rendering a view or applying its modifiers name the
 // view, the modifier and, in development builds, where the view was created
 // (#42). The original error is the `cause`; an error already described by a
@@ -150,8 +154,8 @@ function renderDescriptorBody(descriptor, renderer) {
     // A view's children see no stack axis unless the view is itself a
     // stack (VStack/HStack set it for their children), so frame and Spacer
     // inside a Button, ScrollView or List don't act on an outer stack's
-    // axis (#50). Spacer has no children and reads its parent's axis.
-    element = descriptor.type === 'Spacer'
+    // axis (#50). See AXIS_TRANSPARENT for the exceptions.
+    element = AXIS_TRANSPARENT.has(descriptor.type)
       ? renderer(descriptor.props, descriptor.children)
       : withStackAxis(null, () => renderer(descriptor.props, descriptor.children));
   } catch (error) {

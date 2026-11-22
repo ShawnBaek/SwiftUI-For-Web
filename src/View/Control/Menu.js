@@ -24,8 +24,8 @@
 
 import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
-import { isDescriptor } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
+import { isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
+import { render as renderDescriptor, applyModifiers } from '../../Core/Renderer.js';
 import { Color } from '../../Graphic/Color.js';
 
 function nextMenuId() {
@@ -194,6 +194,12 @@ export class MenuView extends View {
         const { label, action, isDisabled } = descriptor.props;
         if (typeof label === 'string') menuItem.textContent = label;
         else if (label) menuItem.appendChild(renderDescriptor(label));
+        // Button(action, Label(...)) and Button(Text(...), action) keep the
+        // label view in children.
+        for (const child of descriptor.children) menuItem.appendChild(renderDescriptor(child));
+        // Keep the item's tint (a destructive item's red, for example).
+        const tint = descriptor.modifiers.filter((modifier) => modifier.type === ModifierType.FOREGROUND_COLOR);
+        if (tint.length) applyModifiers(menuItem, tint);
         if (isDisabled) menuItem.setAttribute('aria-disabled', 'true');
         menuItem.addEventListener('click', (e) => {
           e.stopPropagation();
