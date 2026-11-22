@@ -75,10 +75,12 @@ class AppInstance {
     // the view is rendered (off-document), then the two are swapped in one
     // step. The host holds its current size until the next frame, so
     // swapping the fallback for the view causes no layout shift.
-    // mode 'adopt' (#39) takes over markup from renderDocument: like
-    // replace, plus a development check that the client tree matches the
-    // server markup, and focus kept inside the host. It swaps in the
-    // client's nodes; it does not reuse the server's (no hydration yet).
+    // mode 'adopt' (#39) hydrates markup from renderDocument or
+    // renderToString: the view renders onto the server's nodes (see
+    // src/Core/Hydration.js), so their identity, focus and scroll offsets
+    // are kept and effects and handlers bind to them. Nodes that don't
+    // match are created fresh; development builds warn about the first
+    // difference.
     const adopt = options.mode === 'adopt';
     const replace = adopt || options.mode === 'replace';
     if (replace) this._holdSize(this._rootElement);

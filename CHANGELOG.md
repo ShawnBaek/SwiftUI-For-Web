@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- `mount(host, { mode: 'adopt' })` now hydrates (#39): the view renders onto
+  the server's DOM nodes instead of swapping in a new tree. While the client
+  render runs, element creation (`acquireElement`, `document.createElement`,
+  `createElementNS`) claims the matching server element, so effects,
+  delegated handlers, lifecycle callbacks, gesture listeners and the element
+  references their closures capture all belong to the server's nodes. A
+  claimed element is emptied first and rebuilt by its renderer, so the
+  resulting DOM is always the client's tree; elements that don't match (a
+  different tag, or outside the enclosing view's element) are created fresh,
+  and development builds still warn at the first difference. Focus, a
+  field's selection and scroll offsets are kept on the reused nodes.
+  Comments and whitespace text in the markup are ignored. `replace` mode and
+  the default mount are unchanged.
 - Descriptor views gained the modifiers that only legacy `View` classes had
   (#48, #50), so nothing that worked before the descriptor migration is
   missing. Every descriptor view (`Text`, `Button`, stacks, the form

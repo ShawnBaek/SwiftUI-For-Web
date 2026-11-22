@@ -1403,9 +1403,11 @@ export function App(content: () => View): {
   /**
    * Mount to a DOM element. `mode: 'replace'` keeps the host's static
    * fallback until the view is ready, swaps them in one step and holds the
-   * host's size meanwhile (no layout shift). `mode: 'adopt'` does the same
-   * for markup from renderDocument, warns in development when the client
-   * tree differs from it, and keeps focus inside the host.
+   * host's size meanwhile (no layout shift). `mode: 'adopt'` hydrates
+   * markup from renderDocument or renderToString: the view renders onto the
+   * server's DOM nodes, keeping their identity, focus and scroll offsets,
+   * creates fresh nodes only where the markup differs, and warns in
+   * development at the first difference.
    */
   mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
   /** Refresh the UI */

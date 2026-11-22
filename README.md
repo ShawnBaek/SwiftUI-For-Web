@@ -371,11 +371,14 @@ App(() => FinderView(query)).mount('#finder', { mode: 'replace' });
 - `mount(host, { mode: 'replace' })` keeps the fallback markup until the view
   is rendered, swaps them in one step and holds the host's height until the
   next frame, so activation causes no layout shift.
-- `mount(host, { mode: 'adopt' })` takes over markup from
-  `renderDocument`/`renderToString`: it swaps in the client tree the same
-  way, keeps focus inside the host, and in development warns at the first
-  place where the client tree differs from the server markup. It doesn't
-  reuse the server's nodes (no hydration yet).
+- `mount(host, { mode: 'adopt' })` hydrates markup from
+  `renderDocument`/`renderToString`: the view renders onto the server's DOM
+  nodes instead of new ones, so each element keeps its identity, focus (with
+  a field's selection) and scroll offset, and the effects, handlers,
+  gestures and lifecycle callbacks bind to those nodes. Where the markup
+  differs from the client tree, the differing elements are created fresh
+  (the result is always the client's tree), and development builds warn at
+  the first difference. Comments and whitespace in the markup don't matter.
 - `unmount()` releases the island's handlers, effects, tasks and lifecycle
   callbacks.
 - Static controls drive the island by writing a `State` the island module

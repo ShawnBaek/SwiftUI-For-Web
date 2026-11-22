@@ -23,6 +23,7 @@ import {
 import { acquireElement, releaseTree, onRelease } from './ElementPool.js';
 import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
+import { isHydrating, hydrationFrame } from './Hydration.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
 import { applyFrame, withStackAxis, currentStackAxis } from './Frame.js';
@@ -81,6 +82,11 @@ export function registerRenderer(type, renderer) {
  * @returns {HTMLElement} DOM element
  */
 export function render(descriptor) {
+  // mount mode 'adopt' (#39): each view is a frame of the hydrating render.
+  return isHydrating() ? hydrationFrame(() => renderNode(descriptor)) : renderNode(descriptor);
+}
+
+function renderNode(descriptor) {
   // Handle null/undefined
   if (descriptor == null) {
     return document.createComment('empty');
