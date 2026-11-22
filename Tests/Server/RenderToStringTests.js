@@ -116,6 +116,8 @@ describe('renderToString (#40)', () => {
 
   it('containers keep a view descriptor given as their first argument', async () => {
     const { ScrollView, LazyVStack, LazyHStack, Form, ViewThatFits } = await import('../../src/index.js');
+    // Lazy stacks render every row in a static page (no IntersectionObserver).
+    expect(renderToString(() => LazyVStack(Text('r1'), Text('r2'))).includes('r2')).toBe(true);
     for (const container of [ScrollView, LazyVStack, LazyHStack, Form]) {
       const html = renderToString(() => container(VStack(Text('inside'))));
       expect(html.includes('inside')).toBe(true);

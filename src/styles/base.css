@@ -210,3 +210,8 @@ body {
   max-height: calc(100vh - 34px);
   overflow: auto;
 }
+
+/* ZStack layers made from ForEach/Show wrappers overlay their rows (#50). */
+[data-zstack-layer] > * {
+  grid-area: 1 / 1;
+}

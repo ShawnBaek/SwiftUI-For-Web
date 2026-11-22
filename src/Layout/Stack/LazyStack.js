@@ -1,8 +1,8 @@
 /**
  * LazyVStack & LazyHStack
  *
- * Not lazy yet (#50): every row renders up front, like VStack/HStack.
- * Real virtualization is planned; the API is SwiftUI's so code won't change.
+ * Lazy (#50): a row's view is built when it nears the viewport and kept
+ * once built, as in SwiftUI. Rows are not recycled.
  *
  * Matches SwiftUI's lazy stacks that only render visible items.
  *
@@ -19,7 +19,70 @@
 
 import { isDescriptor } from '../../Core/ViewDescriptor.js';
 import { View } from '../../Core/View.js';
+import { createOwnedSlot } from '../../Core/OwnedSlot.js';
+import { getOwner, onCleanup } from '../../Data/Signal.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
+
+/**
+ * Lazy rows (#50): like SwiftUI's lazy stacks, a row's view is built only
+ * when its placeholder comes near the viewport (overscan beyond it), and
+ * kept once built. Each row renders through an owned slot created now, so
+ * its effects belong to the stack's owner although it renders later. With
+ * no IntersectionObserver (old browsers, static rendering, tests) every row
+ * renders at once.
+ */
+function renderLazyRows(container, children, { axis, estimate, overscan }) {
+  const canObserve = typeof IntersectionObserver === 'function';
+  const pending = new Map();
+  const observer = canObserve
+    ? new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const build = pending.get(entry.target);
+        if (!build) continue;
+        pending.delete(entry.target);
+        observer.unobserve(entry.target);
+        build();
+      }
+      if (pending.size === 0) observer.disconnect();
+    }, {
+      root: null,
+      rootMargin: axis === 'vertical' ? `${estimate * overscan}px 0px` : `0px ${estimate * overscan}px`,
+      threshold: 0,
+    })
+    : null;
+
+  children.forEach((child, index) => {
+    if (!(child instanceof View) && !isDescriptor(child)) return;
+    const wrapper = document.createElement('div');
+    wrapper.dataset.lazyIndex = String(index);
+    const slot = createOwnedSlot();
+    const build = () => {
+      if (slot.isDisposed()) return;
+      const rendered = slot.render(() => renderAny(child));
+      if (rendered) wrapper.appendChild(rendered);
+      wrapper.dataset.lazyRendered = '';
+      // The placeholder size was only an estimate.
+      if (axis === 'vertical') wrapper.style.minHeight = '';
+      else wrapper.style.minWidth = '';
+    };
+    if (axis === 'vertical') wrapper.style.minHeight = `${estimate}px`;
+    else {
+      wrapper.style.minWidth = `${estimate}px`;
+      wrapper.style.flexShrink = '0';
+    }
+    container.appendChild(wrapper);
+    if (observer) {
+      pending.set(wrapper, build);
+      observer.observe(wrapper);
+    } else {
+      build();
+    }
+  });
+
+  container._lazyObserver = observer;
+  if (observer && getOwner()) onCleanup(() => observer.disconnect());
+}
 
 // A child that is a legacy View or a view descriptor.
 function renderAny(child) {
@@ -59,45 +122,7 @@ export class LazyVStackView extends View {
     container.style.alignItems = this._getAlignmentCSS();
     container.style.minHeight = '0';
 
-    // For now, render all children but set up for lazy loading
-    // Full virtual scrolling would require more complex intersection observer logic
-    const visibleItems = new Set();
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        const index = parseInt(entry.target.dataset.lazyIndex);
-        if (entry.isIntersecting) {
-          visibleItems.add(index);
-          entry.target.style.visibility = 'visible';
-        } else {
-          // Keep rendered but mark as potentially recyclable
-          visibleItems.delete(index);
-        }
-      });
-    }, {
-      root: null,
-      rootMargin: `${this._itemHeight * this._overscan}px 0px`,
-      threshold: 0
-    });
-
-    // Render children with lazy loading support
-    this._children.forEach((child, index) => {
-      if (child instanceof View || isDescriptor(child)) {
-        const wrapper = document.createElement('div');
-        wrapper.dataset.lazyIndex = String(index);
-        wrapper.style.minHeight = `${this._itemHeight}px`;
-
-        const rendered = renderAny(child);
-        wrapper.appendChild(rendered);
-
-        // Observe for visibility
-        observer.observe(wrapper);
-
-        container.appendChild(wrapper);
-      }
-    });
-
-    // Store observer for cleanup
-    container._lazyObserver = observer;
+    renderLazyRows(container, this._children, { axis: 'vertical', estimate: this._itemHeight, overscan: this._overscan });
 
     return this._applyModifiers(container);
   }
@@ -151,36 +176,7 @@ export class LazyHStackView extends View {
     container.style.alignItems = this._getAlignmentCSS();
     container.style.minWidth = '0';
 
-    // Intersection observer for lazy loading
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.style.visibility = 'visible';
-        }
-      });
-    }, {
-      root: null,
-      rootMargin: `0px ${this._itemWidth * this._overscan}px`,
-      threshold: 0
-    });
-
-    // Render children with lazy loading support
-    this._children.forEach((child, index) => {
-      if (child instanceof View || isDescriptor(child)) {
-        const wrapper = document.createElement('div');
-        wrapper.dataset.lazyIndex = String(index);
-        wrapper.style.minWidth = `${this._itemWidth}px`;
-        wrapper.style.flexShrink = '0';
-
-        const rendered = renderAny(child);
-        wrapper.appendChild(rendered);
-
-        observer.observe(wrapper);
-        container.appendChild(wrapper);
-      }
-    });
-
-    container._lazyObserver = observer;
+    renderLazyRows(container, this._children, { axis: 'horizontal', estimate: this._itemWidth, overscan: this._overscan });
 
     return this._applyModifiers(container);
   }

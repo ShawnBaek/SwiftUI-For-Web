@@ -709,7 +709,9 @@ export function withDOMShim(fn) {
     requestIdleCallback: window.requestIdleCallback,
     cancelIdleCallback: window.cancelIdleCallback,
     ResizeObserver: InertObserver,
-    IntersectionObserver: InertObserver,
+    // No IntersectionObserver: code that checks for it renders everything
+    // at once (lazy stacks), which is what a static page needs.
+    IntersectionObserver: undefined,
     MutationObserver: InertObserver,
   };
   const previous = new Map();

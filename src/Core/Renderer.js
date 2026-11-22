@@ -936,7 +936,24 @@ registerRenderer('ZStack', (props, children) => {
     if (child != null) {
       const childEl = withStackAxis(null, () => render(child));
       childEl.style.gridArea = '1 / 1';
-      applyZStackAlignment(childEl, props.alignment);
+      if (childEl.style.display === 'contents') {
+        // ForEach, For and Show render a display:contents wrapper. Make it
+        // an overlay cell of its own, so its rows stack too (#50); rows it
+        // adds later get grid-area from the [data-zstack-layer] rule in
+        // base.css.
+        childEl.style.display = 'grid';
+        childEl.style.gridTemplate = '1fr / 1fr';
+        childEl.style.justifySelf = 'stretch';
+        childEl.style.alignSelf = 'stretch';
+        childEl.dataset.zstackLayer = '';
+        for (const row of Array.from(childEl.children || [])) {
+          row.style.gridArea = '1 / 1';
+          applyZStackAlignment(row, props.alignment);
+        }
+        applyZStackItemsAlignment(childEl, props.alignment);
+      } else {
+        applyZStackAlignment(childEl, props.alignment);
+      }
       element.appendChild(childEl);
     }
   }
@@ -1235,6 +1252,15 @@ function alignmentToCSS(alignment, direction) {
     default:
       return 'center';
   }
+}
+
+// The same alignment for every item of a grid (rows a ZStack layer adds
+// later).
+function applyZStackItemsAlignment(element, alignment) {
+  const probe = { style: {} };
+  applyZStackAlignment(probe, alignment);
+  element.style.justifyItems = probe.style.justifySelf;
+  element.style.alignItems = probe.style.alignSelf;
 }
 
 function applyZStackAlignment(element, alignment) {

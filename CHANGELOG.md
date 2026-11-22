@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Layout (#50): `ZStack` overlays the rows of a `ForEach`, `For` or `Show`
+  (the wrapper becomes an overlay cell; rows added later follow a
+  `[data-zstack-layer]` rule in `base.css`). `frame(alignment:)` positions
+  content inside the frame (`.frame({ width, height, alignment:
+  'bottomTrailing' })`). `LazyVStack` and `LazyHStack` are lazy: a row's
+  view is built when it nears the viewport and kept, as in SwiftUI; without
+  `IntersectionObserver` (and in static rendering) every row renders.
 - One view model (#48). `Toggle`, `Slider`, `Stepper`, `TextField`,
   `SecureField`, `Picker`, `DatePicker` and `ColorPicker` return view
   descriptors with the full modifier table plus their own methods
@@ -103,7 +110,6 @@
   `box-sizing: border-box`, so padding followed by a frame no longer
   overflows (#50).
 - `Spacer(minLength:)` sets the minimum length on its stack's axis only (#50).
-- `LazyVStack` and `LazyHStack` document that they are not lazy yet.
 - `ForEach` is reactive and keyed (#52): given a `State`, a `Binding` or a
   function returning the array, it renders through the keyed `For` renderer,
   so rows with a stable id keep their DOM when the data changes. A plain

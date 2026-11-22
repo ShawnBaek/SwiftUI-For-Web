@@ -66,6 +66,35 @@ export function applyFrame(element, value) {
       style.maxHeight = cssLength(value.maxHeight);
     }
   }
+  if (value.alignment !== undefined && value.alignment !== null) applyFrameAlignment(style, value.alignment);
+}
+
+// frame(alignment:) positions the content inside the frame (#50): the
+// element becomes a flex container (unless it is a grid) and its main and
+// cross axis alignment follow the requested edge.
+function applyFrameAlignment(style, alignment) {
+  const name = String(alignment).toLowerCase();
+  const vertical = name.includes('top') ? 'flex-start' : name.includes('bottom') ? 'flex-end' : 'center';
+  const horizontal = name.includes('leading') || name.includes('left')
+    ? 'flex-start'
+    : name.includes('trailing') || name.includes('right') ? 'flex-end' : 'center';
+  if (style.display === 'grid') {
+    style.alignItems = vertical === 'flex-start' ? 'start' : vertical === 'flex-end' ? 'end' : 'center';
+    style.justifyItems = horizontal === 'flex-start' ? 'start' : horizontal === 'flex-end' ? 'end' : 'center';
+    return;
+  }
+  if (!style.display || style.display.startsWith('inline') || style.display === 'block') {
+    style.display = 'flex';
+  }
+  if (style.flexDirection === 'column') {
+    style.justifyContent = vertical;
+    style.alignItems = horizontal;
+  } else {
+    style.justifyContent = horizontal;
+    style.alignItems = vertical;
+  }
+  // Text inside follows the horizontal edge too.
+  style.textAlign = horizontal === 'flex-start' ? 'start' : horizontal === 'flex-end' ? 'end' : 'center';
 }
 
 function fill(style, axis, sizeIsFree) {

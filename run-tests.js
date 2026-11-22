@@ -717,6 +717,7 @@ async function runTests() {
     const { HStack: LayerHStack } = await import('./src/Layout/Stack/HStack.js');
     const { ZStack: LayerZStack } = await import('./src/Layout/Stack/ZStack.js');
     const { Spacer: LayerSpacer } = await import('./src/Layout/Spacer.js');
+    const { LazyVStack: LayerLazyVStack } = await import('./src/Layout/Stack/LazyStack.js');
     const { Button: LayerButton } = await import('./src/View/Control/Button.js');
     describe('Reactive bindings inside Show and For (#44)', () => {
       const mountInRoot = (viewFactory) => {
@@ -864,6 +865,58 @@ async function runTests() {
         expect(rows.map((row) => row.style.flexGrow)).toEqual(['1', '1']);
         expect(hstack.children[1].style.minHeight || '').toBe('');
         teardown();
+      });
+
+      it('ZStack overlays the rows of a ForEach, and frame(alignment:) places content', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerZStack({ alignment: 'topLeading' }, ReactiveForEach(['a', 'b'], (item) => ModifierText(item))),
+          ModifierText('corner').frame({ width: 200, height: 100, alignment: 'bottomTrailing' }),
+          VStack(ModifierText('x')).frame({ maxWidth: Infinity, alignment: 'leading' })
+        ));
+        const [zstack, corner, column] = root.children[0].children;
+        const layer = zstack.children[0];
+        expect(layer.style.display).toBe('grid');
+        expect(layer.dataset.zstackLayer).toBe('');
+        expect(layer.children.map((row) => row.style.gridArea)).toEqual(['1 / 1', '1 / 1']);
+        expect(layer.style.justifyItems).toBe('start');
+        expect(layer.style.alignItems).toBe('start');
+        // Row direction: main axis horizontal.
+        expect(corner.style.display).toBe('flex');
+        expect(corner.style.justifyContent).toBe('flex-end');
+        expect(corner.style.alignItems).toBe('flex-end');
+        // A VStack (column): cross axis horizontal.
+        expect(column.style.alignItems).toBe('flex-start');
+        teardown();
+      });
+
+      it('LazyVStack builds a row when it nears the viewport and keeps it', () => {
+        const previous = globalThis.IntersectionObserver;
+        const observers = [];
+        globalThis.IntersectionObserver = class {
+          constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); }
+          observe(target) { this.targets.push(target); }
+          unobserve(target) { this.targets = this.targets.filter((t) => t !== target); }
+          disconnect() { this.targets = []; }
+        };
+        try {
+          const built = [];
+          const { root, teardown } = mountInRoot(() => VStack(LayerLazyVStack(
+            ...['one', 'two', 'three'].map((item) => ModifierText(() => { built.push(item); return item; }))
+          )));
+          const rows = root.children[0].children[0].children;
+          expect(rows.length).toBe(3);
+          expect(built).toEqual([]);
+          expect(rows[0].style.minHeight).toBe('44px');
+          observers[0].callback([{ target: rows[1], isIntersecting: true }]);
+          expect(built).toEqual(['two']);
+          expect(rows[1].children.length).toBe(1);
+          expect(rows[1].dataset.lazyRendered).toBe('');
+          observers[0].callback([{ target: rows[1], isIntersecting: true }]);
+          expect(built).toEqual(['two']);
+          teardown();
+        } finally {
+          globalThis.IntersectionObserver = previous;
+        }
       });
 
       it('Spacer(minLength:) applies on the stack axis only', () => {
