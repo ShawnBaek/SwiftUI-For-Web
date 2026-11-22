@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The default export's type (`import SwiftUI from …`) is now derived from the
+  declared named exports, so it lists every typed view and modifier instead of
+  a hand-kept subset of about 90, and it includes Charts for the main entry
+  (#47).
 - `swiftui-for-web/core` has its own type declarations (`src/core.d.ts`), so
   importing a Charts name from it is now a type error instead of a load-time
   failure. `scripts/check-package.js` checks `./core` declarations against the
@@ -14,7 +18,9 @@
   `getPoolStats`, `batchUpdates`, `endBatch`, `enqueueDOMWrite`,
   `scheduleWork`, `schedulePostFlush`, `getSchedulerStats`,
   `resetSchedulerStats`, `promoteToGPULayer`, `demoteFromGPULayer`,
-  `initDelegation`, `teardownDelegation`, `delegateEvent`, `undelegateEvent`)
+  `initDelegation`, `teardownDelegation`, `delegateEvent`, `undelegateEvent`,
+  and the scheduler lanes `SyncLane`, `DiscreteLane`, `DefaultLane`,
+  `TransitionLane`, `IdleLane`)
   will leave the main entry in the next major release. Import them from
   `swiftui-for-web/internal/*` if you depend on them (#47).
 - Add `.task(_:)` and `.task(id:_:)`: asynchronous work that starts when a view

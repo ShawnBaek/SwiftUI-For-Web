@@ -1414,97 +1414,12 @@ export function currentDeviceIdiom(): string;
 // Default Export
 // =============================================================================
 
-declare const SwiftUI: {
-  // All exports available as properties
-  VERSION: string;
-  View: typeof View;
-  Text: typeof Text;
-  Image: typeof Image;
-  Label: typeof Label;
-  Button: typeof Button;
-  TextField: typeof TextField;
-  SecureField: typeof SecureField;
-  Toggle: typeof Toggle;
-  Slider: typeof Slider;
-  Stepper: typeof Stepper;
-  Picker: typeof Picker;
-  DatePicker: typeof DatePicker;
-  ColorPicker: typeof ColorPicker;
-  Menu: typeof Menu;
-  VStack: typeof VStack;
-  HStack: typeof HStack;
-  ZStack: typeof ZStack;
-  LazyVStack: typeof LazyVStack;
-  LazyHStack: typeof LazyHStack;
-  Spacer: typeof Spacer;
-  Divider: typeof Divider;
-  Grid: typeof Grid;
-  GridRow: typeof GridRow;
-  GridItem: typeof GridItem;
-  LazyVGrid: typeof LazyVGrid;
-  LazyHGrid: typeof LazyHGrid;
-  GeometryReader: typeof GeometryReader;
-  ViewThatFits: typeof ViewThatFits;
-  List: typeof List;
-  ForEach: typeof ForEach;
-  Range: typeof Range;
-  Section: typeof Section;
-  ScrollView: typeof ScrollView;
-  Group: typeof Group;
-  Form: typeof Form;
-  DisclosureGroup: typeof DisclosureGroup;
-  NavigationStack: typeof NavigationStack;
-  NavigationLink: typeof NavigationLink;
-  NavigationPath: typeof NavigationPath;
-  NavigationSplitView: typeof NavigationSplitView;
-  TabView: typeof TabView;
-  Rectangle: typeof Rectangle;
-  RoundedRectangle: typeof RoundedRectangle;
-  Circle: typeof Circle;
-  Ellipse: typeof Ellipse;
-  Capsule: typeof Capsule;
-  Path: typeof Path;
-  Color: typeof Color;
-  Font: typeof Font;
-  LinearGradient: typeof LinearGradient;
-  RadialGradient: typeof RadialGradient;
-  AngularGradient: typeof AngularGradient;
-  Animation: typeof Animation;
-  AnyTransition: typeof AnyTransition;
-  Namespace: typeof Namespace;
-  animate: typeof animate;
-  animateStyles: typeof animateStyles;
-  withAnimation: typeof withAnimation;
-  TapGesture: typeof TapGesture;
-  LongPressGesture: typeof LongPressGesture;
-  DragGesture: typeof DragGesture;
-  MagnificationGesture: typeof MagnificationGesture;
-  RotationGesture: typeof RotationGesture;
-  State: typeof State;
-  Binding: typeof Binding;
-  ObservableObject: typeof ObservableObject;
-  Published: typeof Published;
-  StateObject: typeof StateObject;
-  Observable: typeof Observable;
-  Environment: typeof Environment;
-  EnvironmentObject: typeof EnvironmentObject;
-  EnvironmentValues: typeof EnvironmentValues;
-  App: typeof App;
-  WindowGroup: typeof WindowGroup;
-  Settings: typeof Settings;
-  SearchFieldPlacement: typeof SearchFieldPlacement;
-  // Style constants
-  Alignment: typeof Alignment;
-  HorizontalAlignment: typeof HorizontalAlignment;
-  VerticalAlignment: typeof VerticalAlignment;
-  ContentMode: typeof ContentMode;
-  PickerStyle: typeof PickerStyle;
-  ListStyle: typeof ListStyle;
-  FormStyle: typeof FormStyle;
-  TabViewStyle: typeof TabViewStyle;
-  ColorScheme: typeof ColorScheme;
-  UserInterfaceSizeClass: typeof UserInterfaceSizeClass;
-  UnitPoint: typeof UnitPoint;
-};
+import * as SwiftUICore from './core.js';
+
+/**
+ * The default export: every declared named export of this module as one
+ * namespace object (the runtime default carries the same values).
+ */
+declare const SwiftUI: Omit<typeof SwiftUICore, 'default'>;
 
 export default SwiftUI;
