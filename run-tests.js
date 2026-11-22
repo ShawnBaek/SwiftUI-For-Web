@@ -709,6 +709,44 @@ async function runTests() {
         teardown();
       });
 
+      it('TabView selects tabs by their .tag(_:) values', () => {
+        const selection = new State('settings');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(
+          selection,
+          ModifierText('Home screen').tag('home'),
+          ModifierText('Settings screen').tag('settings')
+        )).mount(root);
+        const parts = root.children[0].children;
+        const content = parts.find((child) => child.dataset.tabviewPart !== 'tabbar');
+        const collect = (node, out = []) => { if (node._textContent) out.push(node._textContent); (node.children || []).forEach((c) => collect(c, out)); return out; };
+        expect(collect(content).join(' ').includes('Settings screen')).toBe(true);
+        const tabBar = parts.find((child) => child.dataset.tabviewPart === 'tabbar');
+        tabBar.children[0].click();
+        expect(selection.value).toBe('home');
+        app.unmount();
+        root.remove();
+      });
+
+      it('a menu Picker keeps a number tag as a number', () => {
+        const count = new State(1);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker('Count', count.binding,
+          ModifierText('One').tag(1),
+          ModifierText('Two').tag(2))).mount(root);
+        let select = null;
+        const find = (node) => { if (!select && (node.tagName === 'SELECT' || node.tagName === 'select')) select = node; (node.children || []).forEach(find); };
+        find(root);
+        select.selectedIndex = 1;
+        select.value = '2';
+        select.dispatchEvent({ type: 'change', target: select });
+        expect(count.value).toBe(2);
+        app.unmount();
+        root.remove();
+      });
+
       it('disposes the previous tab\'s effects when TabView switches tabs and on unmount', () => {
         const selection = new State(0);
         const n = new State(0);

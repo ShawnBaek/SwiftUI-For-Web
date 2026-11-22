@@ -194,9 +194,12 @@ export class PickerView extends View {
       }
     }
 
-    // Handle selection change
+    // Handle selection change. <option>.value is always a string, so map the
+    // chosen option back to its original tag (a number tag stays a number).
+    const optionTags = this._options.filter((option) => this._isOption(option)).map((option) => this._getTag(option));
     select.addEventListener('change', (e) => {
-      this._setSelection(e.target.value);
+      const index = e.target.selectedIndex;
+      this._setSelection(index >= 0 && index < optionTags.length ? optionTags[index] : e.target.value);
     });
 
     container.appendChild(select);

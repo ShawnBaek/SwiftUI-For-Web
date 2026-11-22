@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `TabView` selects tabs by a descriptor's `.tag(_:)` value, everywhere it
+  reads a tag (#48).
+- The menu-style `Picker` keeps a number tag as a number when the user picks
+  an option; before, it stored the option's string value, so the selection
+  stopped matching.
 - Legacy containers render view descriptors (#48): `NavigationStack(VStack(…))`,
   descriptor screens pushed onto it, descriptor `NavigationLink` labels, and
   descriptor content in `WindowGroup` and `Settings` used to render nothing.
