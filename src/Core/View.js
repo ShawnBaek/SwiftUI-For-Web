@@ -23,6 +23,7 @@
  * }
  */
 
+import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint } from './Accessibility.js';
 import { ChangeTracker } from './ChangeTracker.js';
 import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
@@ -560,15 +561,15 @@ export class View {
   }
 
   accessibilityLabel(label) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-label', String(label ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityLabel(element, String(label ?? '')) });
   }
 
   accessibilityValue(value) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-valuetext', String(value ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityValue(element, String(value ?? '')) });
   }
 
   accessibilityHint(hint) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-description', String(hint ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityHint(element, String(hint ?? '')) });
   }
 
   accessibilityIdentifier(identifier) {

@@ -462,7 +462,10 @@ async function runTests() {
     const PresentationEnvironment = await import('./src/Data/Environment.js');
     const LifecycleModule = await import('./src/Core/LifecycleObserver.js');
     const IslandsModule = await import('./src/islands.js');
+    const { applyAccessibilityValue: applyAccessibilityValueForTest } = await import('./src/Core/Accessibility.js');
     describe('SwiftUI-style modifiers', () => {
+      // #51 decision: value joins the name except on range roles; the hint is
+      // an aria-describedby description.
       it('maps accessibility modifiers to semantic attributes', () => {
         const element = render(
           ModifierText('Status')
@@ -471,10 +474,24 @@ async function runTests() {
             .accessibilityHint('Opens the build details')
             .accessibilityIdentifier('build-status')
         );
-        expect(element.getAttribute('aria-label')).toBe('Build status');
-        expect(element.getAttribute('aria-valuetext')).toBe('Passing');
-        expect(element.getAttribute('aria-description')).toBe('Opens the build details');
+        expect(element.getAttribute('aria-label')).toBe('Build status, Passing');
+        expect(element.getAttribute('aria-valuetext')).toBe(null);
+        expect(element.getAttribute('aria-description')).toBe(null);
+        const hintId = element.getAttribute('aria-describedby');
+        const hint = element.children.find((child) => child.id === hintId);
+        expect(hint.textContent).toBe('Opens the build details');
+        expect(hint.hidden).toBe(true);
         expect(element.getAttribute('data-accessibility-identifier')).toBe('build-status');
+        // Without a label, the value is visually hidden text in the name.
+        const unlabeled = render(ModifierText('Volume').accessibilityValue('50%'));
+        const valueNode = unlabeled.children.find((child) => child.dataset?.accessibilityValue === '');
+        expect(valueNode.textContent).toBe(', 50%');
+        expect(valueNode.className).toBe('swiftui-visually-hidden');
+        // On a range role, it is aria-valuetext.
+        const slider = document.createElement('div');
+        slider.setAttribute('role', 'slider');
+        applyAccessibilityValueForTest(slider, 'Loud');
+        expect(slider.getAttribute('aria-valuetext')).toBe('Loud');
       });
 
       it('runs onChange for actual changes and supports initial', () => {

@@ -13,6 +13,7 @@
  * 6. Eliminated data-view attributes in production (removed debug overhead)
  */
 
+import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint } from './Accessibility.js';
 import { DEV_BUILD, userFrame } from './Dev.js';
 import {
   isDescriptor,
@@ -545,15 +546,15 @@ function applyModifier(element, modifier) {
       break;
 
     case ModifierType.ACCESSIBILITY_LABEL:
-      element.setAttribute('aria-label', accessibilityText(value));
+      applyAccessibilityLabel(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_VALUE:
-      element.setAttribute('aria-valuetext', accessibilityText(value));
+      applyAccessibilityValue(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_HINT:
-      element.setAttribute('aria-description', accessibilityText(value));
+      applyAccessibilityHint(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_IDENTIFIER:
