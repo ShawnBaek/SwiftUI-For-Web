@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What’s new in 3.1 · SwiftUI for Web 3.1</title>
+  <meta name="description" content="Overview of the 3.1.0 release and links to every guide.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./" aria-current="page">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./" aria-current="page">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>What’s new in 3.1.0</h1>
+<p class="lead">3.1.0 is the first release of the 3.x line, and includes everything from the
+<code>3.0.0-alpha.1</code> and <code>3.0.0-alpha.2</code> prereleases. Every built-in view is now a
+descriptor with one shared modifier table, the same views render to HTML on a server, and the
+framework behaves closer to SwiftUI in gestures, transitions, presentations and accessibility.</p>
+
+<p>Try any of it in the <a href="../playground/">Playground</a>: every runnable sample in these guides
+has an <strong>Open in Playground</strong> button.</p>
+
+<div class="cards">
+  <a class="card" href="static-rendering.html"><strong>Static rendering for SEO</strong><span><code>swiftui-for-web/server</code>: <code>renderToString</code>, <code>renderDocument</code>, <code>DocumentMetadata</code>, <code>sitemap</code>.</span></a>
+  <a class="card" href="islands.html"><strong>Islands and hydration</strong><span><code>mount(host, { mode: 'replace' | 'adopt' })</code> and <code>whenVisible</code>.</span></a>
+  <a class="card" href="presentations.html"><strong>Presentations</strong><span><code>.sheet</code>, <code>.alert</code>, <code>.confirmationDialog</code>, <code>.fullScreenCover</code> and <code>dismiss</code>.</span></a>
+  <a class="card" href="gestures-animation.html"><strong>Gestures and animation</strong><span><code>.simultaneousGesture</code>, <code>.highPriorityGesture</code>, removal transitions, <code>matchedGeometryEffect</code>.</span></a>
+  <a class="card" href="reactivity-layout.html"><strong>Reactivity and layout</strong><span>Reactive <code>ForEach</code>, <code>Show</code>, ordered modifiers, <code>frame(alignment:)</code>, lazy stacks.</span></a>
+  <a class="card" href="accessibility.html"><strong>Accessibility</strong><span>Native controls and WAI-ARIA patterns with keyboard support.</span></a>
+  <a class="card" href="build.html"><strong>Release build</strong><span><code>node scripts/build.js</code> with <code>--bundle</code>, <code>--hash</code>, <code>--no-minify</code>.</span></a>
+  <a class="card" href="migration.html"><strong>Migrating from 3.0</strong><span>Removed <code>*View</code> classes and <code>extend*</code> helpers, <code>/performance</code>, Chart changes.</span></a>
+</div>
+
+<h2>Highlights</h2>
+<ul>
+  <li><strong>One view model.</strong> <code>Text</code>, the stacks, the controls, <code>List</code>, <code>NavigationStack</code>,
+  the shapes and <code>Chart</code> are all immutable descriptors. Every modifier returns a new descriptor, and every view
+  has the whole modifier table. The <code>*View</code> classes are gone (<a href="migration.html">migration</a>).</li>
+  <li><strong>Static rendering.</strong> The new <code>swiftui-for-web/server</code> entry renders views to HTML in Node with the
+  framework’s own renderers, and writes document metadata, JSON-LD and sitemaps.</li>
+  <li><strong>Hydration.</strong> <code>mount(host, { mode: 'adopt' })</code> renders onto the server’s DOM nodes, keeping their
+  identity, focus and scroll offsets.</li>
+  <li><strong>Presentations on one controller.</strong> Sheets, full-screen covers, alerts and confirmation dialogs all use
+  <code>&lt;dialog&gt;.showModal()</code>, trap focus, return it, and put <code>dismiss</code> in the environment.</li>
+  <li><strong>Gestures and transitions.</strong> Gesture composition with <code>GestureMask</code>, and <code>.transition</code>
+  now animates removal from <code>Show</code>, <code>ForEach</code> and a navigation pop.</li>
+  <li><strong>Reactivity.</strong> <code>ForEach</code> is reactive and keyed when given a <code>State</code>, a <code>Binding</code> or a
+  function; <code>Text(state)</code> and style modifiers accept a <code>State</code>; development builds warn about the
+  <code>Text(count.value)</code> mistake.</li>
+  <li><strong>Release build.</strong> <code>--bundle</code> scope-hoists an app into one module, <code>--hash</code> names files by content,
+  and <code>npm run size</code> keeps the library under a 120 KB gzip budget.</li>
+  <li><strong>Reliable cold loads.</strong> <code>serve.py</code> no longer resets connections on a cold load and reports a module that
+  fails to load instead of showing a blank page.</li>
+</ul>
+
+<h2>A first taste</h2>
+<p>This counter uses the 3.1 reactivity rules: pass the <code>State</code> itself, or a function for derived text.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Button, State, Font } from 'swiftui-for-web';
+
+const count = new State(0);
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Text(count).font(Font.largeTitle),
+    Text(() =&gt; (count.value === 1 ? '1 tap' : `${count.value} taps`)),
+    Button('Tap', () =&gt; { count.value += 1; })
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<p>The full list of changes, with migration notes for each breaking change, is in the
+<a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>.</p>
+
+      <nav class="pager" aria-label="Previous and next guide"><span></span><a href="static-rendering.html">Static rendering for SEO →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestures and animation · SwiftUI for Web 3.1</title>
+  <meta name="description" content="Gesture composition, transitions, .animation and matchedGeometryEffect.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html" aria-current="page">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Gestures and animation</h1>
+<p class="lead">Every view has the gesture and animation modifiers, backed by native browser APIs: pointer and touch
+events, the Web Animations API, CSS transitions and the View Transitions API.</p>
+
+<h2>Gestures</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">Modifier</th><th scope="col">Use</th></tr></thead><tbody><tr><td><code>.onTapGesture(action)</code></td><td>A tap. Several tap handlers on a view compose in modifier order, and <code>Button(…).onTapGesture(f)</code> runs both.</td></tr><tr><td><code>.onLongPressGesture(action, { minimumDuration })</code></td><td>A long press.</td></tr><tr><td><code>.onDrag(onChanged, onEnded)</code></td><td>A drag; each callback receives <code>{ translation, location, startLocation }</code>.</td></tr><tr><td><code>.gesture(g, { including })</code></td><td>Any recognizer: <code>TapGesture(count)</code>, <code>LongPressGesture({ minimumDuration })</code>, <code>DragGesture({ minimumDistance })</code>, <code>MagnificationGesture()</code>, <code>RotationGesture()</code>.</td></tr><tr><td><code>.simultaneousGesture(g)</code></td><td>Recognizes together with the view’s own gestures.</td></tr><tr><td><code>.highPriorityGesture(g)</code></td><td>Wins over gestures of the same kind on the view and inside it.</td></tr></tbody></table></div>
+
+<p>Recognizers chain <code>.onChanged(value =&gt; …)</code> and <code>.onEnded(value =&gt; …)</code>. Each element keeps its
+own gesture state, so one recognizer can sit on every row of a list, and listeners are removed when the element is
+released or its owner is disposed.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import {
+  App, VStack, HStack, Text, State, TapGesture, LongPressGesture, DragGesture, Color
+} from 'swiftui-for-web';
+
+const parentTaps = new State(0);
+const childTaps = new State(0);
+const presses = new State(0);
+const drag = new State('Drag the label');
+
+App(() =&gt;
+  VStack({ spacing: 16 },
+    // High priority: a tap on the child counts for the parent only.
+    HStack({ spacing: 12 },
+      Text('Child').padding(10).background(Color.secondarySystemBackground)
+        .gesture(TapGesture().onEnded(() =&gt; { childTaps.value += 1; })),
+      Text(() =&gt; `parent ${parentTaps.value} · child ${childTaps.value}`)
+    )
+      .padding(10)
+      .border(Color.gray)
+      .highPriorityGesture(TapGesture().onEnded(() =&gt; { parentTaps.value += 1; })),
+
+    // Simultaneous: the long press and the tap both recognize.
+    Text(() =&gt; `Long presses: ${presses.value}`)
+      .padding(10)
+      .background(Color.orange)
+      .foregroundColor(Color.white)
+      .onTapGesture(() =&gt; console.log('tap'))
+      .simultaneousGesture(LongPressGesture({ minimumDuration: 0.4 }).onEnded(() =&gt; { presses.value += 1; })),
+
+    Text(drag)
+      .padding(10)
+      .border(Color.blue)
+      .gesture(DragGesture()
+        .onChanged((value) =&gt; { drag.value = `Δ ${value.translation.width}, ${value.translation.height}`; })
+        .onEnded(() =&gt; { drag.value = 'Dropped'; }))
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+<p><code>GestureMask</code> chooses what <code>.gesture(g, { including })</code> enables: <code>GestureMask.all</code> (the
+default), <code>gesture</code> (disables the gestures inside the view), <code>subviews</code> (disables <code>g</code>) and
+<code>none</code> (disables both).</p>
+<div class="note"><strong>Not yet like SwiftUI:</strong> a parent’s and a child’s plain <code>.gesture</code> of the same kind
+both fire (SwiftUI lets the child win; use <code>.highPriorityGesture</code> or <code>GestureMask</code> to choose).
+Gestures of different kinds don’t arbitrate, <code>Button</code> actions are not gestures, a high-priority gesture takes
+the interaction even when it fails, and <code>SequenceGesture</code>, <code>ExclusiveGesture</code> and
+<code>@GestureState</code> are missing. The list is kept in
+<a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/docs/parity-audit.md">docs/parity-audit.md</a>.</div>
+
+<h2>withAnimation and .animation</h2>
+<p><code>withAnimation(animation, body)</code> runs <code>body</code> and animates the changes it makes; it returns a promise
+that resolves when the animation ends. <code>.animation(animation, value)</code> animates a view’s own style changes with a CSS
+transition; <code>.animation(null)</code> turns it off. Animations: <code>Animation.default</code>,
+<code>linear(d)</code>, <code>easeIn(d)</code>, <code>easeOut(d)</code>, <code>easeInOut(d)</code>, <code>spring(options)</code>,
+<code>smooth</code>, <code>snappy</code>, <code>bouncy</code>.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Button, State, Animation, withAnimation, Color } from 'swiftui-for-web';
+
+const faded = new State(false);
+const opacity = new State(1);
+
+App(() =&gt;
+  VStack({ spacing: 16 },
+    Text('Fades with .animation')
+      .padding(16)
+      .background(Color.blue)
+      .foregroundColor(Color.white)
+      .opacity(opacity)                       // a State: updates on its own
+      .animation(Animation.easeInOut(0.5)),
+    Button('Toggle', () =&gt; {
+      withAnimation(Animation.spring(), () =&gt; {
+        faded.value = !faded.value;
+        opacity.value = faded.value ? 0.25 : 1;
+      });
+    })
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Transitions: insertion and removal</h2>
+<p><code>.transition(t)</code> says how a view enters and leaves. Insertion animates when the view is inserted inside
+<code>withAnimation</code>. Removal animates when <code>Show</code>, a reactive <code>ForEach</code> or a navigation pop
+removes the view, inside <code>withAnimation</code> or when the transition carries its own animation
+(<code>AnyTransition.opacity.animation(Animation.easeOut(0.2))</code>). The leaving element stays in the document while it
+animates, without pointer events and with <code>aria-hidden</code>; its effects are disposed at once.</p>
+<p>Transitions: <code>AnyTransition.opacity</code>, <code>scale(s)</code>, <code>slide</code>, <code>move(edge)</code>,
+<code>push(edge)</code>, <code>identity</code>, <code>asymmetric(insertion, removal)</code> and
+<code>t.combined(other)</code>. With <code>prefers-reduced-motion</code>, no transition, or no animation, removal is
+immediate.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import {
+  App, VStack, Text, Button, ForEach, State, AnyTransition, Animation, withAnimation, Color
+} from 'swiftui-for-web';
+
+const items = new State([1, 2, 3]);
+let next = 4;
+
+const Row = (item) =&gt;
+  Text(`Item ${item}`)
+    .padding(10)
+    .frame({ width: 200 })
+    .background(Color.secondarySystemBackground)
+    .cornerRadius(8)
+    .transition(AnyTransition.asymmetric(AnyTransition.move('leading'), AnyTransition.opacity));
+
+App(() =&gt;
+  VStack({ spacing: 8 },
+    Button('Add', () =&gt; {
+      withAnimation(Animation.easeOut(0.3), () =&gt; { items.value = [...items.value, next++]; });
+    }),
+    Button('Remove first', () =&gt; {
+      withAnimation(Animation.easeIn(0.3), () =&gt; { items.value = items.value.slice(1); });
+    }),
+    ForEach(items, { id: (item) =&gt; item }, Row)
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>matchedGeometryEffect</h2>
+<p>Views with the same id in a <code>Namespace()</code> morph into each other when one replaces the other inside
+<code>withAnimation</code>, through a View Transition (where the browser supports it).</p>
+<div class="sample"><pre data-lang="js" data-run><code>import {
+  App, VStack, HStack, Text, Show, State, Namespace, withAnimation, Animation, Color, Font
+} from 'swiftui-for-web';
+
+const expanded = new State(false);
+const ns = Namespace();
+const toggle = () =&gt; withAnimation(Animation.spring(), () =&gt; { expanded.value = !expanded.value; });
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Text('Tap the card').foregroundColor(Color.secondary),
+    Show(() =&gt; expanded.value,
+      VStack({ alignment: 'leading', spacing: 8 },
+        Text('Big card').font(Font.title),
+        Text('Tap to collapse')
+      )
+        .padding(24)
+        .frame({ width: 280, height: 180, alignment: 'topLeading' })
+        .background(Color.indigo)
+        .foregroundColor(Color.white)
+        .cornerRadius(20)
+        .matchedGeometryEffect('card', ns)
+        .onTapGesture(toggle),
+      HStack(Text('Small card'))
+        .padding(12)
+        .background(Color.indigo)
+        .foregroundColor(Color.white)
+        .cornerRadius(12)
+        .matchedGeometryEffect('card', ns)
+        .onTapGesture(toggle)
+    )
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="presentations.html">← Presentations</a><a href="reactivity-layout.html">Reactivity and layout →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

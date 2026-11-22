@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SwiftUI for Web</title>
+  <meta name="description" content="A zero-dependency UI framework that brings Apple's SwiftUI to the browser. Version 3.1.0: static rendering, hydration, presentations, gestures and a live Playground.">
   <link rel="stylesheet" href="./src/styles/index.css">
   <style>
     body {
@@ -128,6 +129,48 @@
       font-size: 14px;
     }
     .links a:hover { text-decoration: underline; }
+    a:focus-visible { outline: 2px solid #b9b0ff; outline-offset: 3px; border-radius: 4px; }
+    .version-badge {
+      font-size: 12px;
+      font-weight: 700;
+      color: #0a0d1a;
+      background: linear-gradient(120deg, #c4baff, #ffb5e0);
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-decoration: none;
+    }
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: -24px 0 56px;
+    }
+    .cta a {
+      display: inline-block;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      color: #fff;
+      border: 1px solid rgba(180, 160, 255, 0.55);
+      background: rgba(140, 100, 255, 0.12);
+    }
+    .cta a.primary {
+      background: #6a5cff;
+      border-color: #6a5cff;
+    }
+    .whats-new {
+      margin: 0 0 56px;
+      padding: 22px 24px;
+      border: 1px solid rgba(180, 160, 255, 0.35);
+      border-radius: 14px;
+      background: rgba(140, 100, 255, 0.07);
+    }
+    .whats-new h2 { margin-bottom: 12px; color: #d9d6ff; }
+    .whats-new ul { list-style: disc; margin: 0 0 14px; padding-left: 20px; color: #c9cddb; line-height: 1.6; font-size: 15px; }
+    .whats-new a { color: #c4baff; }
+    .whats-new code { font-size: 13px; color: #fff; }
   </style>
 </head>
 <body>
@@ -139,11 +182,31 @@
     </p>
 
     <div class="badges">
+      <a class="version-badge" href="./docs/guides/">v3.1.0 · What’s new</a>
       <span class="badge">zero deps</span>
-      <span class="badge">~52KB gzipped</span>
+      <span class="badge">&lt; 120 KB gzipped</span>
       <span class="badge">signals engine</span>
       <span class="badge">SwiftUI parity</span>
     </div>
+
+    <div class="cta">
+      <a class="primary" href="./docs/playground/">Open the Playground</a>
+      <a href="./docs/">Tutorials</a>
+      <a href="./docs/guides/">3.1 guides</a>
+    </div>
+
+    <section class="whats-new" aria-labelledby="whats-new-title">
+      <h2 id="whats-new-title">What’s new in 3.1.0</h2>
+      <ul>
+        <li><a href="./docs/guides/static-rendering.html">Static rendering for SEO</a>: <code>renderToString</code>, <code>renderDocument</code>, <code>DocumentMetadata</code> and <code>sitemap</code> from <code>swiftui-for-web/server</code>.</li>
+        <li><a href="./docs/guides/islands.html">Islands and hydration</a>: <code>mount(host, { mode: 'adopt' })</code> reuses the server’s nodes; <code>whenVisible</code> loads an island when it scrolls near.</li>
+        <li><a href="./docs/guides/presentations.html">Presentations</a>: <code>.sheet</code>, <code>.alert</code>, <code>.confirmationDialog</code>, <code>.fullScreenCover</code> and <code>dismiss</code>.</li>
+        <li><a href="./docs/guides/gestures-animation.html">Gestures and animation</a>: gesture composition, removal transitions and <code>matchedGeometryEffect</code> on every view.</li>
+        <li><a href="./docs/guides/reactivity-layout.html">Reactivity and layout</a>: reactive keyed <code>ForEach</code>, ordered modifiers, <code>frame(alignment:)</code>, lazy stacks.</li>
+        <li><a href="./docs/guides/accessibility.html">Accessibility</a>, the <a href="./docs/guides/build.html">release build</a> (<code>--bundle</code>, <code>--hash</code>), and a <a href="./docs/guides/migration.html">migration guide</a> from 3.0.</li>
+      </ul>
+      <a href="./docs/guides/">Read the 3.1 guides →</a>
+    </section>
 
     <h2>Runnable examples</h2>
     <div class="grid">
@@ -215,7 +278,9 @@ Text('NEON')
       <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
       <a href="./README.md">README</a>
       <a href="./AGENTS.md">AGENTS.md</a>
-      <a href="./Examples/">All examples</a>
+      <a href="./docs/">Tutorials</a>
+      <a href="./docs/guides/">3.1 guides</a>
+      <a href="./docs/playground/">Playground</a>
     </p>
   </div>
 </body>

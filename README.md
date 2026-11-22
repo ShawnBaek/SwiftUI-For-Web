@@ -8,13 +8,13 @@ If you know SwiftUI, you already know this framework. Same component names (`VSt
 
 Under the hood, view bodies run **once at mount**. State changes execute only the small effect closures bound to the affected DOM nodes — no virtual DOM, no diff, no patches. Closer in spirit to Solid than to React.
 
-[![Version](https://img.shields.io/badge/version-2.0.0--alpha.1-blue.svg)](https://github.com/ShawnBaek/SwiftUI-For-Web)
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
 [![Animation](https://img.shields.io/badge/animation%20engine-native%20browser-2ea44f.svg)](#animation-engine-native-browser-under-the-hood)
 [![Bundle](https://img.shields.io/badge/gzipped-~93KB-brightgreen.svg)](#bundle-size)
 
-> **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
+> **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Playground](https://shawnbaek.github.io/SwiftUI-For-Web/docs/playground/)** · **[3.1 guides](https://shawnbaek.github.io/SwiftUI-For-Web/docs/guides/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
 
 ---
 

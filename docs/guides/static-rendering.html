@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Static rendering for SEO · SwiftUI for Web 3.1</title>
+  <meta name="description" content="renderToString, renderDocument, DocumentMetadata and sitemap.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html" aria-current="page">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Static rendering for SEO</h1>
+<p class="lead">The <code>swiftui-for-web/server</code> entry renders the same views to HTML with no browser, so
+crawlers and link previews see the page without running JavaScript.</p>
+
+<p>The server entry runs the framework’s own renderers against a small DOM-like shim
+(<code>src/Server/DOMShim.js</code>). There is no second HTML implementation to keep in sync: the markup is what the browser
+renderer produces on its first render. Import views from <code>swiftui-for-web</code> as usual, and the server functions from
+<code>swiftui-for-web/server</code>.</p>
+
+<h2>renderToString</h2>
+<p><code>renderToString(view)</code> takes a view, a view descriptor or a function returning one, and returns the markup of
+its first render.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { VStack, Text, Font, Color } from 'swiftui-for-web';
+import { renderToString } from 'swiftui-for-web/server';
+
+const Greeting = (name) =&gt;
+  VStack({ alignment: 'leading', spacing: 4 },
+    Text(`Hello, ${name}`).font(Font.title),
+    Text('Rendered without a browser').foregroundColor(Color.secondary)
+  );
+
+// In Node, write the string to a file or a response. In the Playground,
+// the default export is shown next to the preview.
+export default renderToString(Greeting('Ada'));
+</code></pre></div>
+
+<p>What a static render does and doesn’t do:</p>
+<ul>
+  <li>The output is deterministic: the same input gives byte-identical HTML. Attributes and styles keep their order, and
+  generated ARIA ids restart for each render.</li>
+  <li>Effects, animation frames and timers never run, and there is no layout: sizes are 0. Views that wait for a frame or a
+  <code>ResizeObserver</code> (<code>GeometryReader</code>, <code>ViewThatFits</code>) render empty until the client mounts.
+  Lazy stacks render every row.</li>
+  <li>The shim is installed as globals only for the duration of the call and restored afterwards, so importing the
+  framework in Node never touches <code>window</code> or <code>document</code>.</li>
+  <li>It runs where there is no real <code>window</code>: Node, or a Worker. In a browser window it throws, because a
+  window’s own <code>window</code> and <code>document</code> can’t be replaced. (The Playground runs code that imports the server
+  entry in a Worker for this reason.)</li>
+</ul>
+
+<h2>renderDocument and DocumentMetadata</h2>
+<p><code>renderDocument(view, options)</code> returns a whole document: a <code>&lt;head&gt;</code> with charset, viewport and
+the scene’s metadata, and a <code>&lt;body&gt;</code> whose root element holds the view’s markup for the client app to mount
+into. Metadata comes from <code>options.metadata</code> or from a <code>WindowGroup({ metadata })</code>.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { WindowGroup, VStack, Text, Font } from 'swiftui-for-web';
+import { renderDocument, DocumentMetadata } from 'swiftui-for-web/server';
+
+const metadata = new DocumentMetadata({
+  title: 'Trail Guide',
+  description: 'Hikes near you, with maps and elevation.',
+  canonical: 'https://example.com/',
+  robots: 'index, follow',
+  openGraph: { type: 'website', image: 'https://example.com/og.png', imageAlt: 'A mountain trail' },
+  twitter: { card: 'summary_large_image' },
+  jsonLD: { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Trail Guide' },
+});
+
+export default renderDocument(
+  WindowGroup({ metadata }, () =&gt;
+    VStack({ spacing: 8 },
+      Text('Trail Guide').font(Font.largeTitle).accessibilityHeading('h1'),
+      Text('Twelve hikes within an hour of the city.')
+    )
+  ),
+  { stylesheets: ['/styles/index.css'], scripts: ['/main.js'] }
+);
+</code></pre></div>
+
+<div class="table-wrap"><table><thead><tr><th scope="col">Option</th><th scope="col">Default</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td><code>metadata</code></td><td>the <code>WindowGroup</code>’s</td><td>A <code>DocumentMetadata</code> or a plain object with the same fields.</td></tr><tr><td><code>lang</code></td><td><code>'en'</code></td><td>The <code>&lt;html lang&gt;</code> attribute.</td></tr><tr><td><code>rootId</code></td><td><code>'root'</code></td><td>The id of the element that holds the markup.</td></tr><tr><td><code>stylesheets</code></td><td>none</td><td><code>&lt;link rel="stylesheet"&gt;</code> hrefs.</td></tr><tr><td><code>scripts</code></td><td>none</td><td><code>&lt;script type="module"&gt;</code> srcs, after the root element.</td></tr><tr><td><code>head</code></td><td>none</td><td>Extra markup appended to <code>&lt;head&gt;</code>. It is trusted and not escaped.</td></tr></tbody></table></div>
+
+<p><code>DocumentMetadata</code> fields: <code>title</code>, <code>description</code>, <code>canonical</code>, <code>robots</code>,
+<code>openGraph</code> (<code>title</code>, <code>description</code>, <code>type</code>, <code>url</code>, <code>image</code>,
+<code>imageAlt</code>, <code>siteName</code>, <code>locale</code>), <code>twitter</code> (<code>card</code>, <code>site</code>,
+<code>creator</code>) and <code>jsonLD</code>. A missing title comes from the view’s <code>.navigationTitle(_:)</code>, then from
+the <code>WindowGroup</code>’s title.</p>
+<p>Every value is escaped. URLs (canonical, Open Graph) must be http(s), robots directives are checked, and JSON-LD is
+serialized so it can’t close its <code>&lt;script&gt;</code> element. <code>DocumentMetadata</code> is a web-only API: SwiftUI
+has no document head.</p>
+
+<h2>sitemap</h2>
+<p><code>sitemap(routes, { baseURL })</code> writes <a href="https://www.sitemaps.org/protocol.html">sitemaps.org</a> XML. A
+route is a path, or an object with <code>path</code> (or <code>url</code>), <code>lastModified</code>,
+<code>changeFrequency</code> and <code>priority</code>.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { sitemap } from 'swiftui-for-web/server';
+
+export default sitemap([
+  '/',
+  { path: '/trails', changeFrequency: 'weekly', priority: 0.8 },
+  { path: '/about', lastModified: '2026-11-01' },
+], { baseURL: 'https://example.com' });
+</code></pre></div>
+
+
+<h2>A prerender script</h2>
+<p>In a project, a small Node script writes the pages at deploy time. The client then
+<a href="islands.html#adopt">hydrates</a> the markup with <code>mode: 'adopt'</code>.</p>
+<div class="sample"><pre data-lang="js" data-node data-title="prerender.mjs (Node)"><code>// prerender.mjs: node prerender.mjs
+import { mkdir, writeFile } from 'node:fs/promises';
+import { WindowGroup, VStack, Text } from 'swiftui-for-web';
+import { renderDocument, sitemap } from 'swiftui-for-web/server';
+
+const pages = {
+  '/': () =&gt; VStack(Text('Home')).navigationTitle('Trail Guide'),
+  '/about': () =&gt; VStack(Text('About us')).navigationTitle('About · Trail Guide'),
+};
+
+await mkdir('public/about', { recursive: true });
+for (const [path, page] of Object.entries(pages)) {
+  const html = renderDocument(WindowGroup(page), {
+    stylesheets: ['/styles/index.css'],
+    scripts: ['/main.js'],
+  });
+  await writeFile(`public${path === '/' ? '' : path}/index.html`, html);
+}
+await writeFile('public/sitemap.xml', sitemap(Object.keys(pages), { baseURL: 'https://example.com' }));
+</code></pre></div>
+
+<p><a href="https://github.com/ShawnBaek/SwiftUI-For-Web/tree/main/Examples/AppleSampleCodeProof"><code>Examples/AppleSampleCodeProof</code></a>
+renders a real AppleSampleCode.com page this way and tests it against that site’s own renderer: metadata, JSON-LD,
+headings, links, landmarks, lists, tables and all visible words match.</p>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="./">← What’s new in 3.1</a><a href="islands.html">Islands and hydration →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

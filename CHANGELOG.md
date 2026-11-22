@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Docs (#53): 3.1 guides on the site (`docs/guides/`): static rendering,
+  islands and hydration, presentations, gestures and animation, reactivity
+  and layout, accessibility, the release build, and a 3.0 → 3.1 migration
+  guide. The landing page and the tutorials link them and show the version.
+- Playground (#53): `docs/playground/` edits code with a live preview in a
+  sandboxed iframe that imports the deployed `src/`, shows runtime and syntax
+  errors with line numbers, has examples (including a `renderToString`
+  preview, run in a Worker), and shares code through a gzip-compressed URL
+  hash. `serve.py` now sends `Access-Control-Allow-Origin: *`, as GitHub
+  Pages does, so the opaque-origin preview can import the modules locally.
+- Fixed: render errors from built-in views said nothing about where the view
+  was created. `chainable()` copied only enumerable properties and dropped
+  the development-build creation site, so the "created at" line appeared
+  only for raw descriptors.
+
 ## 3.1.0
 
 The first release of the 3.x line. It includes everything from the

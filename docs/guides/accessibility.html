@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accessibility · SwiftUI for Web 3.1</title>
+  <meta name="description" content="How the controls map to native elements and WAI-ARIA patterns.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html" aria-current="page">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Accessibility</h1>
+<p class="lead">Controls render native elements where the platform has one, and follow the WAI-ARIA Authoring Practices
+pattern, with keyboard support, where it doesn’t.</p>
+
+<h2>What each control renders</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">View</th><th scope="col">Element or pattern</th><th scope="col">Keyboard</th></tr></thead><tbody><tr><td><code>Button</code>, <code>NavigationLink</code></td><td>Native <code>&lt;button&gt;</code>; a <code>NavigationLink</code> with a URL is <code>&lt;a href&gt;</code> (relative, http(s), mailto and tel URLs only).</td><td>Enter, Space</td></tr><tr><td><code>Toggle</code></td><td>Switch style: <code>&lt;button role="switch" aria-checked&gt;</code>. Checkbox style: a native checkbox.</td><td>Space</td></tr><tr><td><code>Slider</code></td><td>Native range input.</td><td>Arrows, Home, End</td></tr><tr><td><code>TextField</code>, <code>SecureField</code></td><td>Native text and password inputs.</td><td>—</td></tr><tr><td><code>Picker</code></td><td>Menu style: native <code>&lt;select&gt;</code>. Segmented: <code>radiogroup</code> with a roving tabindex.</td><td>Arrows in the segmented style</td></tr><tr><td><code>List</code> with selection</td><td><code>listbox</code> of <code>option</code>s with <code>aria-selected</code> and a roving tabindex; a <code>Set</code> selection adds <code>aria-multiselectable</code>.</td><td>↑ ↓, Home, End, Space</td></tr><tr><td><code>TabView</code></td><td>Tabs pattern: <code>tablist</code>, <code>tab</code>, <code>tabpanel</code>, in both styles.</td><td>Arrows, Home, End</td></tr><tr><td><code>Menu</code></td><td>Menu button: <code>aria-haspopup="menu"</code>, <code>aria-expanded</code>, a <code>menu</code> of items.</td><td>Arrows, Escape</td></tr><tr><td><code>DisclosureGroup</code></td><td>Disclosure: a button with <code>aria-expanded</code>.</td><td>Enter, Space</td></tr><tr><td><code>.sheet</code>, <code>.alert</code>, …</td><td><code>&lt;dialog&gt;</code> with <code>showModal()</code>: the page is inert, focus is trapped and returned. An alert is <code>alertdialog</code>, labelled by its title and described by its message.</td><td>Escape</td></tr></tbody></table></div>
+
+<p>Try the listbox: click a row, or Tab into the list and use the arrow keys and Space.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, List, Text, Toggle, Picker, PickerStyle, State } from 'swiftui-for-web';
+
+const selection = new State(new Set(['b']));
+const wifi = new State(true);
+const size = new State('m');
+
+App(() =&gt;
+  VStack({ alignment: 'leading', spacing: 16 },
+    Toggle('Wi-Fi', wifi.binding),
+    Picker('Size', size.binding,
+      Text('Small').tag('s'), Text('Medium').tag('m'), Text('Large').tag('l')
+    ).pickerStyle(PickerStyle.segmented),
+    List({ selection: selection.binding },
+      Text('Alpha').tag('a'),
+      Text('Bravo').tag('b'),
+      Text('Charlie').tag('c')
+    ),
+    Text(() =&gt; `Selected: ${[...selection.value].join(', ') || 'none'}`)
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Accessibility modifiers</h2>
+<div class="table-wrap"><table><thead><tr><th scope="col">Modifier</th><th scope="col">Renders</th></tr></thead><tbody><tr><td><code>.accessibilityLabel(label)</code></td><td>The accessible name (<code>aria-label</code>).</td></tr><tr><td><code>.accessibilityValue(value)</code></td><td>The current value, read after the name.</td></tr><tr><td><code>.accessibilityHint(hint)</code></td><td>A description of what happens on activation.</td></tr><tr><td><code>.accessibilityIdentifier(id)</code></td><td>An identifier for tests; not announced.</td></tr><tr><td><code>Text(…).accessibilityHeading(level)</code></td><td>A heading element, <code>AccessibilityHeadingLevel.h1</code> to <code>h6</code>.</td></tr></tbody></table></div>
+
+<p>Label, value and hint accept a <code>State</code> and stay in sync.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import {
+  App, VStack, HStack, Text, Button, State, AccessibilityHeadingLevel, Font
+} from 'swiftui-for-web';
+
+const volume = new State(5);
+const volumeText = new State('5 of 10');
+const set = (value) =&gt; {
+  volume.value = Math.max(0, Math.min(10, value));
+  volumeText.value = `${volume.value} of 10`;
+};
+
+App(() =&gt;
+  VStack({ alignment: 'leading', spacing: 12 },
+    Text('Sound').font(Font.title2).accessibilityHeading(AccessibilityHeadingLevel.h1),
+    HStack({ spacing: 8 },
+      Button('−', () =&gt; set(volume.value - 1)).accessibilityLabel('Quieter'),
+      Text(volume)
+        .accessibilityLabel('Volume')
+        .accessibilityValue(volumeText),
+      Button('+', () =&gt; set(volume.value + 1))
+        .accessibilityLabel('Louder')
+        .accessibilityHint('Raises the volume by one step')
+    )
+  ).padding(24)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Focus and motion</h2>
+<ul>
+  <li>The stylesheet (<code>src/styles/reset.css</code>) draws a 2px focus ring on <code>:focus-visible</code>.</li>
+  <li>With <code>prefers-reduced-motion</code>, removal transitions are immediate. A view that is animating out is
+  <code>aria-hidden</code> and takes no pointer events, so assistive technology never reads a view that is already gone.</li>
+  <li>Presentations return focus to the element that opened them.</li>
+</ul>
+
+<h2>Known gaps</h2>
+<ul>
+  <li><code>Stepper</code>’s − and + buttons have no accessible names of their own.</li>
+  <li>The inline and wheel <code>Picker</code> styles have no keyboard support.</li>
+  <li><code>.disabled()</code> is missing on <code>Slider</code>, <code>Stepper</code>, <code>Picker</code>,
+  <code>DatePicker</code> and <code>ColorPicker</code>.</li>
+</ul>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="reactivity-layout.html">← Reactivity and layout</a><a href="build.html">Release build →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Release build · SwiftUI for Web 3.1</title>
+  <meta name="description" content="node scripts/build.js with --bundle, --hash and --no-minify.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html" aria-current="page">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Release build</h1>
+<p class="lead">Development needs no build step. <code>node scripts/build.js</code> makes an optional, smaller release with
+Node built-ins only, and its output behaves exactly like the unbuilt source.</p>
+
+<h2>Build an app</h2>
+<div class="sample"><pre data-lang="shell"><code># Tree-shaken and minified, into dist/hello-world
+node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir dist/hello-world
+
+# One scope-hoisted module, content-hashed file names
+node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir dist/hello-world --bundle --hash
+
+# Readable output (still tree-shaken)
+node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir dist/hello-world --no-minify
+
+# The whole library, into dist/
+node scripts/build.js
+</code></pre></div>
+
+<div class="table-wrap"><table><thead><tr><th scope="col">Option</th><th scope="col">Effect</th></tr></thead><tbody><tr><td><code>--entry &lt;file&gt;</code></td><td>Build one application from its HTML entry. The builder follows static HTML, JavaScript and CSS references, routes named framework imports to their defining modules, and drops unreachable modules.</td></tr><tr><td><code>--out-dir &lt;dir&gt;</code></td><td>Output directory (default <code>dist</code>). Inside the repository it must be <code>dist</code> or a directory in it.</td></tr><tr><td><code>--configuration release</code></td><td>The production configuration (the only one).</td></tr><tr><td><code>--no-minify</code></td><td>Keep the output readable.</td></tr><tr><td><code>--hash</code></td><td>Name every emitted file <code>name.&lt;hash&gt;.ext</code>, rewrite the references, and write <code>manifest.json</code> mapping source paths to hashed ones. A file’s hash covers everything it reaches.</td></tr><tr><td><code>--bundle</code></td><td>Scope-hoist the page’s module scripts and their static imports into one ES module, <code>bundle.js</code> (<code>bundle.&lt;hash&gt;.js</code> with <code>--hash</code>), and point <code>index.html</code> at it. Modules reached only through <code>import('…')</code> become <code>chunk-*.js</code> files.</td></tr></tbody></table></div>
+
+
+<h2>What the release contains</h2>
+<ul>
+  <li><code>&lt;link rel="modulepreload"&gt;</code> for every module the page imports statically, so they download in parallel.</li>
+  <li><code>build-report.json</code>: retained and removed files, external references, raw and gzip totals, and with
+  <code>--bundle</code> the bundled modules and chunks.</li>
+  <li>Development checks compiled out: <code>DEV_BUILD</code> is rewritten to <code>false</code>, so the untracked-read
+  warning and the “created at” sites in render errors cost nothing in production.</li>
+</ul>
+
+<h2>How --bundle works</h2>
+<p>The bundler parses each module, resolves its scopes, and concatenates the modules in ES module evaluation order. A
+top-level name is renamed only where it would collide, and only the references that resolve to it change, so live
+bindings, hoisting, temporal dead zones, cycles, namespace imports (frozen objects with getters) and class and function
+names behave as they do between modules. <code>import.meta.url</code> keeps pointing at each module’s original location.
+The output is byte-for-byte deterministic.</p>
+<div class="note warning">Top-level <code>await</code> and <code>eval</code> are rejected. Stack traces, and the development
+warnings that read them, point into the bundle. A dynamic chunk’s dependencies run before its own modules rather than
+interleaved with them.</div>
+
+<h2>Size budget and validation</h2>
+<div class="sample"><pre data-lang="shell"><code>npm run size       # fails when the gzipped dist/ total passes 120 KB
+npm run validate   # npm test, browser tests, the build and the size report
+</code></pre></div>
+
+<p>Serving the unbuilt source in production? Use a host that accepts many connections (HTTP/2), or the
+<code>--bundle</code> build: a cold load of the source opens dozens of module requests at once.</p>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="accessibility.html">← Accessibility</a><a href="migration.html">Migrating from 3.0 →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>

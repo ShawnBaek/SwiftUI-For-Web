@@ -33,8 +33,12 @@ p.style.cssText='margin:16px;padding:12px;border:1px solid #c00;color:#c00;white
 
 class FastHandler(SimpleHTTPRequestHandler):
     # Short browser cache so reloads are fast but recent edits show up.
+    # Allow any origin to read files, as GitHub Pages does: the Playground's
+    # preview runs in a sandboxed iframe with an opaque origin and imports
+    # src/ as cross-origin module scripts.
     def end_headers(self):
         self.send_header("Cache-Control", "max-age=2")
+        self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
     # Skip reverse-DNS lookup — it adds ~200ms PER REQUEST on localhost,

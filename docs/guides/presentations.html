@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presentations · SwiftUI for Web 3.1</title>
+  <meta name="description" content="sheet, fullScreenCover, alert, confirmationDialog and dismiss.">
+  <link rel="stylesheet" href="../../src/styles/index.css">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <script>
+    try {
+      const theme = localStorage.getItem('swiftui-playground-theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (error) { /* follow the system */ }
+  </script>
+  <script type="module" src="../assets/docs.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="site-brand">
+      <a class="site-logo" href="../../">SwiftUI for Web</a>
+      <span class="version-badge">3.1.0</span>
+    </div>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../">Tutorials</a>
+      <a href="./">What’s new</a>
+      <a href="../playground/">Playground</a>
+      <a href="https://github.com/ShawnBaek/SwiftUI-For-Web">GitHub</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <nav class="guide-nav" aria-labelledby="guide-nav-title">
+      <h2 id="guide-nav-title">3.1 guides</h2>
+      <ol>
+        <li><a href="./">What’s new in 3.1</a></li>
+        <li><a href="static-rendering.html">Static rendering for SEO</a></li>
+        <li><a href="islands.html">Islands and hydration</a></li>
+        <li><a href="presentations.html" aria-current="page">Presentations</a></li>
+        <li><a href="gestures-animation.html">Gestures and animation</a></li>
+        <li><a href="reactivity-layout.html">Reactivity and layout</a></li>
+        <li><a href="accessibility.html">Accessibility</a></li>
+        <li><a href="build.html">Release build</a></li>
+        <li><a href="migration.html">Migrating from 3.0</a></li>
+      </ol>
+    </nav>
+    <main id="main">
+
+<h1>Presentations</h1>
+<p class="lead"><code>.sheet</code>, <code>.fullScreenCover</code>, <code>.alert</code> and <code>.confirmationDialog</code> share one
+controller built on <code>&lt;dialog&gt;.showModal()</code>.</p>
+
+<h2>The binding is the source of truth</h2>
+<p>Each presentation shows while its <code>isPresented</code> binding is <code>true</code>. Every way of closing it writes
+<code>false</code> to the binding: Escape, a backdrop click (except for an alert), an action, or <code>dismiss()</code>.
+<code>onDismiss</code> runs once, after it closes.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Modifier</th><th scope="col">Signature</th></tr></thead><tbody><tr><td><code>.sheet</code></td><td><code>.sheet(isPresented, content)</code> or <code>.sheet(isPresented, { onDismiss, content })</code></td></tr><tr><td><code>.fullScreenCover</code></td><td><code>.fullScreenCover(isPresented, content)</code> or <code>.fullScreenCover(isPresented, { onDismiss, content })</code></td></tr><tr><td><code>.alert</code></td><td><code>.alert(title, isPresented, { actions, message, onDismiss })</code></td></tr><tr><td><code>.confirmationDialog</code></td><td><code>.confirmationDialog(title, isPresented, { titleVisibility, actions, message, onDismiss })</code></td></tr></tbody></table></div>
+
+
+<h2>Alerts and confirmation dialogs</h2>
+<p>Actions are buttons with SwiftUI roles: <code>Button('Delete', { role: 'destructive' }, action)</code>, or plain objects
+<code>{ title, role, action }</code>. Escape runs the <code>cancel</code> action. With no actions, one “OK” button is shown.
+An alert is <code>role="alertdialog"</code>, labelled by its title and described by its message.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import { App, VStack, Text, Button, State, Color } from 'swiftui-for-web';
+
+const showAlert = new State(false);
+const confirmDelete = new State(false);
+const log = new State('Nothing yet');
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Button('Sign out', () =&gt; { showAlert.value = true; }),
+    Button('Delete photo…', () =&gt; { confirmDelete.value = true; }).foregroundColor(Color.red),
+    Text(() =&gt; `Last choice: ${log.value}`)
+  )
+    .padding(24)
+    .alert('Sign out?', showAlert.binding, {
+      message: 'You can sign back in at any time.',
+      actions: [
+        { title: 'Sign out', role: 'destructive', action: () =&gt; { log.value = 'Signed out'; } },
+        { title: 'Cancel', role: 'cancel', action: () =&gt; { log.value = 'Stayed'; } },
+      ],
+    })
+    .confirmationDialog('Delete this photo?', confirmDelete.binding, {
+      titleVisibility: 'visible',
+      message: 'It will be removed from all your devices.',
+      actions: [
+        Button('Delete', { role: 'destructive' }, () =&gt; { log.value = 'Deleted'; }),
+        { title: 'Cancel', role: 'cancel' },
+      ],
+    })
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Sheets, full-screen covers and dismiss</h2>
+<p>Presented content finds <code>dismiss</code> in its environment, like SwiftUI’s <code>@Environment(\.dismiss)</code>.
+Calling it writes <code>false</code> to the binding that presented the view.</p>
+<div class="sample"><pre data-lang="js" data-run><code>import {
+  App, VStack, Text, Button, State, Environment, EnvironmentValues, Font
+} from 'swiftui-for-web';
+
+const showSettings = new State(false);
+const showPlayer = new State(false);
+
+const Settings = () =&gt; {
+  const dismiss = Environment.get(EnvironmentValues.dismiss);
+  return VStack({ spacing: 12 },
+    Text('Settings').font(Font.title2),
+    Button('Done', () =&gt; dismiss())
+  ).padding(24);
+};
+
+const Player = () =&gt; {
+  const dismiss = Environment.get(EnvironmentValues.dismiss);
+  return VStack({ spacing: 12 },
+    Text('Now playing').font(Font.largeTitle),
+    Button('Close', () =&gt; dismiss())
+  ).padding(40);
+};
+
+App(() =&gt;
+  VStack({ spacing: 12 },
+    Button('Settings', () =&gt; { showSettings.value = true; }),
+    Button('Play', () =&gt; { showPlayer.value = true; })
+  )
+    .padding(24)
+    .sheet(showSettings.binding, { onDismiss: () =&gt; console.log('Settings closed'), content: Settings })
+    .fullScreenCover(showPlayer.binding, Player)
+).mount('#root');
+</code></pre></div>
+
+
+<h2>Behaviour</h2>
+<ul>
+  <li>The page behind is inert while anything is presented, focus is trapped in the presentation, and page scroll is locked.</li>
+  <li>Focus returns to the element that presented it.</li>
+  <li>Presentations stack: a sheet can present an alert, and closing the alert returns to the sheet.</li>
+  <li>A backdrop click dismisses a sheet, a cover or a confirmation dialog, but not an alert, as in SwiftUI.</li>
+</ul>
+
+      <nav class="pager" aria-label="Previous and next guide"><a href="islands.html">← Islands and hydration</a><a href="gestures-animation.html">Gestures and animation →</a></nav>
+    </main>
+  </div>
+  <footer class="site-footer">
+    SwiftUI for Web 3.1.0 · MIT License · <a href="https://github.com/ShawnBaek/SwiftUI-For-Web/blob/main/CHANGELOG.md">CHANGELOG</a>
+  </footer>
+</body>
+</html>
