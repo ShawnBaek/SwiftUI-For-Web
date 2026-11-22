@@ -828,7 +828,12 @@ export function NavigationStack(
 export function NavigationLink(
   label: string | View,
   destination: View | (() => View),
-  options?: { /** Title shown for the destination */ title?: string }
+  options?: {
+    /** Title shown for the destination */
+    title?: string;
+    /** URL of the destination; the link renders as `<a href>` instead of `<button>` */
+    url?: string;
+  }
 ): View;
 
 /** Button that pops the enclosing NavigationStack */

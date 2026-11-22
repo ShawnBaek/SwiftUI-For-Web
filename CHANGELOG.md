@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `NavigationLink` is a native element (#51): a `<button type="button">`, or
+  an `<a href>` when it is given `{ url }`, so it is focusable and Enter
+  activates it. A plain click on a URL link navigates in place; a modified
+  or middle click is left to the browser (open in a new tab). Clicking a
+  `NavigationLink` also pushes again: the link used to look up its stack at
+  click time, after the render-time context was gone, so it did nothing.
+  The label now sits inside a button or link, so it should not contain other
+  interactive views (a `Button`, `Toggle` or another link).
 - The tab-bar `TabView` follows the WAI-ARIA tabs pattern (#51): the bar is a
   `tablist`, each button a `tab` with `aria-selected`, `aria-controls` and a
   roving `tabindex`, and the content area a `tabpanel` labelled by the

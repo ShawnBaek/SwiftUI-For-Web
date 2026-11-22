@@ -306,12 +306,17 @@ class NavigationLinkView extends View {
    * @param {string|View} label - Label text or view
    * @param {View|Function} destination - Destination view or view builder
    * @param {Object} [options] - Link options
+   * @param {string} [options.title] - Title shown for the destination
+   * @param {string} [options.url] - URL of the destination. When given, the
+   *   link renders as `<a href>` so it can be opened in a new tab, copied and
+   *   crawled; a plain click still navigates in place.
    */
   constructor(label, destination, options = {}) {
     super();
     this._label = label;
     this._destination = destination;
     this._title = options.title ?? '';
+    this._url = options.url ?? null;
     this._isActive = false;
   }
 
@@ -320,8 +325,7 @@ class NavigationLinkView extends View {
    *
    * @private
    */
-  _navigate() {
-    const navStack = getCurrentNavigationStack();
+  _navigate(navStack = getCurrentNavigationStack()) {
     if (navStack) {
       const view = typeof this._destination === 'function'
         ? this._destination()
@@ -337,8 +341,33 @@ class NavigationLinkView extends View {
    * @protected
    */
   _render() {
-    const el = document.createElement('div');
+    // #51: a native element, so the link is focusable and keyboard-operable.
+    // `<a href>` when the destination has a URL, otherwise `<button>`.
+    // The stack context only exists while the stack renders, so capture it
+    // now; a click arrives after rendering has finished.
+    const navStack = getCurrentNavigationStack();
+    const el = document.createElement(this._url ? 'a' : 'button');
     el.dataset.view = 'NavigationLink';
+    if (this._url) {
+      el.setAttribute('href', String(this._url));
+    } else {
+      el.setAttribute('type', 'button');
+      // Undo the user-agent button look so the label renders as before.
+      el.style.background = 'none';
+      el.style.border = '0';
+      el.style.padding = '0';
+      el.style.margin = '0';
+      el.style.font = 'inherit';
+      el.style.textAlign = 'inherit';
+      // No width: inside the framework's flex containers (stacks, List rows)
+      // a <button> sizes exactly like the <div> it replaces, while width:100%
+      // would stretch links in centered stacks and rows. Only a block-flow
+      // parent differs (a width:auto button shrinks to its content); use
+      // .frame(maxWidth: Infinity) there.
+    }
+    el.style.display = 'block';
+    el.style.color = 'inherit';
+    el.style.textDecoration = 'none';
     el.style.cursor = 'pointer';
 
     // Render label
@@ -350,8 +379,14 @@ class NavigationLinkView extends View {
       el.textContent = String(this._label);
     }
 
-    // Add click handler
-    el.addEventListener('click', () => this._navigate());
+    el.addEventListener('click', (event) => {
+      // Let the browser handle new-tab and download gestures on a URL link.
+      if (this._url && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (event.button ?? 0) !== 0)) {
+        return;
+      }
+      if (this._url) event.preventDefault?.();
+      this._navigate(navStack ?? getCurrentNavigationStack());
+    });
 
     return this._applyModifiers(el);
   }
