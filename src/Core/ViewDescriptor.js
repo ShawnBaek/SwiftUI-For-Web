@@ -168,6 +168,17 @@ export const ModifierType = {
   // Scoped environment for this view and its descendants (#49):
   // { values: [[key, value]], objects: [object] }.
   ENVIRONMENT: 'environment',
+  // Motion (src/Animation): the value is { apply(element) } built by
+  // animationModifier / transitionModifier / matchedGeometryModifier.
+  ANIMATION: 'animation',
+  TRANSITION: 'transition',
+  MATCHED_GEOMETRY: 'matchedGeometryEffect',
+  // .gesture / .onLongPressGesture / .onDrag (src/Gesture): the value is
+  // { gesture, apply(element) → dispose }.
+  GESTURE: 'gesture',
+  // .mask(_:) and .contentShape(_:): { shape, alignment } / { shape, eoFill }.
+  MASK: 'mask',
+  CONTENT_SHAPE: 'contentShape',
   CUSTOM: 'custom'
 };
 

@@ -13,7 +13,7 @@
 import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer } from '../../Core/Renderer.js';
-import { untrack } from '../../Data/Signal.js';
+import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
 import { Color } from '../../Graphic/Color.js';
 
 /**
@@ -41,9 +41,10 @@ export function ColorPicker(...args) {
   return chainable(createDescriptor('ColorPicker', props));
 }
 
-function readColor(selection) {
+function readColor(selection, tracked = false) {
   if (selection) {
-    const val = untrack(() => selection.value ?? selection.wrappedValue);
+    const read = () => selection.value ?? selection.wrappedValue;
+    const val = tracked ? read() : untrack(read);
     if (val && typeof val.hex === 'function') return val.hex();
     if (typeof val === 'string') return val;
   }
@@ -129,6 +130,16 @@ registerRenderer('ColorPicker', (props) => {
     writeColor(selection, color);
     colorCode.textContent = color.toUpperCase();
   });
+
+  // Follow writes made elsewhere: swatch, input and colour code.
+  if (getOwner() && selection) {
+    createEffect(() => {
+      const color = readColor(selection, true);
+      swatch.style.backgroundColor = color;
+      if (input.value !== color) input.value = color;
+      colorCode.textContent = color.toUpperCase();
+    });
+  }
 
   pickerWrapper.appendChild(input);
   pickerWrapper.appendChild(swatch);

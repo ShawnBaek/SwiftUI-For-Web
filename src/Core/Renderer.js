@@ -20,7 +20,7 @@ import {
   isLegacyView,
   ModifierType
 } from './ViewDescriptor.js';
-import { acquireElement, releaseTree } from './ElementPool.js';
+import { acquireElement, releaseTree, onRelease } from './ElementPool.js';
 import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
@@ -326,20 +326,26 @@ const LAYER_CATEGORY = {
   [ModifierType.CLIP_SHAPE]: 'clip',
   [ModifierType.OPACITY]: 'opacity',
   [ModifierType.SHADOW]: 'shadow',
+  [ModifierType.CONTENT_SHAPE]: 'clip',
+  [ModifierType.MASK]: 'mask',
 };
 
 // For each modifier, the categories already on the layer that force a new
 // layer before it is applied. For example .background(c).padding(8) pads
 // outside the background, and .padding(8).padding(4) adds up.
+// A mask is a clip-path, which also clips the element's own box-shadow,
+// border and background, so anything drawn after a mask goes on a new layer.
 const WRAPS_AFTER = {
-  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow']),
-  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity']),
-  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow']),
-  [ModifierType.BORDER]: new Set(['border', 'clip']),
+  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow', 'mask']),
+  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity', 'mask']),
+  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow', 'mask']),
+  [ModifierType.BORDER]: new Set(['border', 'clip', 'mask']),
   [ModifierType.CORNER_RADIUS]: new Set(['clip']),
   [ModifierType.CLIP_SHAPE]: new Set(['clip']),
   [ModifierType.OPACITY]: new Set(['opacity']),
-  [ModifierType.SHADOW]: new Set(['shadow']),
+  [ModifierType.SHADOW]: new Set(['shadow', 'mask']),
+  [ModifierType.CONTENT_SHAPE]: new Set(['clip']),
+  [ModifierType.MASK]: new Set(['mask']),
 };
 
 // Properties that place an element in its parent. A new layer takes them
@@ -589,6 +595,25 @@ function applyModifier(element, modifier) {
       applyShaderEffect(element, value, type);
       break;
 
+    // Motion and gestures (src/Animation, src/Gesture). The value carries
+    // the shared implementation; whatever it returns to undo (gesture
+    // listeners, a pending transition frame) is released with the element
+    // and with the current owner.
+    case ModifierType.ANIMATION:
+    case ModifierType.TRANSITION:
+    case ModifierType.MATCHED_GEOMETRY:
+    case ModifierType.GESTURE:
+      ownElementResource(element, value.apply(element));
+      break;
+
+    case ModifierType.MASK:
+      applyMask(element, value);
+      break;
+
+    case ModifierType.CONTENT_SHAPE:
+      applyContentShape(element, value);
+      break;
+
     case ModifierType.CUSTOM:
       if (typeof value === 'function') {
         value(element);
@@ -761,6 +786,86 @@ function applyShadow(element, value) {
 }
 
 /**
+ * Tie a cleanup function to an element: it runs once, when the element is
+ * released to the pool or when the current owner is disposed, whichever
+ * comes first.
+ */
+function ownElementResource(element, dispose) {
+  if (typeof dispose !== 'function') return;
+  let done = false;
+  const once = () => {
+    if (done) return;
+    done = true;
+    dispose();
+  };
+  onRelease(element, once);
+  if (getOwner()) onCleanup(once);
+}
+
+// The lower-case shape name of a shape value: 'circle', 'roundedrectangle',
+// … from a string, a descriptor's type or a Shape view's class.
+function shapeName(value) {
+  const name = typeof value === 'string' ? value : value?.type || value?.constructor?.name;
+  return typeof name === 'string' ? name.toLowerCase().replace(/view$/, '') : '';
+}
+
+// A RoundedRectangle's radius. On a Shape view `cornerRadius` is the
+// modifier method, so only numbers count.
+function cornerRadiusOf(value) {
+  for (const candidate of [value?.cornerRadius, value?._cornerRadius, value?.props?.cornerRadius]) {
+    if (typeof candidate === 'number') return candidate;
+  }
+  return 10;
+}
+
+// The CSS clip-path for a shape, or null when it isn't a known shape.
+function shapeClipPath(value) {
+  switch (shapeName(value)) {
+    case 'circle': return 'circle(50%)';
+    case 'ellipse': return 'ellipse(50% 50%)';
+    case 'capsule': return 'inset(0 round 9999px)';
+    case 'roundedrectangle': return `inset(0 round ${cornerRadiusOf(value)}px)`;
+    case 'rectangle': return 'inset(0)';
+    default: return null;
+  }
+}
+
+/**
+ * .mask(_:alignment:) (SwiftUI: mask(alignment:_:)). A shape masks with a
+ * clip-path; a gradient masks with its alpha through mask-image.
+ * @see https://developer.apple.com/documentation/swiftui/view/mask(alignment:_:)
+ */
+function applyMask(element, { shape, alignment }) {
+  const clipPath = shapeClipPath(shape);
+  if (clipPath) {
+    element.style.clipPath = clipPath;
+    return;
+  }
+  const gradient = shape && typeof shape.css === 'function' ? shape.css() : null;
+  if (typeof gradient === 'string' && gradient) {
+    element.style.maskImage = gradient;
+    element.style.webkitMaskImage = gradient;
+    const position = String(alignment ?? 'center').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+      .replace('leading', 'left').replace('trailing', 'right');
+    element.style.maskPosition = position;
+    element.style.maskRepeat = 'no-repeat';
+  }
+}
+
+/**
+ * .contentShape(_:eoFill:): the shape that receives taps. The whole box is
+ * hit-testable (even where it draws nothing); a rounded shape rounds the hit
+ * area like clipShape does, as the legacy View modifier did. A rectangle
+ * doesn't clip: in SwiftUI contentShape never changes what is drawn.
+ * @see https://developer.apple.com/documentation/swiftui/view/contentshape(_:eofill:)
+ */
+function applyContentShape(element, { shape }) {
+  element.style.pointerEvents = 'auto';
+  const name = shapeName(shape);
+  if (name && name !== 'rectangle') applyClipShape(element, shape);
+}
+
+/**
  * Apply clip shape modifier
  */
 function applyClipShape(element, value) {
@@ -777,8 +882,7 @@ function applyClipShape(element, value) {
       break;
     case 'roundedrectangle':
     case 'roundedrectangleview':
-      const radius = value?.cornerRadius ?? value?._cornerRadius ?? 10;
-      element.style.borderRadius = `${radius}px`;
+      element.style.borderRadius = `${cornerRadiusOf(value)}px`;
       break;
     case 'rectangle':
     case 'rectangleview':

@@ -15,6 +15,8 @@ import {
   createModifier,
   ModifierType
 } from './ViewDescriptor.js';
+import { animationModifier, transitionModifier, matchedGeometryModifier } from '../Animation/Animation.js';
+import { gestureModifier, longPressGestureModifier, dragGestureModifier } from '../Gesture/Gesture.js';
 
 /**
  * @param {Object} descriptor - Base descriptor
@@ -55,6 +57,19 @@ export function chainable(descriptor, extras = null) {
   chain.border = (color, width = 1) => add(ModifierType.BORDER, { color, width });
   chain.shadow = (options) => add(ModifierType.SHADOW, options);
   chain.clipShape = (shape) => add(ModifierType.CLIP_SHAPE, shape);
+  chain.mask = (mask, alignment = 'center') => add(ModifierType.MASK, { shape: mask, alignment });
+  chain.contentShape = (shape, eoFill = false) => add(ModifierType.CONTENT_SHAPE, { shape, eoFill });
+
+  // Animation (src/Animation; the same implementation the legacy View uses)
+  chain.animation = (animation, value) => add(ModifierType.ANIMATION, animationModifier(animation, value));
+  chain.transition = (transition) => add(ModifierType.TRANSITION, transitionModifier(transition));
+  chain.matchedGeometryEffect = (id, namespace, options = {}) =>
+    add(ModifierType.MATCHED_GEOMETRY, matchedGeometryModifier(id, namespace, options));
+
+  // Gestures (src/Gesture)
+  chain.gesture = (gesture) => add(ModifierType.GESTURE, gestureModifier(gesture));
+  chain.onLongPressGesture = (handler, options = {}) => add(ModifierType.GESTURE, longPressGestureModifier(handler, options));
+  chain.onDrag = (onChanged, onEnded) => add(ModifierType.GESTURE, dragGestureModifier(onChanged, onEnded));
 
   // Effects
   chain.colorEffect = (shader, opts) => add(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) });

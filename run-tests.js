@@ -9,6 +9,23 @@ class MockDocument {
     this.body = this.createElement('body');
     this.head = this.createElement('head');
     this.elements = new Map();
+    this._eventListeners = {};
+  }
+
+  // Document-level listeners (DragGesture tracks mouse moves on the document).
+  addEventListener(event, handler) {
+    (this._eventListeners[event] ||= []).push(handler);
+  }
+
+  removeEventListener(event, handler) {
+    const listeners = this._eventListeners[event];
+    if (listeners) this._eventListeners[event] = listeners.filter((candidate) => candidate !== handler);
+  }
+
+  dispatchEvent(event) {
+    if (!event.target) event.target = this;
+    (this._eventListeners[event.type] || []).slice().forEach((handler) => handler(event));
+    return !event.defaultPrevented;
   }
 
   createElement(tag) {
@@ -3930,6 +3947,271 @@ async function runTests() {
         const element = render(toggle);
         expect(element.tagName).toBe('BUTTON');
       });
+    });
+
+    // Restored modifiers on descriptor views: gestures, animation, mask,
+    // contentShape (#48, #50). docs/parity-audit.md lists the gaps.
+    const GestureModule = await import('./src/Gesture/Gesture.js');
+    const AnimationModule = await import('./src/Animation/Animation.js');
+    const { Circle: ParityCircle, Rectangle: ParityRectangle, RoundedRectangle: ParityRoundedRectangle } = await import('./src/Shape/Shape.js');
+    const { LinearGradient: ParityLinearGradient } = await import('./src/Graphic/Gradient.js');
+    const { Toggle: ParityToggle } = await import('./src/View/Control/Toggle.js');
+    const { DatePicker: ParityDatePicker } = await import('./src/View/Control/DatePicker.js');
+    const { ColorPicker: ParityColorPicker } = await import('./src/View/Control/ColorPicker.js');
+    const { Color: ParityColor } = await import('./src/Graphic/Color.js');
+    const { View: LegacyView } = await import('./src/Core/View.js');
+    await import('./src/runtime.js');
+    const mouse = (type, x, y) => Object.assign(new MockEvent(type), { clientX: x, clientY: y });
+    const touch = (type, points) => Object.assign(new MockEvent(type), {
+      touches: points.map(([x, y]) => ({ clientX: x, clientY: y })),
+      cancelable: true,
+    });
+    const findAll = (node, test, out = []) => {
+      if (test(node)) out.push(node);
+      (node.children || []).forEach((child) => findAll(child, test, out));
+      return out;
+    };
+
+    describe('Descriptor parity: restored legacy modifiers', () => {
+      const RESTORED = ['animation', 'transition', 'matchedGeometryEffect', 'gesture',
+        'onLongPressGesture', 'onDrag', 'mask', 'contentShape'];
+
+      it('every descriptor family has the restored modifiers, and they survive chaining', () => {
+        const views = {
+          Text: ModifierText('a'),
+          VStack: VStack(ModifierText('a')),
+          Button: Button('b', () => {}),
+          Toggle: ParityToggle('t', new State(false).binding),
+          Picker: Picker('p', new State(1).binding, ModifierText('One').tag(1)),
+          Stepper: Stepper('s', new State(0).binding),
+          ChainedText: ModifierText('a').padding(4).bold(),
+        };
+        for (const [name, view] of Object.entries(views)) {
+          for (const method of RESTORED) {
+            if (typeof view[method] !== 'function') throw new Error(`${name} lacks .${method}()`);
+          }
+        }
+        expect(Object.isFrozen(ModifierText('a').gesture(GestureModule.TapGesture()))).toBe(true);
+      });
+
+      it('the legacy View class still has the same modifiers', () => {
+        for (const method of RESTORED) {
+          expect(typeof LegacyView.prototype[method]).toBe('function');
+        }
+      });
+
+      it('.gesture(TapGesture()) fires onEnded on click; TapGesture(2) needs two clicks', () => {
+        const taps = [];
+        const single = render(ModifierText('tap').gesture(GestureModule.TapGesture().onEnded(() => taps.push('single'))));
+        single.dispatchEvent(mouse('click', 1, 2));
+        const double = render(ModifierText('tap').gesture(GestureModule.TapGesture(2).onEnded(() => taps.push('double'))));
+        double.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toEqual(['single']);
+        double.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toEqual(['single', 'double']);
+      });
+
+      it('.onDrag reports translation through onChanged and onEnded', () => {
+        const changed = [];
+        let ended = null;
+        const element = render(VStack(ModifierText('drag')).onDrag((v) => changed.push(v.translation), (v) => { ended = v.translation; }));
+        expect(element.style.cursor).toBe('grab');
+        element.dispatchEvent(mouse('mousedown', 10, 10));
+        document.dispatchEvent(mouse('mousemove', 13, 10)); // below minimumDistance
+        expect(changed.length).toBe(0);
+        document.dispatchEvent(mouse('mousemove', 40, 30));
+        document.dispatchEvent(mouse('mouseup', 40, 30));
+        expect(changed).toEqual([{ width: 30, height: 20 }]);
+        expect(ended).toEqual({ width: 30, height: 20 });
+      });
+
+      it('one gesture attached to two elements keeps separate state per element', () => {
+        const ends = [];
+        const drag = GestureModule.DragGesture({ minimumDistance: 0 }).onEnded((v) => ends.push(v.startLocation.x));
+        const view = ModifierText('x').gesture(drag);
+        const a = render(view);
+        const b = render(view);
+        a.dispatchEvent(mouse('mousedown', 1, 0));
+        document.dispatchEvent(mouse('mousemove', 5, 0));
+        document.dispatchEvent(mouse('mouseup', 5, 0));
+        expect(ends).toEqual([1]);
+        b.dispatchEvent(mouse('mousedown', 7, 0));
+        document.dispatchEvent(mouse('mousemove', 9, 0));
+        document.dispatchEvent(mouse('mouseup', 9, 0));
+        expect(ends).toEqual([1, 7]);
+      });
+
+      it('MagnificationGesture and RotationGesture follow two touches', () => {
+        let scale = null;
+        let angle = null;
+        const pinch = render(ModifierText('p').gesture(GestureModule.MagnificationGesture().onEnded((v) => { scale = v.magnification; })));
+        pinch.dispatchEvent(touch('touchstart', [[0, 0], [10, 0]]));
+        pinch.dispatchEvent(touch('touchmove', [[0, 0], [20, 0]]));
+        pinch.dispatchEvent(touch('touchend', []));
+        expect(scale).toBe(2);
+        const rotate = render(ModifierText('r').gesture(GestureModule.RotationGesture().onEnded((v) => { angle = v.rotation; })));
+        rotate.dispatchEvent(touch('touchstart', [[0, 0], [10, 0]]));
+        rotate.dispatchEvent(touch('touchmove', [[0, 0], [0, 10]]));
+        rotate.dispatchEvent(touch('touchend', []));
+        expect(Math.round(angle * 1000) / 1000).toBe(Math.round((Math.PI / 2) * 1000) / 1000);
+      });
+
+      it('gesture listeners are removed when the owner is disposed', () => {
+        let taps = 0;
+        let element = null;
+        const dispose = Signal.createRoot((d) => {
+          element = render(ModifierText('t').gesture(GestureModule.TapGesture().onEnded(() => { taps++; })));
+          return d;
+        });
+        element.dispatchEvent(mouse('click', 0, 0));
+        dispose();
+        element.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toBe(1);
+        expect((element._eventListeners.click || []).length).toBe(0);
+      });
+
+      it('gesture listeners are removed when the element is released to the pool, including document listeners', () => {
+        ElementPool.clearPools();
+        const before = (document._eventListeners.mousemove || []).length;
+        let taps = 0;
+        const element = render(ModifierText('t').gesture(GestureModule.TapGesture().onEnded(() => { taps++; })));
+        const dragged = render(ModifierText('d').onDrag(() => {}));
+        expect((document._eventListeners.mousemove || []).length).toBe(before + 1);
+        ElementPool.releaseElement(element);
+        ElementPool.releaseElement(dragged);
+        element.dispatchEvent(mouse('click', 0, 0));
+        expect(taps).toBe(0);
+        expect((document._eventListeners.mousemove || []).length).toBe(before);
+      });
+
+      it('.animation sets a CSS transition from the Animation; .animation(null) turns it off', () => {
+        const animated = render(ModifierText('a').opacity(0.5).animation(AnimationModule.Animation.easeInOut(0.3)));
+        expect(animated.style.transition).toBe(AnimationModule.Animation.easeInOut(0.3).toCSS());
+        expect(render(ModifierText('a').animation(null)).style.transition).toBe('none');
+        expect(render(ModifierText('a').animation()).style.transition).toBe(AnimationModule.Animation.default.toCSS());
+      });
+
+      it('.matchedGeometryEffect names the view transition from the namespace', () => {
+        const ns = AnimationModule.Namespace();
+        const element = render(ModifierText('hero').matchedGeometryEffect('card', ns, { isSource: false }));
+        expect(element.style.viewTransitionName).toBe(ns.name('card'));
+        expect(element._matchedGeometry.isSource).toBe(false);
+      });
+
+      it('.transition outside withAnimation leaves the view at its normal styles', () => {
+        const element = render(ModifierText('t').transition(AnimationModule.AnyTransition.opacity));
+        expect(element.style.opacity === undefined || element.style.opacity === '').toBe(true);
+        expect(element._swiftuiTransition instanceof AnimationModule.AnyTransition).toBe(true);
+      });
+
+      it('.mask clips to a shape, and a gradient masks with mask-image', () => {
+        expect(render(ModifierText('m').mask(ParityCircle())).style.clipPath).toBe('circle(50%)');
+        expect(render(ModifierText('m').mask('capsule')).style.clipPath).toBe('inset(0 round 9999px)');
+        expect(render(ModifierText('m').mask(ParityRoundedRectangle({ cornerRadius: 6 }))).style.clipPath).toBe('inset(0 round 6px)');
+        // clipShape read the Shape view's cornerRadius() method as the radius.
+        expect(render(ModifierText('m').clipShape(ParityRoundedRectangle({ cornerRadius: 6 }))).style.borderRadius).toBe('6px');
+        const gradient = ParityLinearGradient([ParityColor.black, ParityColor.clear]);
+        const masked = render(ModifierText('m').mask(gradient));
+        expect(masked.style.maskImage).toBe(gradient.css());
+      });
+
+      it('.mask orders with drawing modifiers: a background after the mask is not masked', () => {
+        const inside = render(ModifierText('m').background('red').mask(ParityCircle()));
+        expect(inside.style.clipPath).toBe('circle(50%)');
+        expect(inside.style.background || inside.style.backgroundColor).toBeTruthy();
+        const outside = render(ModifierText('m').mask(ParityCircle()).background('red'));
+        expect(outside.dataset.modifierLayer).toBe('');
+        expect(outside.style.clipPath === undefined || outside.style.clipPath === '').toBe(true);
+        expect(outside.children[0].style.clipPath).toBe('circle(50%)');
+      });
+
+      it('.contentShape makes the box hit-testable; a rectangle does not clip, a circle rounds', () => {
+        const rect = render(ModifierText('c').contentShape(ParityRectangle()));
+        expect(rect.style.pointerEvents).toBe('auto');
+        expect(rect.style.overflow === undefined || rect.style.overflow === '').toBe(true);
+        const round = render(ModifierText('c').contentShape(ParityCircle()));
+        expect(round.style.borderRadius).toBe('50%');
+      });
+    });
+
+    describe('Descriptor parity: controls follow binding writes made elsewhere', () => {
+      const owned = (view) => {
+        let element = null;
+        const dispose = Signal.createRoot((d) => { element = render(view); return d; });
+        return { element, dispose };
+      };
+
+      it('Picker (menu, segmented, inline) shows a selection written elsewhere', () => {
+        const flavor = new State('a');
+        const options = () => [ModifierText('A').tag('a'), ModifierText('B').tag('b')];
+        const menu = owned(Picker('F', flavor.binding, ...options()));
+        const segmented = owned(Picker('F', flavor.binding, ...options()).pickerStyle(PickerStyle.segmented));
+        const inline = owned(Picker('F', flavor.binding, ...options()).pickerStyle(PickerStyle.inline));
+        flavor.value = 'b';
+        Scheduler.flushSync();
+        const select = findAll(menu.element, (n) => n.tagName === 'SELECT')[0];
+        expect(select.selectedIndex).toBe(1);
+        const radios = findAll(segmented.element, (n) => n.getAttribute && n.getAttribute('role') === 'radio');
+        expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+        const marks = inline.element.children.map((row) => row.children[0].textContent);
+        expect(marks).toEqual(['', '✓']);
+        menu.dispose(); segmented.dispose(); inline.dispose();
+      });
+
+      it('Stepper dims the + button when the value reaches max from elsewhere', () => {
+        const count = new State(0);
+        const { element, dispose } = owned(Stepper('Count', count.binding, { in: [0, 3] }));
+        const buttons = findAll(element, (n) => n.tagName === 'BUTTON');
+        expect(buttons[1].style.opacity).toBe('1');
+        count.value = 3;
+        Scheduler.flushSync();
+        expect(buttons[1].style.opacity).toBe('0.3');
+        expect(buttons[0].style.opacity).toBe('1');
+        dispose();
+      });
+
+      it('DatePicker and ColorPicker show values written elsewhere', () => {
+        const date = new State(new Date(2026, 0, 2));
+        const color = new State(ParityColor.hex('#112233'));
+        const dp = owned(ParityDatePicker('Date', date.binding));
+        const cp = owned(ParityColorPicker('Color', color.binding));
+        date.value = new Date(2026, 4, 6);
+        color.value = ParityColor.hex('#445566');
+        Scheduler.flushSync();
+        const input = findAll(dp.element, (n) => n.tagName === 'INPUT')[0];
+        expect(input.value).toBe('2026-05-06');
+        const colorInput = findAll(cp.element, (n) => n.tagName === 'INPUT')[0];
+        expect(colorInput.value.toLowerCase()).toBe('#445566');
+        dp.dispose(); cp.dispose();
+      });
+    });
+
+    {
+      const previousRAF = globalThis.requestAnimationFrame;
+      globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+      await itAsync('.transition inserted inside withAnimation starts at the insertion styles and animates back', async () => {
+        let element = null;
+        await AnimationModule.withAnimation(AnimationModule.Animation.linear(0.01), () => {
+          element = render(ModifierText('t').opacity(0.8).transition(AnimationModule.AnyTransition.opacity));
+          if (element.style.opacity !== '0') throw new Error(`expected insertion opacity 0, got ${element.style.opacity}`);
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(element.style.opacity).toBe('0.8');
+        expect(element.style.transition).toBe(AnimationModule.Animation.linear(0.01).toCSS());
+      });
+      globalThis.requestAnimationFrame = previousRAF;
+    }
+
+    await itAsync('.onLongPressGesture fires after minimumDuration, and a release before that cancels it', async () => {
+      let presses = 0;
+      const element = render(ModifierText('hold').onLongPressGesture(() => { presses++; }, { minimumDuration: 0.01 }));
+      element.dispatchEvent(mouse('mousedown', 0, 0));
+      element.dispatchEvent(mouse('mouseup', 0, 0));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(presses).toBe(0);
+      element.dispatchEvent(mouse('mousedown', 0, 0));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(presses).toBe(1);
     });
 
     // Summary

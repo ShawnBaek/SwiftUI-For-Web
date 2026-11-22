@@ -20,7 +20,7 @@
 import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer } from '../../Core/Renderer.js';
-import { untrack } from '../../Data/Signal.js';
+import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
 
 /**
  * DatePicker displayed components
@@ -82,9 +82,10 @@ export function DatePicker(...args) {
   return chainable(createDescriptor('DatePicker', props), datePickerModifiers);
 }
 
-function readDate(selection) {
+function readDate(selection, tracked = false) {
   if (selection) {
-    const val = untrack(() => selection.value ?? selection.wrappedValue);
+    const read = () => selection.value ?? selection.wrappedValue;
+    const val = tracked ? read() : untrack(read);
     return val instanceof Date ? val : new Date();
   }
   return new Date();
@@ -190,6 +191,14 @@ registerRenderer('DatePicker', (props) => {
     input.style.borderColor = 'rgba(60, 60, 67, 0.2)';
     input.style.boxShadow = 'none';
   });
+
+  // Follow writes made elsewhere (SwiftUI: the control shows its binding).
+  if (getOwner() && selection) {
+    createEffect(() => {
+      const formatted = formatDateForInput(readDate(selection, true), components);
+      if (input.value !== formatted) input.value = formatted;
+    });
+  }
 
   container.appendChild(input);
 

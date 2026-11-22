@@ -727,99 +727,115 @@ export function animateStyles(element, animationOrStyles = Animation.default, st
 // =============================================================================
 
 /**
- * Adds animation modifier to a View class
- * Call this with your View class to enable .animation() modifier
+ * `.animation(_:value:)`: changes to this view's styles animate with
+ * `animation`. On the web this is a CSS transition on the element, so any
+ * style change (a State-driven `.opacity(isVisible)`, a frame) animates.
+ *
+ * Shared by descriptor views (Chainable) and the legacy View prototype.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/animation(_:value:)
+ * @param {Animation|null} animation - `null` turns animation off
+ * @param {*} [value] - The value whose changes animate (kept for API parity)
+ * @returns {{ animation: Animation|null, value: *, apply: (element: HTMLElement) => void }}
+ */
+export function animationModifier(animation, value) {
+  const anim = animation === null
+    ? null
+    : (animation instanceof Animation ? animation : Animation.default);
+  return {
+    animation: anim,
+    value,
+    apply(element) {
+      element.style.transition = anim ? anim.toCSS() : 'none';
+    }
+  };
+}
+
+/**
+ * `.transition(_:)`: how the view appears when it is inserted inside
+ * `withAnimation`. The element starts at the transition's insertion styles
+ * and animates to its normal styles.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/transition(_:)
+ * @param {AnyTransition} transition
+ */
+export function transitionModifier(transition) {
+  const trans = transition instanceof AnyTransition ? transition : AnyTransition.opacity;
+  return {
+    transition: trans,
+    apply(element) {
+      // Stored for removal-aware containers.
+      element._swiftuiTransition = trans;
+      if (!_isAnimating) return undefined;
+
+      const animation = _currentAnimation ?? Animation.default;
+      const insertion = trans.insertion;
+      const previous = {};
+      for (const key of Object.keys(insertion)) previous[key] = element.style[key] || '';
+      Object.assign(element.style, insertion);
+
+      if (typeof requestAnimationFrame !== 'function') {
+        Object.assign(element.style, previous);
+        return undefined;
+      }
+      // Animate to identity after a frame, back to the view's own styles.
+      const frame = requestAnimationFrame(() => {
+        element.style.transition = animation.toCSS();
+        Object.assign(element.style, previous);
+      });
+      return () => {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+      };
+    }
+  };
+}
+
+/**
+ * `.matchedGeometryEffect(id:in:isSource:)`: views with the same id in a
+ * namespace share a `view-transition-name`, so a View Transition animates
+ * one into the other.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/matchedgeometryeffect(id:in:properties:anchor:issource:)
+ * @param {string} id
+ * @param {{ id: string, name: (id: string) => string }} namespace - From Namespace()
+ * @param {{ isSource?: boolean }} [options]
+ */
+export function matchedGeometryModifier(id, namespace, options = {}) {
+  const { isSource = true } = options;
+  const transitionName = namespace && typeof namespace.name === 'function'
+    ? namespace.name(id)
+    : String(id);
+  return {
+    id,
+    namespace,
+    isSource,
+    apply(element) {
+      element.style.viewTransitionName = transitionName;
+      element._matchedGeometry = {
+        id,
+        namespace: namespace?.id,
+        isSource
+      };
+    }
+  };
+}
+
+/**
+ * Adds animation modifiers to a View class.
  *
  * @param {Function} ViewClass - The View class to extend
  */
 export function extendViewWithAnimation(ViewClass) {
-  /**
-   * Implicit animation modifier
-   * Animates changes when the specified value changes
-   *
-   * @param {Animation} animation - Animation to use
-   * @param {Object} value - State value to watch (e.g., a State instance)
-   * @returns {View} this
-   */
   ViewClass.prototype.animation = function(animation, value) {
-    const anim = animation instanceof Animation ? animation : Animation.default;
-
-    return this.modifier({
-      _animation: anim,
-      _value: value,
-      apply(element) {
-        // Apply CSS transition
-        element.style.transition = anim.toCSS();
-
-        // If value is a State, subscribe to changes
-        if (value && typeof value.subscribe === 'function') {
-          value.subscribe(() => {
-            // Animation is already applied via CSS transition
-          });
-        }
-      }
-    });
+    return this.modifier(animationModifier(animation, value));
   };
 
-  /**
-   * Transition modifier for view insertion/removal
-   *
-   * @param {AnyTransition} transition - Transition to apply
-   * @returns {View} this
-   */
   ViewClass.prototype.transition = function(transition) {
-    const trans = transition instanceof AnyTransition ? transition : AnyTransition.opacity;
-
-    return this.modifier({
-      _transition: trans,
-      apply(element) {
-        // Store transition for later use
-        element._swiftuiTransition = trans;
-
-        // Apply insertion styles initially (for appearing views)
-        if (_isAnimating) {
-          Object.assign(element.style, trans.insertion);
-
-          // Animate to identity after a frame
-          requestAnimationFrame(() => {
-            element.style.transition = _currentAnimation?.toCSS() ?? Animation.default.toCSS();
-            // Reset to normal state
-            Object.keys(trans.insertion).forEach(key => {
-              element.style[key] = '';
-            });
-          });
-        }
-      }
-    });
+    return this.modifier(transitionModifier(transition));
   };
 
-  /**
-   * matchedGeometryEffect - Synchronizes geometry between views
-   * Uses CSS view-transition-name for hero animations
-   *
-   * @param {string} id - Unique identifier for matching
-   * @param {Object} namespace - Namespace from Namespace()
-   * @param {Object} [options] - Options
-   * @param {boolean} [options.isSource=true] - Whether this is the source view
-   * @returns {View} this
-   */
   ViewClass.prototype.matchedGeometryEffect = function(id, namespace, options = {}) {
-    const { isSource = true } = options;
-    const transitionName = namespace.name(id);
-
-    return this.modifier({
-      apply(element) {
-        // Use CSS view-transition-name for cross-view animations
-        element.style.viewTransitionName = transitionName;
-
-        // Store metadata for the animation system
-        element._matchedGeometry = {
-          id,
-          namespace: namespace.id,
-          isSource
-        };
-      }
-    });
+    return this.modifier(matchedGeometryModifier(id, namespace, options));
   };
 }
 
@@ -973,7 +989,8 @@ export function getAnimationStyles() {
  * Inject animation styles into the document
  */
 export function injectAnimationStyles() {
-  if (typeof document === 'undefined') return;
+  // Minimal DOMs (server shims, test mocks) may lack these.
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function' || !document.head) return;
 
   // Check if already injected
   if (document.getElementById('swiftui-animation-styles')) return;
@@ -985,7 +1002,7 @@ export function injectAnimationStyles() {
 }
 
 // Auto-inject styles when module loads in browser
-if (typeof document !== 'undefined') {
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectAnimationStyles);
   } else {

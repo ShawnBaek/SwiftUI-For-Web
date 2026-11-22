@@ -16,7 +16,26 @@
  *   )
  */
 
-import { View } from '../Core/View.js';
+/**
+ * Add listeners to targets and return one function that removes them all.
+ * Every recognizer returns this from _apply, so a view that is released
+ * (its owner disposed, or its element returned to the pool) leaves no
+ * listeners behind.
+ *
+ * @returns {{ on: Function, dispose: Function }}
+ */
+function listenerGroup() {
+  const removers = [];
+  return {
+    on(target, type, handler, options) {
+      target.addEventListener(type, handler, options);
+      removers.push(() => target.removeEventListener(type, handler, options));
+    },
+    dispose() {
+      while (removers.length) removers.pop()();
+    }
+  };
+}
 
 /**
  * Base Gesture class
@@ -68,47 +87,38 @@ export class TapGestureRecognizer extends GestureBase {
   constructor(count = 1) {
     super();
     this._count = count;
-    this._tapCount = 0;
-    this._tapTimer = null;
   }
 
   _apply(element) {
     element.style.cursor = 'pointer';
     element.style.userSelect = 'none';
 
-    if (this._count === 1) {
-      element.addEventListener('click', (e) => {
-        const value = {
-          location: { x: e.clientX, y: e.clientY }
-        };
-        if (this._onEndedHandler) {
-          this._onEndedHandler(value);
-        }
-      });
-    } else {
+    const listeners = listenerGroup();
+    let tapCount = 0;
+    let tapTimer = null;
+
+    listeners.on(element, 'click', (e) => {
+      const value = { location: { x: e.clientX, y: e.clientY } };
+      if (this._count === 1) {
+        if (this._onEndedHandler) this._onEndedHandler(value);
+        return;
+      }
       // Multi-tap (double-tap, triple-tap, etc.)
-      element.addEventListener('click', (e) => {
-        this._tapCount++;
+      tapCount++;
+      if (tapTimer) clearTimeout(tapTimer);
+      tapTimer = null;
+      if (tapCount === this._count) {
+        tapCount = 0;
+        if (this._onEndedHandler) this._onEndedHandler(value);
+      } else {
+        tapTimer = setTimeout(() => { tapCount = 0; tapTimer = null; }, 300);
+      }
+    });
 
-        if (this._tapTimer) {
-          clearTimeout(this._tapTimer);
-        }
-
-        if (this._tapCount === this._count) {
-          const value = {
-            location: { x: e.clientX, y: e.clientY }
-          };
-          if (this._onEndedHandler) {
-            this._onEndedHandler(value);
-          }
-          this._tapCount = 0;
-        } else {
-          this._tapTimer = setTimeout(() => {
-            this._tapCount = 0;
-          }, 300);
-        }
-      });
-    }
+    return () => {
+      if (tapTimer) clearTimeout(tapTimer);
+      listeners.dispose();
+    };
   }
 }
 
@@ -131,8 +141,6 @@ export class LongPressGestureRecognizer extends GestureBase {
     super();
     this._minimumDuration = (options.minimumDuration ?? 0.5) * 1000; // Convert to ms
     this._maximumDistance = options.maximumDistance ?? 10;
-    this._timer = null;
-    this._startLocation = null;
   }
 
   _apply(element) {
@@ -140,71 +148,64 @@ export class LongPressGestureRecognizer extends GestureBase {
     element.style.userSelect = 'none';
     element.style.webkitTouchCallout = 'none';
 
+    // Per-element state: one recognizer may be attached to several elements
+    // (a descriptor rendered in a ForEach).
+    const listeners = listenerGroup();
+    let timer = null;
+    let feedbackTimer = null;
+    let startLocation = null;
+
+    const cancel = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      startLocation = null;
+    };
+
     const startHandler = (e) => {
       const point = e.touches ? e.touches[0] : e;
-      this._startLocation = { x: point.clientX, y: point.clientY };
+      startLocation = { x: point.clientX, y: point.clientY };
+      if (timer) clearTimeout(timer);
 
-      this._timer = setTimeout(() => {
-        const value = {
-          location: this._startLocation,
-          startLocation: this._startLocation
-        };
+      timer = setTimeout(() => {
+        timer = null;
+        const value = { location: startLocation, startLocation };
+        if (this._onChangedHandler) this._onChangedHandler(value);
+        if (this._onEndedHandler) this._onEndedHandler(value);
 
-        if (this._onChangedHandler) {
-          this._onChangedHandler(value);
-        }
-        if (this._onEndedHandler) {
-          this._onEndedHandler(value);
-        }
-
-        // Add visual feedback
+        // Visual feedback
         element.style.opacity = '0.7';
-        setTimeout(() => {
+        feedbackTimer = setTimeout(() => {
+          feedbackTimer = null;
           element.style.opacity = '1';
         }, 100);
       }, this._minimumDuration);
     };
 
     const moveHandler = (e) => {
-      if (!this._startLocation || !this._timer) return;
-
+      if (!startLocation || !timer) return;
       const point = e.touches ? e.touches[0] : e;
-      const distance = Math.sqrt(
-        Math.pow(point.clientX - this._startLocation.x, 2) +
-        Math.pow(point.clientY - this._startLocation.y, 2)
-      );
-
-      if (distance > this._maximumDistance) {
-        this._cancel();
-      }
+      const distance = Math.hypot(point.clientX - startLocation.x, point.clientY - startLocation.y);
+      if (distance > this._maximumDistance) cancel();
     };
 
-    const endHandler = () => {
-      this._cancel();
-    };
+    listeners.on(element, 'mousedown', startHandler);
+    listeners.on(element, 'mousemove', moveHandler);
+    listeners.on(element, 'mouseup', cancel);
+    listeners.on(element, 'mouseleave', cancel);
 
-    element.addEventListener('mousedown', startHandler);
-    element.addEventListener('mousemove', moveHandler);
-    element.addEventListener('mouseup', endHandler);
-    element.addEventListener('mouseleave', endHandler);
-
-    element.addEventListener('touchstart', startHandler, { passive: true });
-    element.addEventListener('touchmove', moveHandler, { passive: true });
-    element.addEventListener('touchend', endHandler);
-    element.addEventListener('touchcancel', endHandler);
+    listeners.on(element, 'touchstart', startHandler, { passive: true });
+    listeners.on(element, 'touchmove', moveHandler, { passive: true });
+    listeners.on(element, 'touchend', cancel);
+    listeners.on(element, 'touchcancel', cancel);
 
     // Prevent context menu on long press
-    element.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-  }
+    listeners.on(element, 'contextmenu', (e) => e.preventDefault());
 
-  _cancel() {
-    if (this._timer) {
-      clearTimeout(this._timer);
-      this._timer = null;
-    }
-    this._startLocation = null;
+    return () => {
+      cancel();
+      if (feedbackTimer) clearTimeout(feedbackTimer);
+      listeners.dispose();
+    };
   }
 }
 
@@ -228,97 +229,81 @@ export class DragGestureRecognizer extends GestureBase {
     super();
     this._minimumDistance = options.minimumDistance ?? 10;
     this._coordinateSpace = options.coordinateSpace ?? 'local';
-    this._isDragging = false;
-    this._startLocation = null;
-    this._currentLocation = null;
   }
 
   _apply(element) {
     element.style.cursor = 'grab';
     element.style.userSelect = 'none';
 
+    const listeners = listenerGroup();
+    let isDragging = false;
+    let startLocation = null;
+    let currentLocation = null;
+
     const getPoint = (e) => {
       const point = e.touches ? e.touches[0] : e;
       return { x: point.clientX, y: point.clientY };
     };
 
-    const createValue = (point) => {
-      const translation = {
-        width: point.x - this._startLocation.x,
-        height: point.y - this._startLocation.y
-      };
-
-      const velocity = {
-        width: 0,
-        height: 0
-      };
-
-      return {
-        startLocation: this._startLocation,
-        location: point,
-        translation: translation,
-        velocity: velocity,
-        time: Date.now()
-      };
-    };
+    const createValue = (point) => ({
+      startLocation,
+      location: point,
+      translation: {
+        width: point.x - startLocation.x,
+        height: point.y - startLocation.y
+      },
+      velocity: { width: 0, height: 0 },
+      time: Date.now()
+    });
 
     const startHandler = (e) => {
-      this._startLocation = getPoint(e);
-      this._currentLocation = this._startLocation;
+      startLocation = getPoint(e);
+      currentLocation = startLocation;
       element.style.cursor = 'grabbing';
     };
 
     const moveHandler = (e) => {
-      if (!this._startLocation) return;
+      if (!startLocation) return;
 
       const point = getPoint(e);
-      const distance = Math.sqrt(
-        Math.pow(point.x - this._startLocation.x, 2) +
-        Math.pow(point.y - this._startLocation.y, 2)
-      );
+      const distance = Math.hypot(point.x - startLocation.x, point.y - startLocation.y);
 
-      if (!this._isDragging && distance >= this._minimumDistance) {
-        this._isDragging = true;
+      if (!isDragging && distance >= this._minimumDistance) {
+        isDragging = true;
       }
 
-      if (this._isDragging) {
-        this._currentLocation = point;
-        const value = createValue(point);
-
-        if (this._onChangedHandler) {
-          this._onChangedHandler(value);
-        }
-
+      if (isDragging) {
+        currentLocation = point;
+        if (this._onChangedHandler) this._onChangedHandler(createValue(point));
         // Prevent default to avoid text selection during drag
-        if (e.cancelable) {
-          e.preventDefault();
-        }
+        if (e.cancelable) e.preventDefault();
       }
     };
 
-    const endHandler = (e) => {
-      if (this._isDragging && this._currentLocation) {
-        const value = createValue(this._currentLocation);
-
-        if (this._onEndedHandler) {
-          this._onEndedHandler(value);
-        }
+    const endHandler = () => {
+      if (!startLocation) return;
+      if (isDragging && currentLocation && this._onEndedHandler) {
+        this._onEndedHandler(createValue(currentLocation));
       }
-
-      this._isDragging = false;
-      this._startLocation = null;
-      this._currentLocation = null;
+      isDragging = false;
+      startLocation = null;
+      currentLocation = null;
       element.style.cursor = 'grab';
     };
 
-    element.addEventListener('mousedown', startHandler);
-    document.addEventListener('mousemove', moveHandler);
-    document.addEventListener('mouseup', endHandler);
+    // Mouse moves are tracked on the document so a drag continues outside
+    // the element; dispose removes those listeners too.
+    const doc = element.ownerDocument || document;
+    listeners.on(element, 'mousedown', startHandler);
+    listeners.on(doc, 'mousemove', moveHandler);
+    listeners.on(doc, 'mouseup', endHandler);
 
-    element.addEventListener('touchstart', startHandler, { passive: true });
-    element.addEventListener('touchmove', moveHandler, { passive: false });
-    element.addEventListener('touchend', endHandler);
-    element.addEventListener('touchcancel', endHandler);
+    listeners.on(element, 'touchstart', startHandler, { passive: true });
+    listeners.on(element, 'touchmove', moveHandler, { passive: false });
+    listeners.on(element, 'touchend', endHandler);
+    listeners.on(element, 'touchcancel', endHandler);
+
+    return listeners.dispose;
   }
 }
 
@@ -340,88 +325,54 @@ export class MagnificationGestureRecognizer extends GestureBase {
   constructor(options = {}) {
     super();
     this._minimumScaleDelta = options.minimumScaleDelta ?? 0.01;
-    this._initialDistance = null;
-    this._currentMagnification = 1;
   }
 
   _apply(element) {
     element.style.touchAction = 'none';
 
-    // Track pinch with two fingers
-    let touches = [];
+    const listeners = listenerGroup();
+    let initialDistance = null;
+    let magnification = 1;
 
-    const getDistance = (t1, t2) => {
-      return Math.sqrt(
-        Math.pow(t2.clientX - t1.clientX, 2) +
-        Math.pow(t2.clientY - t1.clientY, 2)
-      );
-    };
+    const getDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 
     const startHandler = (e) => {
       if (e.touches && e.touches.length === 2) {
-        touches = Array.from(e.touches);
-        this._initialDistance = getDistance(touches[0], touches[1]);
-        this._currentMagnification = 1;
+        initialDistance = getDistance(e.touches[0], e.touches[1]);
+        magnification = 1;
       }
     };
 
     const moveHandler = (e) => {
-      if (e.touches && e.touches.length === 2 && this._initialDistance) {
-        touches = Array.from(e.touches);
-        const currentDistance = getDistance(touches[0], touches[1]);
-        this._currentMagnification = currentDistance / this._initialDistance;
-
-        const value = {
-          magnification: this._currentMagnification,
-          velocity: 0
-        };
-
-        if (this._onChangedHandler) {
-          this._onChangedHandler(value);
-        }
-
+      if (e.touches && e.touches.length === 2 && initialDistance) {
+        magnification = getDistance(e.touches[0], e.touches[1]) / initialDistance;
+        if (this._onChangedHandler) this._onChangedHandler({ magnification, velocity: 0 });
         e.preventDefault();
       }
     };
 
     const endHandler = () => {
-      if (this._initialDistance) {
-        const value = {
-          magnification: this._currentMagnification,
-          velocity: 0
-        };
-
-        if (this._onEndedHandler) {
-          this._onEndedHandler(value);
-        }
+      if (initialDistance && this._onEndedHandler) {
+        this._onEndedHandler({ magnification, velocity: 0 });
       }
-
-      this._initialDistance = null;
-      touches = [];
+      initialDistance = null;
     };
 
-    element.addEventListener('touchstart', startHandler, { passive: true });
-    element.addEventListener('touchmove', moveHandler, { passive: false });
-    element.addEventListener('touchend', endHandler);
-    element.addEventListener('touchcancel', endHandler);
+    listeners.on(element, 'touchstart', startHandler, { passive: true });
+    listeners.on(element, 'touchmove', moveHandler, { passive: false });
+    listeners.on(element, 'touchend', endHandler);
+    listeners.on(element, 'touchcancel', endHandler);
 
-    // Also handle wheel for desktop pinch simulation
-    element.addEventListener('wheel', (e) => {
+    // Trackpad pinch arrives as a wheel event with ctrlKey on desktop.
+    listeners.on(element, 'wheel', (e) => {
       if (e.ctrlKey) {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        this._currentMagnification *= delta;
-
-        const value = {
-          magnification: this._currentMagnification,
-          velocity: 0
-        };
-
-        if (this._onChangedHandler) {
-          this._onChangedHandler(value);
-        }
+        magnification *= e.deltaY > 0 ? 0.9 : 1.1;
+        if (this._onChangedHandler) this._onChangedHandler({ magnification, velocity: 0 });
       }
     }, { passive: false });
+
+    return listeners.dispose;
   }
 }
 
@@ -439,61 +390,45 @@ export class RotationGestureRecognizer extends GestureBase {
   constructor(options = {}) {
     super();
     this._minimumAngleDelta = options.minimumAngleDelta ?? 0.01;
-    this._initialAngle = null;
-    this._currentRotation = 0;
   }
 
   _apply(element) {
     element.style.touchAction = 'none';
 
-    const getAngle = (t1, t2) => {
-      return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
-    };
+    const listeners = listenerGroup();
+    let initialAngle = null;
+    let rotation = 0;
+
+    const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
 
     const startHandler = (e) => {
       if (e.touches && e.touches.length === 2) {
-        this._initialAngle = getAngle(e.touches[0], e.touches[1]);
-        this._currentRotation = 0;
+        initialAngle = getAngle(e.touches[0], e.touches[1]);
+        rotation = 0;
       }
     };
 
     const moveHandler = (e) => {
-      if (e.touches && e.touches.length === 2 && this._initialAngle !== null) {
-        const currentAngle = getAngle(e.touches[0], e.touches[1]);
-        this._currentRotation = currentAngle - this._initialAngle;
-
-        const value = {
-          rotation: this._currentRotation,
-          velocity: 0
-        };
-
-        if (this._onChangedHandler) {
-          this._onChangedHandler(value);
-        }
-
+      if (e.touches && e.touches.length === 2 && initialAngle !== null) {
+        rotation = getAngle(e.touches[0], e.touches[1]) - initialAngle;
+        if (this._onChangedHandler) this._onChangedHandler({ rotation, velocity: 0 });
         e.preventDefault();
       }
     };
 
     const endHandler = () => {
-      if (this._initialAngle !== null) {
-        const value = {
-          rotation: this._currentRotation,
-          velocity: 0
-        };
-
-        if (this._onEndedHandler) {
-          this._onEndedHandler(value);
-        }
+      if (initialAngle !== null && this._onEndedHandler) {
+        this._onEndedHandler({ rotation, velocity: 0 });
       }
-
-      this._initialAngle = null;
+      initialAngle = null;
     };
 
-    element.addEventListener('touchstart', startHandler, { passive: true });
-    element.addEventListener('touchmove', moveHandler, { passive: false });
-    element.addEventListener('touchend', endHandler);
-    element.addEventListener('touchcancel', endHandler);
+    listeners.on(element, 'touchstart', startHandler, { passive: true });
+    listeners.on(element, 'touchmove', moveHandler, { passive: false });
+    listeners.on(element, 'touchend', endHandler);
+    listeners.on(element, 'touchcancel', endHandler);
+
+    return listeners.dispose;
   }
 }
 
@@ -504,6 +439,47 @@ export function RotationGesture(options = {}) {
   return new RotationGestureRecognizer(options);
 }
 
+// =============================================================================
+// Modifier implementations, shared by descriptor views (Chainable) and the
+// legacy View prototype. Each returns { apply(element) }, where apply returns
+// a function that removes the gesture's listeners.
+// =============================================================================
+
+/**
+ * `.gesture(_:)`: attach a gesture recognizer.
+ * @see https://developer.apple.com/documentation/swiftui/view/gesture(_:including:)
+ * @param {GestureBase} gesture
+ */
+export function gestureModifier(gesture) {
+  return {
+    gesture,
+    apply(element) {
+      if (gesture && typeof gesture._apply === 'function') {
+        return gesture._apply(element);
+      }
+      return undefined;
+    }
+  };
+}
+
+/**
+ * `.onLongPressGesture(perform:)`.
+ * @see https://developer.apple.com/documentation/swiftui/view/onlongpressgesture(minimumduration:maximumdistance:perform:onpressingchanged:)
+ */
+export function longPressGestureModifier(handler, options = {}) {
+  return gestureModifier(LongPressGesture(options).onEnded(handler));
+}
+
+/**
+ * `.onDrag(onChanged, onEnded)`: a DragGesture with both handlers.
+ */
+export function dragGestureModifier(onChanged, onEnded) {
+  const gesture = DragGesture();
+  if (onChanged) gesture.onChanged(onChanged);
+  if (onEnded) gesture.onEnded(onEnded);
+  return gestureModifier(gesture);
+}
+
 // Extend View with gesture methods
 const extendViewWithGestures = (ViewClass) => {
   /**
@@ -511,13 +487,7 @@ const extendViewWithGestures = (ViewClass) => {
    * @param {GestureBase} gesture - Gesture recognizer to attach
    */
   ViewClass.prototype.gesture = function (gesture) {
-    return this.modifier({
-      apply(element) {
-        if (gesture && typeof gesture._apply === 'function') {
-          gesture._apply(element);
-        }
-      }
-    });
+    return this.modifier(gestureModifier(gesture));
   };
 
   /**
@@ -526,8 +496,7 @@ const extendViewWithGestures = (ViewClass) => {
    * @param {Object} options - Long press options
    */
   ViewClass.prototype.onLongPressGesture = function (handler, options = {}) {
-    const gesture = LongPressGesture(options).onEnded(handler);
-    return this.gesture(gesture);
+    return this.modifier(longPressGestureModifier(handler, options));
   };
 
   /**
@@ -536,10 +505,7 @@ const extendViewWithGestures = (ViewClass) => {
    * @param {Function} onEnded - Called when drag ends
    */
   ViewClass.prototype.onDrag = function (onChanged, onEnded) {
-    const gesture = DragGesture();
-    if (onChanged) gesture.onChanged(onChanged);
-    if (onEnded) gesture.onEnded(onEnded);
-    return this.gesture(gesture);
+    return this.modifier(dragGestureModifier(onChanged, onEnded));
   };
 };
 

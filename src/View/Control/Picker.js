@@ -23,7 +23,7 @@ import { View } from '../../Core/View.js';
 import { isDescriptor, isLegacyView, createDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderDescriptor } from '../../Core/Renderer.js';
-import { untrack } from '../../Data/Signal.js';
+import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
 
 /**
  * Picker style enum
@@ -105,6 +105,12 @@ function selectionAccessors(selection) {
         else if ('wrappedValue' in selection) selection.wrappedValue = value;
       });
     },
+    // Show writes made elsewhere: under an owner, run `apply` with the
+    // selection now and whenever it changes.
+    followSelection: (apply) => {
+      if (!selection || !getOwner()) return;
+      createEffect(() => apply(selection.value ?? selection.wrappedValue ?? null));
+    },
   };
 }
 
@@ -161,6 +167,10 @@ function renderMenu(ctx) {
   select.addEventListener('change', (e) => {
     const index = e.target.selectedIndex;
     ctx.setSelection(index >= 0 && index < optionTags.length ? optionTags[index] : e.target.value);
+  });
+  ctx.followSelection((value) => {
+    const index = optionTags.indexOf(value);
+    if (select.selectedIndex !== index) select.selectedIndex = index;
   });
 
   container.appendChild(select);
@@ -260,6 +270,11 @@ function renderSegmented(ctx) {
     select(selectedIndex, false);
     // With no matching selection, keep the group reachable by Tab.
     if (selectedIndex === -1) segments[0].tabIndex = 0;
+    ctx.followSelection((value) => {
+      const index = tags.indexOf(value);
+      select(index, false);
+      if (index === -1) segments[0].tabIndex = 0;
+    });
   }
 
   return container;
@@ -350,6 +365,15 @@ function renderWheel(ctx) {
     }
   });
 
+  // A write made elsewhere scrolls the wheel to the new selection.
+  const itemTags = ctx.options.filter((option) => isOption(option)).map((option) => getTag(option));
+  let firstRun = true;
+  ctx.followSelection((value) => {
+    if (firstRun) { firstRun = false; return; }
+    const item = scroll.children[itemTags.indexOf(value)];
+    if (item && typeof item.scrollIntoView === 'function') item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
   container.appendChild(scroll);
 
   return container;
@@ -364,6 +388,7 @@ function renderInline(ctx) {
   container.style.gap = '2px';
 
   const currentSelection = ctx.getSelection();
+  const marks = [];
 
   for (const option of ctx.options) {
     if (isOption(option)) {
@@ -385,6 +410,7 @@ function renderInline(ctx) {
       checkmark.style.marginRight = '12px';
       checkmark.style.width = '20px';
       row.appendChild(checkmark);
+      marks.push({ tag, checkmark });
 
       const content = document.createElement('span');
       content.textContent = rendered.textContent || tag || '';
@@ -400,13 +426,17 @@ function renderInline(ctx) {
       row.addEventListener('click', () => {
         ctx.setSelection(tag);
         // Update all checkmarks
-        container.querySelectorAll('span:first-child').forEach(c => c.textContent = '');
+        for (const mark of marks) mark.checkmark.textContent = '';
         checkmark.textContent = '✓';
       });
 
       container.appendChild(row);
     }
   }
+
+  ctx.followSelection((value) => {
+    for (const mark of marks) mark.checkmark.textContent = mark.tag === value ? '✓' : '';
+  });
 
   return container;
 }

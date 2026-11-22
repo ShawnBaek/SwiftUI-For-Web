@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Descriptor views gained the modifiers that only legacy `View` classes had
+  (#48, #50), so nothing that worked before the descriptor migration is
+  missing. Every descriptor view (`Text`, `Button`, stacks, the form
+  controls, …) now has `.animation(_:value:)`, `.transition(_:)`,
+  `.matchedGeometryEffect(id:in:isSource:)`, `.gesture(_:)` (with
+  `TapGesture`, `LongPressGesture`, `DragGesture`, `MagnificationGesture` and
+  `RotationGesture`), `.onLongPressGesture(_:options)`, `.onDrag(onChanged,
+  onEnded)`, `.mask(_:alignment)` and `.contentShape(_:)`, from the shared
+  table in `Chainable.js`. They reuse the implementations in `src/Animation`
+  and `src/Gesture`, which the legacy `View` methods now call too. Gesture
+  listeners are removed when the element is released or its owner is
+  disposed, and each element keeps its own gesture state (one recognizer can
+  sit on every row of a list). `.mask` and `.contentShape` take part in the
+  ordered modifier layers: a background, border, padding or shadow after a
+  mask goes outside it. `.mask` now also accepts gradients (mask-image), and
+  `.contentShape(Rectangle())` no longer clips drawing. `Picker`, `Stepper`,
+  `DatePicker` and `ColorPicker` now show binding writes made elsewhere, and
+  `.clipShape(RoundedRectangle(...))` uses the shape's radius (it read the
+  `cornerRadius` method). The audit is in `docs/parity-audit.md`.
 - **BREAKING (3.0.0-alpha.2): the form controls are native descriptors and
   their classes are gone** (#48). `Toggle`, `Slider`, `Stepper`,
   `TextField`, `SecureField`, `Picker`, `DatePicker` and `ColorPicker` now
@@ -12,10 +31,6 @@
     from `swiftui-for-web`, `swiftui-for-web/core`, the default `SwiftUI`
     namespace and `core.d.ts`;
   - `src/Core/LegacyControl.js` (`defineControl`);
-  - the legacy `View` methods these controls forwarded and that have no
-    descriptor equivalent: `.animation()`, `.transition()`, `.gesture()`,
-    `.mask()`, `.matchedGeometryEffect()`, `.onDrag()`,
-    `.onLongPressGesture()` and `.contentShape()`;
   - the unused descriptor hashing (`_selfHash`, `_hash`),
     `descriptorsEqual`, `memo` and `isMemoized` in `ViewDescriptor.js`.
 
@@ -34,9 +49,7 @@
   const element = render(Toggle('Wi-Fi', isOn.binding).toggleStyle('checkbox'));
   ```
 
-  Descriptors have no animation or gesture modifiers yet; until they do,
-  apply DOM changes through `.modifier((element) => …)`. Also fixed on the
-  way: `Slider`'s minimum/maximum value labels render descriptor views (they
+  Also fixed on the way: `Slider`'s minimum/maximum value labels render descriptor views (they
   rendered only legacy Views), and `SecureField({ onCommit })` keeps the
   callback from the options object. Rendered markup is unchanged; the server
   snapshots didn't move. The package version is now `3.0.0-alpha.2`.

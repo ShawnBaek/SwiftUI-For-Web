@@ -20,7 +20,7 @@
 import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { chainable } from '../../Core/Chainable.js';
 import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
-import { untrack } from '../../Data/Signal.js';
+import { untrack, createEffect, getOwner } from '../../Data/Signal.js';
 
 function isView(value) {
   return isLegacyView(value) || isDescriptor(value);
@@ -153,8 +153,10 @@ registerRenderer('Stepper', (props) => {
   const decrementBtn = makeStepButton('−');
   const incrementBtn = makeStepButton('+');
 
+  // Reads the value tracked: under an owner it runs in an effect, so the
+  // end-of-range dimming follows writes made elsewhere too.
   const updateButtonStates = () => {
-    const current = untrack(() => readValue(binding));
+    const current = readValue(binding);
     setButtonEnabled(decrementBtn, !(min !== null && current <= min));
     setButtonEnabled(incrementBtn, !(max !== null && current >= max));
   };
@@ -166,7 +168,7 @@ registerRenderer('Stepper', (props) => {
       const newValue = untrack(() => readValue(binding)) - step;
       if (min === null || newValue >= min) untrack(() => writeValue(binding, newValue));
     }
-    updateButtonStates();
+    if (!followsBinding) untrack(updateButtonStates);
   });
 
   incrementBtn.addEventListener('click', () => {
@@ -176,10 +178,12 @@ registerRenderer('Stepper', (props) => {
       const newValue = untrack(() => readValue(binding)) + step;
       if (max === null || newValue <= max) untrack(() => writeValue(binding, newValue));
     }
-    updateButtonStates();
+    if (!followsBinding) untrack(updateButtonStates);
   });
 
-  updateButtonStates();
+  const followsBinding = Boolean(getOwner() && binding);
+  if (followsBinding) createEffect(updateButtonStates);
+  else untrack(updateButtonStates);
 
   const divider = document.createElement('div');
   divider.style.width = '1px';

@@ -49,6 +49,18 @@ export class View {
   shadow(options?: ShadowOptions | Signal<ShadowOptions>): this;
   /** Clip to a shape */
   clipShape(shape: Shape): this;
+  /**
+   * Mask the view with a shape (clip-path) or a gradient (mask-image).
+   * SwiftUI's label order is `mask(alignment:_:)`; here the mask comes first.
+   * @see https://developer.apple.com/documentation/swiftui/view/mask(alignment:_:)
+   */
+  mask(mask: Shape | View | 'circle' | 'ellipse' | 'capsule' | 'rectangle', alignment?: string): this;
+  /**
+   * The shape that receives taps. The whole frame becomes hit-testable; a
+   * rounded shape rounds the hit area. A rectangle never clips drawing.
+   * @see https://developer.apple.com/documentation/swiftui/view/contentshape(_:eofill:)
+   */
+  contentShape(shape: Shape | string, eoFill?: boolean): this;
 
   // Event Modifiers
   /** Handle tap/click events */
@@ -116,21 +128,36 @@ export class View {
   accessibilityHint(hint: string | number | View | Signal<string | number>): this;
   accessibilityIdentifier(identifier: string): this;
 
-  // Gesture Modifiers
-  /** Add a gesture recognizer */
+  // Gesture Modifiers (listeners are removed when the view is released)
+  /**
+   * Add a gesture recognizer.
+   * @see https://developer.apple.com/documentation/swiftui/view/gesture(_:including:)
+   */
   gesture(gesture: Gesture): this;
-  /** Handle drag gestures */
-  onDrag(handler: (value: DragGestureValue) => void): this;
-  /** Handle long press */
-  onLongPressGesture(minimumDuration?: number, action?: () => void): this;
+  /** Handle a drag: `onChanged` while dragging, `onEnded` on release. */
+  onDrag(onChanged?: (value: DragGestureValue) => void, onEnded?: (value: DragGestureValue) => void): this;
+  /**
+   * Run `action` after a long press.
+   * @see https://developer.apple.com/documentation/swiftui/view/onlongpressgesture(minimumduration:maximumdistance:perform:onpressingchanged:)
+   */
+  onLongPressGesture(action: () => void, options?: LongPressGestureOptions): this;
 
   // Animation Modifiers
-  /** Animate changes with a transition */
+  /**
+   * How the view appears when inserted inside `withAnimation`.
+   * @see https://developer.apple.com/documentation/swiftui/view/transition(_:)
+   */
   transition(transition: AnyTransition): this;
-  /** Apply animation to changes */
-  animation(animation: Animation, value?: any): this;
-  /** Match geometry for hero animations */
-  matchedGeometryEffect(id: string, namespace: Namespace): this;
+  /**
+   * Animate this view's style changes (a CSS transition); `null` turns it off.
+   * @see https://developer.apple.com/documentation/swiftui/view/animation(_:value:)
+   */
+  animation(animation?: Animation | null, value?: any): this;
+  /**
+   * Views with the same id in a namespace morph into each other in a View Transition.
+   * @see https://developer.apple.com/documentation/swiftui/view/matchedgeometryeffect(id:in:properties:anchor:issource:)
+   */
+  matchedGeometryEffect(id: string, namespace: Namespace, options?: { isSource?: boolean }): this;
 
   // Shader Effect Modifiers (iOS 17+ in SwiftUI, SVG-filter-backed here)
   /**
@@ -1311,7 +1338,9 @@ export class AnyTransition {
 /** Namespace for matched geometry effect */
 export class Namespace {
   constructor();
-  readonly id: symbol;
+  readonly id: string;
+  /** The view-transition-name for `viewId` in this namespace. */
+  name(viewId: string): string;
 }
 
 // =============================================================================
@@ -1327,9 +1356,15 @@ export interface Gesture {
 /** Tap gesture */
 export function TapGesture(count?: number): Gesture;
 
+/** Long press options; `minimumDuration` is in seconds. */
+export interface LongPressGestureOptions {
+  minimumDuration?: number;
+  maximumDistance?: number;
+}
+
 /** Long press gesture */
-export function LongPressGesture(minimumDuration?: number): Gesture & {
-  onEnded(action: () => void): Gesture;
+export function LongPressGesture(options?: LongPressGestureOptions): Gesture & {
+  onEnded(action: (value: { location: { x: number; y: number } }) => void): Gesture;
 };
 
 /** Drag gesture */
@@ -1344,20 +1379,19 @@ export interface DragGestureValue {
   location: { x: number; y: number };
   startLocation: { x: number; y: number };
   velocity: { width: number; height: number };
-  predictedEndLocation: { x: number; y: number };
-  predictedEndTranslation: { width: number; height: number };
+  time: number;
 }
 
 /** Magnification (pinch) gesture */
-export function MagnificationGesture(): Gesture & {
-  onChanged(action: (scale: number) => void): Gesture;
-  onEnded(action: (scale: number) => void): Gesture;
+export function MagnificationGesture(options?: { minimumScaleDelta?: number }): Gesture & {
+  onChanged(action: (value: { magnification: number; velocity: number }) => void): Gesture;
+  onEnded(action: (value: { magnification: number; velocity: number }) => void): Gesture;
 };
 
 /** Rotation gesture */
-export function RotationGesture(): Gesture & {
-  onChanged(action: (angle: number) => void): Gesture;
-  onEnded(action: (angle: number) => void): Gesture;
+export function RotationGesture(options?: { minimumAngleDelta?: number }): Gesture & {
+  onChanged(action: (value: { rotation: number; velocity: number }) => void): Gesture;
+  onEnded(action: (value: { rotation: number; velocity: number }) => void): Gesture;
 };
 
 // =============================================================================
