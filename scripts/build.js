@@ -644,7 +644,11 @@ async function buildLibrary(outDir) {
   for (const file of files) {
     const target = path.join(outDir, projectRelative(file));
     await mkdir(path.dirname(target), { recursive: true });
-    const source = await readFile(file, 'utf8');
+    let source = await readFile(file, 'utf8');
+    // Development checks are off in the optimized build (#52).
+    if (projectRelative(file) === 'src/Core/Dev.js') {
+      source = source.replace('export const DEV_BUILD = true;', 'export const DEV_BUILD = false;');
+    }
     await writeFile(target, minify(source, file));
   }
 

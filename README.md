@@ -103,7 +103,7 @@ const query = new State('');
 const samples = new State([]);
 
 VStack(
-  For(() => samples.value, (sample) => Text(sample.title), (sample) => sample.id)
+  ForEach(samples, { id: 'id' }, (sample) => Text(sample.title))
 )
   .searchable(query.binding, { prompt: 'Search samples' })
   .task({ id: () => query.value }, async (signal) => {
@@ -202,19 +202,20 @@ Show(
 
 The `when` thunk is tracked. Branch swap mounts/unmounts the children, disposing effects on the way out.
 
-### Lists — `For`
+### Lists — `ForEach`
 
 ```javascript
-import { For } from 'swiftui-for-web';
+import { ForEach } from 'swiftui-for-web';
 
-For(
-  () => vm.todos,
-  (todo) => TodoRow(todo),
-  (todo) => todo.id,    // optional — defaults to item.id or index
-)
+const todos = new State([]);
+ForEach(todos, { id: 'id' }, (todo) => TodoRow(todo))        // a State or Binding
+ForEach(() => vm.todos.filter((todo) => !todo.done), { id: 'id' }, TodoRow) // derived
+ForEach(['a', 'b'], (letter) => Text(letter))               // a plain array: static
 ```
 
-Keyed reconciliation at the data level (compare key arrays only). Stable items keep their DOM and effects; new items mount; removed items dispose. Identity-aware: a new object with the same key (immutable update via `map`/`filter`) remounts the row so its render closure captures the new item.
+Given a `State`, a `Binding` or a function, `ForEach` is reactive and keyed (#52): keyed reconciliation at the data level (compare key arrays only). Stable items keep their DOM and effects; new items mount; removed items dispose. Identity-aware: a new object with the same key (immutable update via `map`/`filter`) remounts the row so its render closure captures the new item. The key is the `id` option (a property name or a function), else the item's `id`, else its index. `For(each, render, key)` is the same thing under its old name, deprecated for one minor release.
+
+In development, reading `count.value` while building a view (outside a function) logs a warning once per call site: that view would never update. Pass the `State` itself or a function instead.
 
 ### State primitives are unchanged
 
@@ -524,7 +525,7 @@ If you used the previous reconciler-based v1 API:
 |---|---|
 | `Text(String(count.value))` | `Text(() => String(count.value))` |
 | `vm.foo === 'x' ? A : B` | `Show(() => vm.foo === 'x', A, B)` |
-| `ForEach(vm.items, ...)` | `For(() => vm.items, ...)` |
+| `ForEach(vm.items, ...)` | `ForEach(() => vm.items, ...)` (or pass the `State`) |
 | `vm.subscribe(() => app.refresh())` | (delete — auto-propagates) |
 | `app.refresh()` calls in handlers | (delete — auto-propagates) |
 
@@ -532,9 +533,9 @@ Eager-read patterns that snapshot to a local then pass it into a binding lose re
 
 ```javascript
 const filtered = vm.todos.filter(...);          // ❌ snapshot
-For(() => filtered, ...)                         // never updates
+ForEach(filtered, ...)                           // never updates
 
-For(() => vm.todos.filter(...), ...)             // ✅ thunked
+ForEach(() => vm.todos.filter(...), ...)         // ✅ thunked
 ```
 
 The `Counter`, `HelloWorld`, `TodoApp`, and `Airbnb/Views/Listing/ListingGrid` examples in this repo are reference migrations.

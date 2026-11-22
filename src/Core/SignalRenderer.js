@@ -16,6 +16,7 @@
  * sheet) that the renderer and legacy View subclasses install.
  */
 
+import { buildingView } from './Dev.js';
 import { render } from './Renderer.js';
 import { ModifierType } from './ViewDescriptor.js';
 import { releaseTree } from './ElementPool.js';
@@ -40,7 +41,7 @@ export function mount(viewFactory, container) {
   createRoot((d) => {
     dispose = d;
 
-    const view = typeof viewFactory === 'function' ? viewFactory() : viewFactory;
+    const view = typeof viewFactory === 'function' ? buildingView(viewFactory) : viewFactory;
     const element = render(view);
 
     const oldChild = container.firstChild;

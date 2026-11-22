@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `ForEach` is reactive and keyed (#52): given a `State`, a `Binding` or a
+  function returning the array, it renders through the keyed `For` renderer,
+  so rows with a stable id keep their DOM when the data changes. A plain
+  array stays static. `For` is deprecated in favour of `ForEach` (it stays
+  for one minor release).
+- Development warning (#52): reading `State.value` while building a view,
+  outside any reactive scope (the `Text(count.value)` mistake), logs a warning
+  once per call site. It is on in the source tree and compiled out of the
+  optimized build (`DEV_BUILD` in `src/Core/Dev.js`).
 - Static rendering (#40). A new `swiftui-for-web/server` entry renders views
   to HTML in Node with no browser: `renderToString(view)` returns the markup
   of the view's first render, and `renderDocument(view, options)` a full

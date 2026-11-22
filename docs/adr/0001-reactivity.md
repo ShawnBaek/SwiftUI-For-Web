@@ -35,8 +35,8 @@ get wrong, for example `Text(count.value)` silently never updating.
 |---|---|
 | `Text(state)` and `Text(binding)` | Done |
 | Style modifiers (`padding`, `frame`, `foregroundColor`, `background`, `font`, `opacity`, `cornerRadius`, `shadow`, `accessibilityLabel`, `accessibilityValue`, `accessibilityHint`) accept a `State` or `Binding` | Done |
-| Reactive keyed `ForEach`, with `For` as an alias | To do, together with #48 |
-| Development warning | To do, together with #42 |
+| Reactive keyed `ForEach`, with `For` as an alias | Done. `ForEach` given a `State`, `Binding` or function renders through the keyed `For` renderer; `For` is marked deprecated |
+| Development warning | Done. `src/Core/Dev.js`; on in the source tree, off in the optimized build (`DEV_BUILD`) |
 
 ## Consequences
 

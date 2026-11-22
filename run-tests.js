@@ -140,12 +140,21 @@ class MockElement {
       }
       return child;
     }
+    // Like the DOM, moving a node detaches it from its current parent.
+    if (child.parentNode?.children) {
+      const at = child.parentNode.children.indexOf(child);
+      if (at >= 0) child.parentNode.children.splice(at, 1);
+    }
     child.parentNode = this;
     this.children.push(child);
     return child;
   }
 
   insertBefore(child, reference) {
+    if (child.parentNode?.children) {
+      const at = child.parentNode.children.indexOf(child);
+      if (at >= 0) child.parentNode.children.splice(at, 1);
+    }
     child.parentNode = this;
     const index = reference ? this.children.indexOf(reference) : -1;
     if (index < 0) this.children.push(child);
@@ -539,6 +548,7 @@ async function runTests() {
     // Invariant I2 (#44): reactive bindings are created when their element is
     // rendered, under the current owner. Content that Show/For render after
     // mount must be as reactive as content rendered at mount.
+    const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
     describe('Reactive bindings inside Show and For (#44)', () => {
       const mountInRoot = (viewFactory) => {
         const root = document.createElement('div');
@@ -632,6 +642,49 @@ async function runTests() {
         for (const el of [a, b, c, d]) {
           expect(String(el.style.maxWidth).includes('infinity')).toBe(false);
         }
+        teardown();
+      });
+
+      // #52: in development, an untracked State read while building a view warns.
+      it('warns once per call site when State.value is read untracked while building a view', () => {
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const count = new State(1);
+          const build = () => VStack(ModifierText(count.value));
+          for (let i = 0; i < 2; i++) mountInRoot(build).teardown();
+          const tracked = mountInRoot(() => VStack(ModifierText(() => String(count.value)), ModifierText(count)));
+          tracked.teardown();
+          // Reads outside view building (an event handler, a test) stay quiet.
+          void count.value;
+          const relevant = warnings.filter((message) => message.includes('a State value was read while building a view'));
+          expect(relevant.length).toBe(1);
+          expect(relevant[0].includes('run-tests.js')).toBe(true);
+        } finally {
+          console.warn = originalWarn;
+        }
+      });
+
+      // #52: ForEach is reactive and keyed when its data is a State or function.
+      it('ForEach over a State or a function updates in place and keeps keyed rows', () => {
+        const todos = new State([{ id: 1, title: 'One' }, { id: 2, title: 'Two' }]);
+        const { root, teardown } = mountInRoot(() => VStack(
+          ReactiveForEach(todos, { id: 'id' }, (todo) => ModifierText(todo.title)),
+          ReactiveForEach(() => todos.value.filter((todo) => todo.id !== 1), (todo) => ModifierText(todo.title))
+        ));
+        const lists = () => root.children[0].children;
+        const texts = () => lists().map((list) => list.children.map((row) => row.textContent));
+        expect(texts()).toEqual([['One', 'Two'], ['Two']]);
+        const firstTwo = lists()[0].children[1];
+        todos.value = [...todos.value, { id: 3, title: 'Three' }];
+        Scheduler.flushSync();
+        expect(texts()).toEqual([['One', 'Two', 'Three'], ['Two', 'Three']]);
+        // The keyed row for id 2 kept its element.
+        expect(lists()[0].children[1]).toBe(firstTwo);
+        todos.value = todos.value.filter((todo) => todo.id !== 2);
+        Scheduler.flushSync();
+        expect(texts()).toEqual([['One', 'Three'], ['Three']]);
         teardown();
       });
 

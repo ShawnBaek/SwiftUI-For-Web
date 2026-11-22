@@ -9,6 +9,9 @@
  * ForEach(items, { id: 'id' }, item => Text(item.name))
  */
 
+import { For } from '../ControlFlow/For.js';
+import { State } from '../../Data/State.js';
+import { Binding } from '../../Data/Binding.js';
 import {
   createDescriptor,
   addModifier,
@@ -47,6 +50,18 @@ function chainable(descriptor) {
  * Range helper for SwiftUI-like range syntax
  * Usage: Range(0, 5) creates [0, 1, 2, 3, 4]
  */
+function isReactiveData(data) {
+  return typeof data === 'function' || data instanceof State || data instanceof Binding;
+}
+
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && 'start' in value && 'end' in value) {
+    return Array.from({ length: value.end - value.start }, (_, i) => value.start + i);
+  }
+  return [];
+}
+
 export class Range {
   constructor(start, end) {
     this.start = start;
@@ -87,6 +102,19 @@ export function ForEach(data, optionsOrContent, contentFn) {
 
   if (!builderFn) {
     throw new Error('ForEach requires a content function');
+  }
+
+  // #52: reactive, keyed ForEach. Given a State, a Binding or a function
+  // returning the array, ForEach renders through the keyed For renderer:
+  // when the data changes, rows with a stable id keep their DOM and state.
+  if (isReactiveData(data)) {
+    const each = typeof data === 'function' ? () => toArray(data()) : () => toArray(data.value);
+    const keyFn = typeof idKey === 'function'
+      ? (item) => idKey(item)
+      : idKey
+        ? (item) => item[idKey]
+        : undefined;
+    return For(each, (item, index) => builderFn(item, index), keyFn);
   }
 
   // Handle range syntax

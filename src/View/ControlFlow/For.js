@@ -13,6 +13,10 @@
  *   For(() => vm.items, item => Text(item.name))
  *
  * Signature mirrors Solid's <For each={…}>.
+ *
+ * @deprecated Use the SwiftUI spelling, which is reactive when given a State,
+ *   Binding or function (#52): `ForEach(() => vm.todos, { id: 'id' }, TodoRow)`.
+ *   `For` stays as an alias for one minor release.
  */
 
 import { createDescriptor } from '../../Core/ViewDescriptor.js';
