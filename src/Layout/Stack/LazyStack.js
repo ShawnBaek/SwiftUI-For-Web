@@ -34,23 +34,39 @@ import { render as renderDescriptor } from '../../Core/Renderer.js';
 function renderLazyRows(container, children, { axis, estimate, overscan }) {
   const canObserve = typeof IntersectionObserver === 'function';
   const pending = new Map();
-  const observer = canObserve
-    ? new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const build = pending.get(entry.target);
-        if (!build) continue;
-        pending.delete(entry.target);
-        observer.unobserve(entry.target);
-        build();
-      }
-      if (pending.size === 0) observer.disconnect();
-    }, {
-      root: null,
+  let observer = null;
+  let disposed = false;
+  const onEntries = (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const build = pending.get(entry.target);
+      if (!build) continue;
+      pending.delete(entry.target);
+      observer.unobserve(entry.target);
+      build();
+    }
+    if (pending.size === 0) observer.disconnect();
+  };
+  // The scrolling ancestor the rows scroll in (a ScrollView), so overscan
+  // applies to it; the viewport when there is none.
+  const scrollRoot = () => {
+    for (let node = container.parentElement; node; node = node.parentElement) {
+      const style = typeof getComputedStyle === 'function' ? getComputedStyle(node) : node.style;
+      const overflow = axis === 'vertical' ? style.overflowY : style.overflowX;
+      if (overflow === 'auto' || overflow === 'scroll') return node;
+    }
+    return null;
+  };
+  const observe = (root) => {
+    observer?.disconnect();
+    observer = new IntersectionObserver(onEntries, {
+      root,
       rootMargin: axis === 'vertical' ? `${estimate * overscan}px 0px` : `0px ${estimate * overscan}px`,
       threshold: 0,
-    })
-    : null;
+    });
+    for (const wrapper of pending.keys()) observer.observe(wrapper);
+    container._lazyObserver = observer;
+  };
 
   // A static ForEach gives one lazy row per item, laid out by the stack.
   const rows = [];
@@ -87,16 +103,26 @@ function renderLazyRows(container, children, { axis, estimate, overscan }) {
       wrapper.style.flexShrink = '0';
     }
     container.appendChild(wrapper);
-    if (observer) {
-      pending.set(wrapper, build);
-      observer.observe(wrapper);
-    } else {
-      build();
-    }
+    if (canObserve) pending.set(wrapper, build);
+    else build();
   });
 
-  container._lazyObserver = observer;
-  if (observer && getOwner()) onCleanup(() => observer.disconnect());
+  if (canObserve && pending.size) {
+    // Observe against the viewport now; once the stack is attached, switch
+    // to its scrolling ancestor if it has one.
+    observe(null);
+    queueMicrotask(() => {
+      if (disposed || pending.size === 0 || !container.isConnected) return;
+      const root = scrollRoot();
+      if (root) observe(root);
+    });
+  }
+  if (getOwner()) {
+    onCleanup(() => {
+      disposed = true;
+      observer?.disconnect();
+    });
+  }
 }
 
 // A child that is a legacy View or a view descriptor.
