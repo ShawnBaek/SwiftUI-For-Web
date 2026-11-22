@@ -239,6 +239,24 @@ import {
 // =============================================================================
 const VERSION = '2.0.0-alpha.1';
 
+// The default export is this module's own namespace, so the named
+// `export { … }` list below is the only list to keep. Reflect.ownKeys reads
+// only the names: reading the value of `default` here would throw, because
+// that binding is not initialized until this module finishes evaluating.
+import * as SwiftUICoreNamespace from './core.js';
+
+function namespaceObject(namespace) {
+  const object = {};
+  for (const key of Reflect.ownKeys(namespace)) {
+    if (typeof key !== 'string' || key === 'default') continue;
+    Object.defineProperty(object, key, {
+      enumerable: true,
+      get: () => namespace[key],
+    });
+  }
+  return object;
+}
+
 // =============================================================================
 // Default Export - Core SwiftUI (without Charts)
 // =============================================================================
@@ -246,142 +264,10 @@ const VERSION = '2.0.0-alpha.1';
  * SwiftUI-For-Web core namespace: everything in the full entry except Charts.
  * Import with: import SwiftUI from 'swiftui-for-web/core'
  *
- * Keep this file in step with src/index.js: `npm test` fails when the two
- * export lists differ by anything other than the ./charts exports.
+ * Keep the named export list in step with src/index.js: `npm test` fails when
+ * the two lists differ by anything other than the ./charts exports.
  */
-const SwiftUICore = {
-  // Version
-  VERSION,
-
-  // Core
-  View,
-  ViewBuilder,
-  EmptyView, Empty,
-  TupleView,
-  ConditionalContent,
-  AnyView, Any,
-  buildView,
-
-  // State Management
-  State, createState,
-  Binding, createBinding,
-  ObservableObject, Published, createObservable,
-  StateObject, createStateObject, stateObject,
-  Observable, ObservationTracking, Bindable,
-  withTracking, withObservationTracking,
-  Environment, EnvironmentObject, EnvironmentValues,
-  ColorScheme, LayoutDirection,
-  UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom,
-
-  // Views
-  Text,
-  AccessibilityHeadingLevel,
-  Image, ImageView, ContentMode,
-  Label, LabelView, LabelStyle, SystemIcons,
-  SearchFieldPlacement,
-
-  // Controls
-  Button,
-  TextField, TextFieldView,
-  SecureField, SecureFieldView,
-  Toggle, ToggleView,
-  Slider, SliderView,
-  Stepper, StepperView,
-  Picker, PickerView, PickerStyle,
-  Menu, MenuView,
-  DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle,
-  ColorPicker, ColorPickerView,
-
-  // Lists
-  List, ListView, ListStyle,
-  ForEach, Range,
-
-  // Reactive control flow (signal engine)
-  Show,
-  For,
-  effect,
-  untrack,
-
-  // Containers
-  ScrollView, ScrollViewView, Axis,
-  Group, GroupView,
-  Form, FormView, FormStyle,
-  Section, SectionView,
-  DisclosureGroup, DisclosureGroupView,
-
-  // Navigation
-  NavigationStack, NavigationLink, BackButton,
-  NavigationSplitView, NavigationSplitViewVisibility,
-  NavigationPath, CodableRepresentation, NavigationDestination,
-  TabView, TabViewView, TabViewStyle,
-
-  // Layout
-  VStack,
-  HStack,
-  ZStack,
-  Spacer,
-  Divider,
-  GeometryReader, GeometryReaderView, GeometryProxy,
-  Alignment, HorizontalAlignment, VerticalAlignment,
-  Grid, GridView,
-  GridRow, GridRowView,
-  GridItem, GridItemSize,
-  LazyVGrid, LazyVGridView,
-  LazyHGrid, LazyHGridView,
-  LazyVStack, LazyVStackView,
-  LazyHStack, LazyHStackView,
-  PinnedScrollableViews,
-  ViewThatFits, ViewThatFitsAxis,
-
-  // Shapes
-  ShapeView,
-  Rectangle, RectangleView,
-  RoundedRectangle, RoundedRectangleView,
-  Circle, CircleView,
-  Ellipse, EllipseView,
-  Capsule, CapsuleView,
-  Path, PathView,
-  UnevenRoundedRectangle, UnevenRoundedRectangleView,
-
-  // Graphics
-  Color, ColorValue,
-  Font, FontValue,
-  LinearGradient, RadialGradient, AngularGradient,
-  GradientDirection, UnitPoint,
-  Shader, ShaderLibrary, ShaderKind,
-
-  // Animation
-  Animation, AnyTransition, Namespace,
-  animate, animateStyles,
-  withAnimation, isAnimating, currentAnimation,
-  isViewTransitionSupported, prefersReducedMotion,
-
-  // Gestures
-  GestureBase,
-  TapGesture, TapGestureRecognizer,
-  LongPressGesture, LongPressGestureRecognizer,
-  DragGesture, DragGestureRecognizer,
-  MagnificationGesture, MagnificationGestureRecognizer,
-  RotationGesture, RotationGestureRecognizer,
-
-  // App
-  App, AppInstance,
-  WindowGroup, WindowGroupView,
-  WindowResizability, WindowStyle,
-  Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView,
-
-  // Performance Infrastructure
-  scheduleWork, schedulePostFlush,
-  batchUpdates, endBatch, batch, flushSync,
-  enqueueDOMWrite,
-  getSchedulerStats, resetSchedulerStats,
-  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
-  acquireElement, releaseElement, releaseTree,
-  getPoolStats, clearPools,
-  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
-  promoteToGPULayer, demoteFromGPULayer
-};
+const SwiftUICore = namespaceObject(SwiftUICoreNamespace);
 
 // Default export
 export default SwiftUICore;

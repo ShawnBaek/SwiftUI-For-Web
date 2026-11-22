@@ -133,8 +133,8 @@ chain.accessibilityHeading = (level) => {
 3. Create elements with `acquireElement(tagName)`, not `document.createElement`.
 4. Bind reactive props inside the renderer with `createEffect`, under the
    current owner, and clean up through the owner.
-5. Export the view from `src/index.js`, in both the default namespace and the
-   named exports, and add it to `src/index.d.ts`.
+5. Add the view to the named `export { … }` list in `src/index.js` (the default
+   namespace is built from that list) and declare it in `src/core.d.ts`.
 6. Add behavior tests in `Tests/View/<Name>Tests.js` and import them in
    [Tests/TestRunner.html](Tests/TestRunner.html). Add the view to
    `src/core.js` as well, unless it belongs to Charts.

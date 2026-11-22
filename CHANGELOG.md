@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The default export of the main entry and of `./core` is now built from each
+  module's own named exports, so the named `export { … }` list is the only one
+  to maintain. The default namespace's members are read-only getters for the
+  same values, and it now also includes the `extend…` helpers (#47).
 - Type declarations for `GeometryProxy` (now a class, as at runtime),
   `ViewBuilder`, `TupleView`, `ConditionalContent`, `Empty`, `Any`,
   `UnevenRoundedRectangle`, `Bindable`, `NavigationDestination`,
