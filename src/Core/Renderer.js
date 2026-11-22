@@ -23,7 +23,7 @@ import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
-import { applyFrame } from './Frame.js';
+import { applyFrame, withStackAxis, currentStackAxis } from './Frame.js';
 import { withEnvironment } from '../Data/Environment.js';
 import { State } from '../Data/State.js';
 import { Binding } from '../Data/Binding.js';
@@ -130,10 +130,12 @@ function renderDescriptorBody(descriptor, renderer) {
   // Render the element
   const element = renderer(descriptor.props, descriptor.children);
 
-  // Apply modifiers in a single pass
-  if (descriptor.modifiers.length > 0) {
-    applyModifiers(element, descriptor.modifiers);
-  }
+  // Apply modifiers in declaration order; a modifier whose meaning depends
+  // on an earlier one gets its own layer (#50), so the result may be a
+  // wrapper around the view's element.
+  const outer = descriptor.modifiers.length > 0
+    ? applyModifiers(element, descriptor.modifiers)
+    : element;
 
   bindReactive(element, descriptor);
 
@@ -147,7 +149,7 @@ function renderDescriptorBody(descriptor, renderer) {
   // Store descriptor reference for reconciliation
   element._descriptor = descriptor;
 
-  return element;
+  return outer;
 }
 
 /**
@@ -266,21 +268,91 @@ function renderUnknown(descriptor) {
   return element;
 }
 
+// Ordered modifier layers (#50). Each layout or drawing modifier marks a
+// category on the layer it writes to. A modifier that would change the
+// meaning of a category already on that layer (SwiftUI applies modifiers
+// outside-in, each wrapping the previous result) starts a new wrapper layer.
+// Chains whose order can't change the result stay on one element.
+const LAYER_CATEGORY = {
+  [ModifierType.PADDING]: 'padding',
+  [ModifierType.BACKGROUND]: 'background',
+  [ModifierType.FRAME]: 'frame',
+  [ModifierType.BORDER]: 'border',
+  [ModifierType.CORNER_RADIUS]: 'clip',
+  [ModifierType.CLIP_SHAPE]: 'clip',
+  [ModifierType.OPACITY]: 'opacity',
+  [ModifierType.SHADOW]: 'shadow',
+};
+
+// For each modifier, the categories already on the layer that force a new
+// layer before it is applied. For example .background(c).padding(8) pads
+// outside the background, and .padding(8).padding(4) adds up.
+const WRAPS_AFTER = {
+  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow']),
+  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity']),
+  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow']),
+  [ModifierType.BORDER]: new Set(['border', 'clip']),
+  [ModifierType.CORNER_RADIUS]: new Set(['clip']),
+  [ModifierType.CLIP_SHAPE]: new Set(['clip']),
+  [ModifierType.OPACITY]: new Set(['opacity']),
+  [ModifierType.SHADOW]: new Set(['shadow']),
+};
+
+// Properties that place an element in its parent. A new layer takes them
+// over, so the wrapped view keeps its position in a stack or grid.
+const PLACEMENT_PROPERTIES = ['flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'justifySelf', 'gridArea', 'order'];
+
+function wrapInLayer(inner) {
+  const layer = document.createElement('div');
+  layer.dataset.modifierLayer = '';
+  const display = inner.style.display || '';
+  const inline = inner.tagName === 'SPAN' || display.startsWith('inline');
+  layer.style.display = inline ? 'inline-flex' : 'flex';
+  layer.style.flexDirection = 'column';
+  for (const property of PLACEMENT_PROPERTIES) {
+    if (inner.style[property]) {
+      layer.style[property] = inner.style[property];
+      inner.style[property] = '';
+    }
+  }
+  // A view that fills its parent keeps filling: the layer fills the parent
+  // and the view fills the layer.
+  if (layer.style.flexGrow && layer.style.flexGrow !== '0') inner.style.flexGrow = '1';
+  if (inner.style.width === '100%') layer.style.width = '100%';
+  if (inner.style.height === '100%') layer.style.height = '100%';
+  layer.appendChild(inner);
+  return layer;
+}
+
 /**
- * Apply modifiers to a DOM element in a single pass.
+ * Apply modifiers to a DOM element in declaration order.
  *
  * @param {HTMLElement} element - DOM element
  * @param {Array} modifiers - Array of modifier descriptors
+ * @returns {HTMLElement} The outermost element: `element`, or the last layer
+ *   wrapped around it when order matters.
  */
 export function applyModifiers(element, modifiers) {
+  let layer = element;
+  let categories = null;
   for (let i = 0; i < modifiers.length; i++) {
     const modifier = modifiers[i];
+    const category = LAYER_CATEGORY[modifier.type];
+    if (category) {
+      const wrapsAfter = WRAPS_AFTER[modifier.type];
+      if (categories && [...categories].some((existing) => wrapsAfter.has(existing))) {
+        layer = wrapInLayer(layer);
+        categories = null;
+      }
+      (categories ??= new Set()).add(category);
+    }
     if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
-      applySignalModifier(element, modifier);
+      applySignalModifier(layer, modifier);
     } else {
-      applyModifier(element, modifier);
+      applyModifier(layer, modifier);
     }
   }
+  return layer;
 }
 
 function applySignalModifier(element, modifier) {
@@ -785,7 +857,7 @@ registerRenderer('VStack', (props, children) => {
   element.style.flexDirection = 'column';
   element.style.alignItems = alignmentToCSS(props.alignment, 'horizontal');
   element.style.gap = `${props.spacing ?? 8}px`;
-  element.appendChild(renderChildren(children));
+  element.appendChild(withStackAxis('vertical', () => renderChildren(children)));
   return element;
 });
 
@@ -796,7 +868,7 @@ registerRenderer('HStack', (props, children) => {
   element.style.flexDirection = 'row';
   element.style.alignItems = alignmentToCSS(props.alignment, 'vertical');
   element.style.gap = `${props.spacing ?? 8}px`;
-  element.appendChild(renderChildren(children));
+  element.appendChild(withStackAxis('horizontal', () => renderChildren(children)));
   return element;
 });
 
@@ -809,7 +881,7 @@ registerRenderer('ZStack', (props, children) => {
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     if (child != null) {
-      const childEl = render(child);
+      const childEl = withStackAxis(null, () => render(child));
       childEl.style.gridArea = '1 / 1';
       applyZStackAlignment(childEl, props.alignment);
       element.appendChild(childEl);
@@ -827,9 +899,12 @@ registerRenderer('Spacer', (props) => {
   element.style.flexBasis = '0';
   element.style.alignSelf = 'stretch';
 
+  // SwiftUI's minLength applies along the containing stack's axis only
+  // (#50); outside a stack it applies to both.
   if (props.minLength != null) {
-    element.style.minWidth = `${props.minLength}px`;
-    element.style.minHeight = `${props.minLength}px`;
+    const axis = currentStackAxis();
+    if (axis !== 'vertical') element.style.minWidth = `${props.minLength}px`;
+    if (axis !== 'horizontal') element.style.minHeight = `${props.minLength}px`;
   }
 
   return element;

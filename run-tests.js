@@ -549,6 +549,10 @@ async function runTests() {
     // rendered, under the current owner. Content that Show/For render after
     // mount must be as reactive as content rendered at mount.
     const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
+    const { HStack: LayerHStack } = await import('./src/Layout/Stack/HStack.js');
+    const { ZStack: LayerZStack } = await import('./src/Layout/Stack/ZStack.js');
+    const { Spacer: LayerSpacer } = await import('./src/Layout/Spacer.js');
+    const { Button: LayerButton } = await import('./src/View/Control/Button.js');
     describe('Reactive bindings inside Show and For (#44)', () => {
       const mountInRoot = (viewFactory) => {
         const root = document.createElement('div');
@@ -631,17 +635,98 @@ async function runTests() {
           ModifierText('D').frame({ maxWidth: 200 })
         ));
         const [a, b, c, d] = root.children[0].children;
-        expect(a.style.width).toBe('100%');
+        // In a VStack: stretch across, grow along (#50).
+        expect(a.style.alignSelf).toBe('stretch');
         expect(a.style.maxWidth).toBe('none');
-        expect(b.style.width).toBe('100%');
-        expect(b.style.height).toBe('100%');
+        expect(b.style.alignSelf).toBe('stretch');
+        expect(b.style.flexGrow).toBe('1');
         expect(b.style.maxHeight).toBe('none');
         expect(c.style.width).toBe('80px');
         expect(c.style.minWidth).toBe('4rem');
         expect(d.style.maxWidth).toBe('200px');
         for (const el of [a, b, c, d]) {
           expect(String(el.style.maxWidth).includes('infinity')).toBe(false);
+          expect(el.style.boxSizing).toBe('border-box');
         }
+        teardown();
+      });
+
+      // #50: fill along an HStack shares space; outside a stack, 100%.
+      it('frame(maxWidth/maxHeight: Infinity) uses flex growth on the stack axis', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ModifierText('row').frame({ maxWidth: Infinity, maxHeight: Infinity })),
+          LayerZStack(ModifierText('free').frame({ maxWidth: Infinity, maxHeight: Infinity }))
+        ));
+        const [hstack, zstack] = root.children[0].children;
+        const row = hstack.children[0];
+        expect(row.style.flexGrow).toBe('1');
+        expect(row.style.flexBasis).toBe('0');
+        expect(row.style.width || '').toBe('');
+        expect(row.style.alignSelf).toBe('stretch');
+        const free = zstack.children[0];
+        expect(free.style.width).toBe('100%');
+        expect(free.style.height).toBe('100%');
+        teardown();
+      });
+
+      it('Spacer(minLength:) applies on the stack axis only', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(LayerSpacer({ minLength: 20 })),
+          VStack(LayerSpacer({ minLength: 30 }))
+        ));
+        const [hstack, vstack] = root.children[0].children;
+        expect(hstack.children[0].style.minWidth).toBe('20px');
+        expect(hstack.children[0].style.minHeight || '').toBe('');
+        expect(vstack.children[0].style.minHeight).toBe('30px');
+        expect(vstack.children[0].style.minWidth || '').toBe('');
+        teardown();
+      });
+
+      it('modifiers apply in order: a modifier that depends on an earlier one gets a new layer', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          ModifierText('same').padding(8).background('red').cornerRadius(4).opacity(0.5),
+          ModifierText('outside').background('red').padding(8),
+          ModifierText('stacked').padding(8).padding({ top: 4 }),
+          ModifierText('frames').frame({ width: 100 }).frame({ width: 200 })
+        ));
+        const [same, outside, stacked, frames] = root.children[0].children;
+        // Order can't change the result: one element.
+        expect(same.tagName).toBe('SPAN');
+        expect(same.style.padding).toBe('8px');
+        expect(same.style.opacity).toBe('0.5');
+        // Padding after a background pads outside it.
+        expect(outside.dataset.modifierLayer).toBe('');
+        expect(outside.style.paddingTop || outside.style.padding).toBe('8px');
+        expect(outside.children[0].style.background || outside.children[0].style.backgroundColor).toBe('red');
+        expect(outside.children[0].style.padding || '').toBe('');
+        // Repeated padding adds up instead of overwriting.
+        expect(stacked.style.paddingTop).toBe('4px');
+        expect(stacked.children[0].style.padding).toBe('8px');
+        // A second frame wraps the first.
+        expect(frames.style.width).toBe('200px');
+        expect(frames.children[0].style.width).toBe('100px');
+        expect(frames.children[0].dataset.view).toBe('Text');
+        teardown();
+      });
+
+      it('a layer keeps the view placed in its stack', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ModifierText('grow').frame({ maxWidth: Infinity }).background('red').padding(8))
+        ));
+        const layer = root.children[0].children[0].children[0];
+        expect(layer.style.flexGrow).toBe('1');
+        expect(layer.children[0].style.flexGrow).toBe('1');
+        expect(layer.children[0].style.alignSelf || '').toBe('');
+        teardown();
+      });
+
+      it('Button(...).onTapGesture(f) runs both the action and f', () => {
+        const calls = [];
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerButton('Tap', () => calls.push('action')).onTapGesture(() => calls.push('tap'))
+        ));
+        root.querySelector('[data-view="Button"]').click();
+        expect(calls).toEqual(['action', 'tap']);
         teardown();
       });
 

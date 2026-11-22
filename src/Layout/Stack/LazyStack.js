@@ -1,5 +1,8 @@
 /**
- * LazyVStack & LazyHStack - Lazy loading stacks with virtual scrolling
+ * LazyVStack & LazyHStack
+ *
+ * Not lazy yet (#50): every row renders up front, like VStack/HStack.
+ * Real virtualization is planned; the API is SwiftUI's so code won't change.
  *
  * Matches SwiftUI's lazy stacks that only render visible items.
  *

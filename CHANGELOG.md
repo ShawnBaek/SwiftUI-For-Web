@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Modifier order has SwiftUI meaning for descriptor views (#50). Modifiers
+  apply in declaration order, and a modifier whose meaning depends on an
+  earlier one gets its own wrapper layer: `.background(c).padding(8)` pads
+  outside the background, `.padding(8).padding({ top: 4 })` adds up, a second
+  `frame` wraps the first, and a repeated `opacity` multiplies. Chains where
+  order can't change the result stay on one element. A layer takes over the
+  view's placement in its stack (flex growth, alignment, grid area).
+- `Button(…).onTapGesture(f)` runs both the action and `f`: handlers for the
+  same event compose in modifier order (#50).
+- `frame(maxWidth: Infinity)` and `frame(maxHeight: Infinity)` fill along a
+  stack's axis with flex growth (sharing space with `Spacer`s) and stretch
+  across it; outside a stack they take 100%. `frame` uses
+  `box-sizing: border-box`, so padding followed by a frame no longer
+  overflows (#50).
+- `Spacer(minLength:)` sets the minimum length on its stack's axis only (#50).
+- `LazyVStack` and `LazyHStack` document that they are not lazy yet.
 - `ForEach` is reactive and keyed (#52): given a `State`, a `Binding` or a
   function returning the array, it renders through the keyed `For` renderer,
   so rows with a stable id keep their DOM when the data changes. A plain

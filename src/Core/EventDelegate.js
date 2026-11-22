@@ -74,7 +74,12 @@ export function delegateEvent(element, eventType, handler, root) {
     elementHandlers = new Map();
     _handlers.set(element, elementHandlers);
   }
-  elementHandlers.set(eventType, handler);
+  // Several handlers for one event compose in registration (modifier)
+  // order: Button(…).onTapGesture(f) runs the action and f (#50).
+  const existing = elementHandlers.get(eventType);
+  elementHandlers.set(eventType, existing
+    ? function composed(event) { existing.call(this, event); handler.call(this, event); }
+    : handler);
 
   // Only attach a root listener when one is explicitly requested. The App's
   // mount() already calls initDelegation() on the root element, which sets
