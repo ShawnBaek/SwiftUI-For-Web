@@ -148,6 +148,9 @@ export class MenuView extends View {
     dropdown.style.display = 'flex';
     dropdown.style.flexDirection = 'column';
 
+    // Focusable items, in order, for the menu keyboard pattern.
+    const items = [];
+
     // Render menu items
     this._content.forEach((item, index) => {
       if (item instanceof View) {
@@ -157,10 +160,14 @@ export class MenuView extends View {
 
         // Check if it's a divider
         if (item.constructor.name === 'DividerView') {
+          menuItem.setAttribute('role', 'separator');
           menuItem.style.height = '1px';
           menuItem.style.backgroundColor = 'rgba(60, 60, 67, 0.1)';
           menuItem.style.margin = '6px 0';
         } else {
+          // Roving focus: items are reachable with the arrow keys, not Tab.
+          menuItem.tabIndex = -1;
+          items.push(menuItem);
           menuItem.style.padding = '10px 12px';
           menuItem.style.borderRadius = '8px';
           menuItem.style.cursor = 'pointer';
@@ -208,6 +215,7 @@ export class MenuView extends View {
       trigger.setAttribute('aria-expanded', 'true');
       dropdown.inert = false;
       dropdown.removeAttribute('aria-hidden');
+      items[0]?.focus?.();
       dropdown.style.opacity = '1';
       dropdown.style.transform = 'scale(1) translateY(0)';
       dropdown.style.pointerEvents = 'auto';
@@ -217,6 +225,10 @@ export class MenuView extends View {
     const closeMenu = () => {
       this._isOpen = false;
       trigger.setAttribute('aria-expanded', 'false');
+      // Return focus before the menu becomes inert, or it falls to <body>.
+      if (typeof document !== 'undefined' && dropdown.contains?.(document.activeElement)) {
+        trigger.focus?.();
+      }
       dropdown.inert = true;
       dropdown.setAttribute('aria-hidden', 'true');
       dropdown.style.opacity = '0';
@@ -226,6 +238,35 @@ export class MenuView extends View {
     };
 
     this._closeMenu = closeMenu;
+
+    // Menu keyboard pattern (#51): arrows, Home and End move focus between
+    // items; Enter and Space activate the focused item; Tab closes the menu.
+    dropdown.addEventListener('keydown', (e) => {
+      const current = items.indexOf(document.activeElement);
+      const focusAt = (index) => {
+        if (items.length === 0) return;
+        items[(index + items.length) % items.length].focus();
+      };
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); focusAt(current + 1); break;
+        case 'ArrowUp': e.preventDefault(); focusAt(current < 0 ? items.length - 1 : current - 1); break;
+        case 'Home': e.preventDefault(); focusAt(0); break;
+        case 'End': e.preventDefault(); focusAt(items.length - 1); break;
+        case 'Enter':
+        case ' ':
+          if (current >= 0) { e.preventDefault(); items[current].click(); }
+          break;
+        case 'Tab': closeMenu(); break;
+        default: break;
+      }
+    });
+    trigger.addEventListener('keydown', (e) => {
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !this._isOpen) {
+        e.preventDefault();
+        openMenu();
+        if (e.key === 'ArrowUp') items[items.length - 1]?.focus?.();
+      }
+    });
 
     trigger.addEventListener('click', (e) => {
       e.stopPropagation();
