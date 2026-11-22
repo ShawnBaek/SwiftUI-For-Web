@@ -128,6 +128,34 @@ describe('renderToString (#40)', () => {
     expect(renderToString(() => WindowGroup(VStack(Text('scene')))).includes('scene')).toBe(true);
   });
 
+  it('keeps accessibility value and hint nodes on reactive Text and void elements', async () => {
+    const { Image } = await import('../../src/index.js');
+    const text = renderToString(() => Text(() => 'hi').accessibilityHint('Opens it').accessibilityValue('on'));
+    const id = text.match(/aria-describedby="([^"]+)"/)[1];
+    expect(text.includes(`id="${id}"`)).toBe(true);
+    expect(text.includes(', on</span>')).toBe(true);
+    const image = renderToString(() => Image('/a.png').accessibilityLabel('Chart').accessibilityValue('rising'));
+    expect(image.includes('aria-label="Chart, rising"')).toBe(true);
+  });
+
+  it('LazyVStack lays out a static ForEach as one row per item', async () => {
+    const { LazyVStack, ForEach } = await import('../../src/index.js');
+    const html = renderToString(() => LazyVStack({ spacing: 20 }, ForEach([1, 2], (i) => Text(String(i)))));
+    expect((html.match(/data-lazy-index=/g) || []).length).toBe(2);
+  });
+
+  it('controls keep legacy View methods and accept a descriptor label', async () => {
+    const { Toggle, Stepper, Animation } = await import('../../src/index.js');
+    const on = new State(true);
+    const toggle = Toggle(Text('Wi-Fi'), on.binding);
+    expect(typeof toggle.animation).toBe('function');
+    expect(typeof toggle.gesture).toBe('function');
+    const html = renderToString(() => toggle.animation(Animation.default, on));
+    expect(html.includes('Wi-Fi')).toBe(true);
+    expect(html.includes('aria-checked="true"')).toBe(true);
+    expect(renderToString(() => Stepper(Text('Count'), new State(1).binding)).includes('Count')).toBe(true);
+  });
+
   it('accepts a descriptor, a factory and a legacy View', () => {
     expect(renderToString(Text('a'))).toBe(renderToString(() => Text('a')));
     expect(renderToString(Toggle('x', new State(false).binding)).startsWith('<')).toBe(true);

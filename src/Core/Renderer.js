@@ -13,7 +13,7 @@
  * 6. Eliminated data-view attributes in production (removed debug overhead)
  */
 
-import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint } from './Accessibility.js';
+import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint, restoreAccessibilityNodes } from './Accessibility.js';
 import { DEV_BUILD, userFrame } from './Dev.js';
 import {
   isDescriptor,
@@ -212,7 +212,10 @@ function bindReactive(element, descriptor) {
   if (!hasThunk && !hasReactiveModifier) return;
 
   if (!getOwner()) {
-    if (hasThunk) element.textContent = String(untrack(thunk) ?? '');
+    if (hasThunk) {
+      element.textContent = String(untrack(thunk) ?? '');
+      restoreAccessibilityNodes(element);
+    }
     // A task without an id needs no effect: it still starts when the element
     // appears and is cancelled when the element disappears. A task with an id
     // needs an owner to restart when the id changes, so warn like any other
@@ -232,6 +235,8 @@ function bindReactive(element, descriptor) {
   if (hasThunk) {
     createEffect(() => {
       element.textContent = String(thunk() ?? '');
+      // textContent removed accessibilityValue/Hint nodes (#51).
+      restoreAccessibilityNodes(element);
     });
   }
 

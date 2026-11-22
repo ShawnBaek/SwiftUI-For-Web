@@ -18,7 +18,7 @@ import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 import { VIEW_DESCRIPTOR, isDescriptor, ModifierType, createDescriptor } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor, registerRenderer } from '../../Core/Renderer.js';
-import { createEffect, getOwner, untrack } from '../../Data/Signal.js';
+import { createEffect, getOwner, onCleanup, untrack } from '../../Data/Signal.js';
 
 /**
  * Helper to render both View instances and descriptors
@@ -344,6 +344,15 @@ export class ListView extends View {
     }
   }
 
+  /** Keep one selectable row in the Tab order. @private */
+  _ensureTabStop() {
+    if (!this._selectionInstalled) return;
+    const rows = this._currentRows();
+    if (rows.length === 0 || rows.some(({ row }) => row.tabIndex === 0)) return;
+    const selected = rows.find(({ id }) => this._isSelected(id)) ?? rows[0];
+    selected.row.tabIndex = 0;
+  }
+
   /**
    * Keyboard and click selection for one row. Rows are looked up when the
    * event happens, so rows added later by a reactive ForEach take part.
@@ -447,7 +456,12 @@ export class ListView extends View {
 }
 
 // A row of a reactive ForEach inside a List (#52).
-registerRenderer('ListRow', (props) => props.list._createListRow(renderChild(props.content), null, props.id));
+registerRenderer('ListRow', (props) => {
+  const row = props.list._createListRow(renderChild(props.content), null, props.id);
+  // When the row holding the Tab stop goes away, give it to another row.
+  if (getOwner()) onCleanup(() => queueMicrotask(() => props.list._ensureTabStop()));
+  return row;
+});
 
 /**
  * Factory function for List

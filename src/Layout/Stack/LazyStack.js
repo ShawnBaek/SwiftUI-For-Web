@@ -52,8 +52,22 @@ function renderLazyRows(container, children, { axis, estimate, overscan }) {
     })
     : null;
 
-  children.forEach((child, index) => {
+  // A static ForEach gives one lazy row per item, laid out by the stack.
+  const rows = [];
+  for (const child of children) {
+    if (isDescriptor(child) && child.type === 'ForEach') rows.push(...child.children);
+    else rows.push(child);
+  }
+
+  rows.forEach((child, index) => {
     if (!(child instanceof View) && !isDescriptor(child)) return;
+    // A reactive ForEach (For) or Show manages its own rows: render it in
+    // place (display: contents keeps its rows in the stack's layout).
+    if (isDescriptor(child) && (child.type === 'For' || child.type === 'Show')) {
+      const rendered = renderAny(child);
+      if (rendered) container.appendChild(rendered);
+      return;
+    }
     const wrapper = document.createElement('div');
     wrapper.dataset.lazyIndex = String(index);
     const slot = createOwnedSlot();

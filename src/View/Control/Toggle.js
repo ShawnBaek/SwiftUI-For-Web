@@ -13,6 +13,8 @@
 import { defineControl } from '../../Core/LegacyControl.js';
 import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderLabelView } from '../../Core/Renderer.js';
 import { Binding } from '../../Data/Binding.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
 
@@ -38,7 +40,7 @@ export class ToggleView extends View {
       this._label = null;
       this._labelView = null;
       this._isOn = labelOrBindingOrOptions;
-    } else if (typeof labelOrBindingOrOptions === 'object' && !(labelOrBindingOrOptions instanceof View)) {
+    } else if (typeof labelOrBindingOrOptions === 'object' && !(labelOrBindingOrOptions instanceof View) && !isDescriptor(labelOrBindingOrOptions)) {
       // Options object style
       const options = labelOrBindingOrOptions;
       this._label = options.label || null;
@@ -49,8 +51,8 @@ export class ToggleView extends View {
       this._label = labelOrBindingOrOptions;
       this._labelView = null;
       this._isOn = isOnBinding || Binding.constant(false);
-    } else if (labelOrBindingOrOptions instanceof View) {
-      // Toggle(labelView, isOnBinding)
+    } else if (labelOrBindingOrOptions instanceof View || isDescriptor(labelOrBindingOrOptions)) {
+      // Toggle(labelView, isOnBinding), the view a legacy View or a descriptor
       this._label = null;
       this._labelView = labelOrBindingOrOptions;
       this._isOn = isOnBinding || Binding.constant(false);
@@ -166,7 +168,7 @@ export class ToggleView extends View {
       track.setAttribute('aria-labelledby', label.id);
       container.appendChild(label);
     } else if (this._labelView) {
-      const label = this._labelView._render();
+      const label = renderLabelView(this._labelView);
       if (!label.id) label.id = nextToggleLabelId();
       track.setAttribute('aria-labelledby', label.id);
       container.appendChild(label);
@@ -230,7 +232,7 @@ export class ToggleView extends View {
       label.textContent = this._label;
       container.appendChild(label);
     } else if (this._labelView) {
-      container.appendChild(this._labelView._render());
+      container.appendChild(renderLabelView(this._labelView));
     }
 
     // Disabled styling
@@ -273,7 +275,7 @@ export class ToggleView extends View {
     if (this._label) {
       button.textContent = this._label;
     } else if (this._labelView) {
-      button.appendChild(this._labelView._render());
+      button.appendChild(renderLabelView(this._labelView));
     }
 
     // Click handler — toggle the binding; the effect above re-renders.
