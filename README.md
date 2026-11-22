@@ -176,6 +176,26 @@ content-hashed name (`main.3fa2b1c4d5.js`, references rewritten) and write
 `manifest.json` mapping source paths to hashed ones, for long-lived caching.
 `--no-minify` keeps the output readable.
 
+Add `--bundle` to scope-hoist the page's module scripts and everything they
+import statically into one ES module, `bundle.js` (`bundle.<hash>.js` with
+`--hash`), and point `index.html` at it:
+
+```bash
+node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir dist/hello-world --bundle --hash
+```
+
+The builder parses every module, resolves its scopes, and concatenates the
+modules in ES module evaluation order. A top-level name is renamed only where
+it would collide, and only the references that resolve to it change, so live
+bindings (`export let`), hoisting, cycles, namespace imports (frozen objects
+with getters), class and function names behave as they do between separate
+modules. Modules reached only through `import('./x.js')` go into `chunk-*.js`
+files loaded on demand. The output is deterministic, and `build-report.json`
+lists the bundled modules and chunks. Limitations: top-level `await` and
+`eval` are rejected; stack traces (and the development warnings that read
+them) point into the bundle; a dynamic chunk's dependencies run before its
+own modules rather than interleaved with them.
+
 ---
 
 ## How reactivity works (the one important page)

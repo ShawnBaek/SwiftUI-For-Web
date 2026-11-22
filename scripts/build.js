@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { minifyJavaScript } from './minify.js';
+import { bundleModules } from './bundle.js';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { mkdir, rm, readdir, readFile, writeFile, stat } from 'node:fs/promises';
@@ -21,6 +22,7 @@ function parseArguments(argv) {
     configuration: 'release',
     minify: true,
     hash: false,
+    bundle: false,
   };
 
   for (let index = 0; index < argv.length; index++) {
@@ -35,6 +37,8 @@ function parseArguments(argv) {
       options.minify = false;
     } else if (argument === '--hash') {
       options.hash = true;
+    } else if (argument === '--bundle') {
+      options.bundle = true;
     } else if (argument === '--help' || argument === '-h') {
       printHelp();
       process.exit(0);
@@ -45,6 +49,10 @@ function parseArguments(argv) {
 
   if (options.configuration !== 'release') {
     throw new Error('Only --configuration release is currently supported');
+  }
+
+  if (options.bundle && !options.entry) {
+    throw new Error('--bundle requires --entry');
   }
 
   assertSafeOutputDirectory(options.outDir);
@@ -68,7 +76,7 @@ function printHelp() {
 
 Usage:
   node scripts/build.js
-  node scripts/build.js --entry <index.html> [--out-dir <directory>]
+  node scripts/build.js --entry <index.html> [--out-dir <directory>] [--bundle] [--hash]
 
 Options:
   --entry <file>            Build one application from its HTML entry
@@ -77,6 +85,10 @@ Options:
   --no-minify               Keep files unminified (still tree-shaken)
   --hash                    Content-hash file names (application builds)
                             and write manifest.json
+  --bundle                  Scope-hoist the page's module scripts and their
+                            static imports into one ES module, bundle.js
+                            (bundle.<hash>.js with --hash); modules reached
+                            only by import('…') become chunk-*.js files
   --help                    Show this help`);
 }
 
@@ -535,7 +547,15 @@ function htmlAssetRecords(source) {
       attribute = attributes.get('src');
     }
 
-    if (attribute) records.push(attribute);
+    if (attribute) {
+      records.push({
+        ...attribute,
+        tag,
+        moduleScript: tag === 'script' && attribute === attributes.get('src'),
+        tagStart: tagMatch.index,
+        tagEnd: tagMatch.index + tagMatch[0].length,
+      });
+    }
   }
 
   return records;
@@ -620,6 +640,7 @@ async function buildApplication(entry, outDir, options = {}) {
 
   const originalHTML = await readFile(entry, 'utf8');
   const htmlReplacements = [];
+  const moduleScripts = [];
   for (const record of htmlAssetRecords(originalHTML)) {
     const target = resolveLocalReference(record.value, path.dirname(entry));
     if (!target) {
@@ -629,6 +650,10 @@ async function buildApplication(entry, outDir, options = {}) {
     if (!isInside(root, target) || !await exists(target)) {
       throw new Error(`Missing HTML resource "${record.value}" in ${projectRelative(entry)}`);
     }
+    if (options.bundle && record.moduleScript) {
+      moduleScripts.push({ record, target });
+      continue;
+    }
     const { suffix } = splitReference(record.value);
     htmlReplacements.push({
       start: record.start,
@@ -636,6 +661,57 @@ async function buildApplication(entry, outDir, options = {}) {
       value: `./${projectRelative(target)}${suffix}`,
     });
     queue.push(target);
+  }
+
+  // #41 --bundle: one scope-hoisted module (plus dynamic chunks) replaces
+  // the page's module scripts and their static module graph.
+  let bundle = null;
+  const bundledFiles = new Set();
+  if (moduleScripts.length > 0) {
+    // A module's identity is its URL: `x.js?a` and `x.js` are two instances.
+    // Ids are the file, then "\0" and the query or fragment if there is one.
+    const moduleId = (file, reference) => {
+      const { suffix } = splitReference(reference);
+      return suffix ? `${file}\0${suffix}` : file;
+    };
+    const idFile = (id) => id.split('\0')[0];
+    const result = await bundleModules({
+      entries: [...new Set(moduleScripts.map(({ record, target }) => moduleId(target, record.value)))],
+      load: async (id) => {
+        const file = idFile(id);
+        bundledFiles.add(file);
+        const rewritten = rewritePublicImports(await readFile(file, 'utf8'), file, exportMap);
+        optimizedImports += rewritten.optimizedImports;
+        for (const reference of staticURLReferences(rewritten.source)) {
+          const dependency = resolveLocalReference(reference, path.dirname(file));
+          if (dependency && await exists(dependency)) queue.push(dependency);
+          else if (!dependency) externalReferences.add(reference);
+        }
+        return rewritten.source;
+      },
+      resolve: async (specifier, importer) => {
+        const file = await resolveModule(specifier, idFile(importer));
+        return file && moduleId(file, specifier);
+      },
+      relative: (id) => projectRelative(idFile(id)) + (id.split('\0')[1] || ''),
+      bundleName: 'bundle.js',
+    });
+    for (const warning of result.warnings) console.warn(`warning: ${warning}`);
+    for (const file of result.files) {
+      await writeFile(path.join(outDir, file.name), minify(file.code, file.name));
+      emitted.add(file.name);
+    }
+    bundle = result;
+    moduleScripts.forEach(({ record }, index) => {
+      if (index === 0) {
+        htmlReplacements.push({ start: record.start, end: record.end, value: './bundle.js' });
+        return;
+      }
+      // Later module scripts are part of the bundle: drop their elements.
+      const close = /<\/script\s*>/i.exec(originalHTML.slice(record.tagEnd));
+      const end = close ? record.tagEnd + close.index + close[0].length : record.tagEnd;
+      htmlReplacements.push({ start: record.tagStart, end, value: '' });
+    });
   }
 
   let outputHTML = originalHTML;
@@ -654,6 +730,9 @@ async function buildApplication(entry, outDir, options = {}) {
     retained.add(file);
 
     const relative = projectRelative(file);
+    if (bundle?.files.some(({ name }) => name === relative)) {
+      throw new Error(`${relative} would overwrite the bundle output of the same name`);
+    }
     const target = path.join(outDir, relative);
     await mkdir(path.dirname(target), { recursive: true });
     const extension = path.extname(file).toLowerCase();
@@ -702,6 +781,10 @@ async function buildApplication(entry, outDir, options = {}) {
     await writeFile(path.join(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   }
 
+  if (bundle) {
+    for (const file of bundledFiles) retained.add(file);
+  }
+
   const candidates = await collectApplicationCandidates(entry, outDir);
   const retainedFiles = [...retained].map(projectRelative).sort();
   const removedFiles = candidates
@@ -732,6 +815,18 @@ async function buildApplication(entry, outDir, options = {}) {
     removedFiles,
     externalReferences: [...externalReferences].sort(),
     optimizedPublicImports: optimizedImports,
+    ...(bundle ? {
+      bundle: {
+        file: nameMap?.get(bundle.files[0].name) ?? bundle.files[0].name,
+        modules: bundle.files[0].modules,
+        chunks: bundle.files.slice(1).map((file) => ({
+          file: nameMap?.get(file.name) ?? file.name,
+          modules: file.modules,
+        })),
+        renamedBindings: bundle.renamed,
+        warnings: bundle.warnings,
+      },
+    } : {}),
     outputFiles,
     sizes: { raw, gzip },
   };

@@ -118,6 +118,27 @@
   first argument (`ScrollView(VStack(…))`); they used to read it as options
   and render nothing. `LazyVStack`, `LazyHStack` and `ViewThatFits` also
   render descriptor children.
+- Release build (#41): `--bundle` scope-hoists an application's module
+  scripts and their static imports into one ES module, `bundle.js`
+  (`bundle.<hash>.js` with `--hash`), and rewrites `index.html` to load it.
+  `scripts/bundle.js` (Node built-ins only) parses each module, resolves its
+  scopes, and concatenates the modules in ES module evaluation order,
+  renaming a top-level binding (and only the references that resolve to it)
+  when it collides with another module's binding, a global the bundle reads
+  or a local that would capture it. Imports become direct references, so
+  live bindings, hoisting, temporal dead zones and cycles behave as between
+  modules; namespace imports become frozen objects with getters; renamed
+  classes and functions keep their `name`. Modules reached only through
+  `import('literal')` go into `chunk-*.js` files grouped by the dynamic
+  imports that reach them. `import.meta.url` and `new URL(…,
+  import.meta.url)` keep pointing at the module's original location. The
+  output is byte-for-byte deterministic, and `build-report.json` gains a
+  `bundle` entry listing bundled modules and chunks. Top-level `await` and
+  `eval` are rejected. `scripts/build-tests.js` bundles HelloWorld, Netflix
+  and a fixture covering every import/export form, live bindings, a cycle,
+  collisions and shadowing, and compares the fixture with the unbundled
+  modules in Node; it also bundles the unit suite with every binding
+  renamed and runs it.
 - Release build (#41): application builds add `<link rel="modulepreload">`
   for every module the page's scripts import statically. `--hash` renames
   each emitted file to `name.<hash>.ext` (the hash covers the file and

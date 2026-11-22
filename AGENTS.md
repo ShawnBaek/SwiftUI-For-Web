@@ -23,7 +23,7 @@ these files win; fix the other one.
    vendored third-party code.
 2. **Optional optimized release build.** `node scripts/build.js --entry
    <index.html>` makes a smaller release (tree-shaken and minified, with
-   bundling and hashing planned). It uses only Node built-ins, and its output
+   optional `--bundle` and `--hash`). It uses only Node built-ins, and its output
    must behave exactly like the unbuilt source.
 3. **SwiftUI is the reference design.** Public names, parameter labels,
    ownership, and update timing match Apple SwiftUI. A difference is allowed

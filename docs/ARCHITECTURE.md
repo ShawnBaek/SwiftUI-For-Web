@@ -96,7 +96,8 @@ Any other divergence is a bug, unless it's added here through review.
 | Modules | Native ES modules straight from `src/` | Only modules the entry statically reaches; public imports rewritten to their defining modules |
 | Minification | None | Per-file JS and CSS minification |
 | Report | — | `build-report.json` lists retained and removed files and their sizes |
-| Planned | — | Optional bundling into fewer files, content-hashed names with a manifest, and export-level tree shaking (#41). An optional compile step could hoist static templates, which the README says is how Solid outperforms this framework. |
+| Bundling | — | `--bundle`: one scope-hoisted module plus on-demand chunks for `import()`; `--hash`: content-hashed names and `manifest.json` (#41) |
+| Planned | — | Export-level tree shaking (#41). An optional compile step could hoist static templates, which the README says is how Solid outperforms this framework. |
 
 The release build must never become a requirement: everything it produces must
 behave exactly like the unbuilt source. Build tests (`scripts/build-tests.js`)
