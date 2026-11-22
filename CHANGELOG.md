@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `.environment(key, value)` and `.environmentObject(object)` apply to the
+  modified view and its descendants (#49). `.environment` was a no-op, and
+  `.environmentObject` set one app-wide object, so the last writer won.
+  Sibling subtrees now read their own values and nested values shadow outer
+  ones. `Text`, the stacks and `Button` gain both modifiers; legacy views
+  scope their own render. Values are read at render time (thunks, effects,
+  content rendered by the view). `environmentObject` still registers the
+  object app-wide as a fallback for reads outside any render.
 - `frame(maxWidth: Infinity)` and `frame(maxHeight: Infinity)` (or the string
   `'infinity'`) fill the available space, like SwiftUI's `.infinity`. They
   used to emit `infinitypx`, which CSS ignores (#50). Frame lengths also

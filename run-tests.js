@@ -2384,7 +2384,7 @@ async function runTests() {
 
     // #49: the environment store creates its system defaults on first use, so
     // it imports in Node and falls back to fixed defaults without a browser.
-    const { Environment: EnvStore, EnvironmentValues: EnvKeys, ColorScheme: EnvColorScheme } =
+    const { Environment: EnvStore, EnvironmentValues: EnvKeys, ColorScheme: EnvColorScheme, extendViewWithEnvironment } =
       await import('./src/Data/Environment.js');
     describe('Environment without a browser', () => {
       it('reads defaults without window, document or navigator', () => {
@@ -2392,6 +2392,59 @@ async function runTests() {
         expect(EnvStore.get(EnvKeys.colorScheme)).toBe(EnvColorScheme.light);
         expect(typeof EnvStore.get(EnvKeys.locale)).toBe('string');
         expect(typeof EnvStore.get(EnvKeys.openURL)).toBe('function');
+      });
+
+      it('.environment scopes a value to its subtree; nested values shadow outer ones', () => {
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const read = () => ModifierText(() => String(EnvStore.get('theme') ?? 'global'));
+        const app = App(() => VStack(
+          VStack(read(), VStack(read()).environment('theme', 'inner')).environment('theme', 'outer'),
+          VStack(read()).environment('theme', 'sibling'),
+          read()
+        )).mount(root);
+        const texts = [];
+        const walk = (node) => { if (node._textContent) texts.push(node._textContent); (node.children || []).forEach(walk); };
+        walk(root);
+        expect(texts).toEqual(['outer', 'inner', 'sibling', 'global']);
+        // Outside any render, the app-wide value applies.
+        expect(EnvStore.get('theme')).toBe(undefined);
+        app.unmount();
+        root.remove();
+      });
+
+      it('legacy View.environment scopes its subtree too', () => {
+        // GroupView extends the legacy View base class; install .environment on it.
+        extendViewWithEnvironment(Object.getPrototypeOf(GroupView));
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          new GroupView(ModifierText(() => String(EnvStore.get('theme') ?? 'global'))).environment('theme', 'legacy'),
+          ModifierText(() => String(EnvStore.get('theme') ?? 'global'))
+        )).mount(root);
+        const texts = [];
+        const walk = (node) => { if (node._textContent) texts.push(node._textContent); (node.children || []).forEach(walk); };
+        walk(root);
+        expect(texts).toEqual(['legacy', 'global']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('.environmentObject scopes an object to its subtree', () => {
+        class Settings { constructor(name) { this.name = name; } }
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const read = () => ModifierText(() => EnvStore.object(Settings)?.name ?? 'none');
+        const app = App(() => VStack(
+          VStack(read()).environmentObject(new Settings('A')),
+          VStack(read()).environmentObject(new Settings('B'))
+        )).mount(root);
+        const texts = [];
+        const walk = (node) => { if (node._textContent) texts.push(node._textContent); (node.children || []).forEach(walk); };
+        walk(root);
+        expect(texts).toEqual(['A', 'B']);
+        app.unmount();
+        root.remove();
       });
 
       it('openURL opens with noopener and noreferrer', () => {

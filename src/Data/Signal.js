@@ -365,6 +365,51 @@ export function createRoot(fn) {
  * Get the current owner (computation or root). Useful for effects that
  * need to attach disposable resources to a longer-lived scope.
  */
+/**
+ * Run `fn` under a child owner that carries context entries (a Map), such as
+ * scoped environment values (#49). The owner is disposed with its parent, and
+ * `readContext` finds the nearest entry by walking up the owner chain.
+ *
+ * @template T
+ * @param {Map<any, any>} entries
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function runWithContext(entries, fn) {
+  const parent = currentOwner;
+  const owner = {
+    fn: null,
+    sources: new Set(),
+    cleanups: [],
+    children: [],
+    owner: parent,
+    disposed: false,
+    lane: DefaultLane,
+    pure: false,
+    execute: null,
+    context: entries,
+  };
+  if (parent) parent.children.push(owner);
+  return runWithOwner(owner, fn);
+}
+
+const CONTEXT_NOT_FOUND = Object.freeze({ found: false, value: undefined });
+
+/**
+ * Find the nearest context entry for `key` from the current owner upward.
+ *
+ * @param {*} key
+ * @returns {{ found: boolean, value: * }}
+ */
+export function readContext(key) {
+  for (let owner = currentOwner; owner; owner = owner.owner) {
+    if (owner.context && owner.context.has(key)) {
+      return { found: true, value: owner.context.get(key) };
+    }
+  }
+  return CONTEXT_NOT_FOUND;
+}
+
 export function getOwner() {
   return currentOwner;
 }
