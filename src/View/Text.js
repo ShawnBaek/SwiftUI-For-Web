@@ -22,6 +22,8 @@ import {
   createModifier,
   ModifierType
 } from '../Core/ViewDescriptor.js';
+import { State } from '../Data/State.js';
+import { Binding } from '../Data/Binding.js';
 
 /**
  * Heading level for `.accessibilityHeading(_:)`.
@@ -169,6 +171,11 @@ export function Text(content) {
   // createEffect under the current owner. Eager content is set once.
   if (typeof content === 'function') {
     return chainable(createDescriptor('Text', { contentThunk: content }));
+  }
+  // A State or Binding passed directly subscribes like a thunk would (#52).
+  if (content instanceof State || content instanceof Binding) {
+    const source = content;
+    return chainable(createDescriptor('Text', { contentThunk: () => source.value }));
   }
   return chainable(createDescriptor('Text', { content: String(content) }));
 }

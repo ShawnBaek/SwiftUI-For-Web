@@ -16,31 +16,37 @@
 // =============================================================================
 
 /** Base View class - all UI components extend this */
+/**
+ * A reactive source that views and style modifiers accept directly in place
+ * of a thunk (#52): `Text(count)`, `.opacity(isVisible)`.
+ */
+export type Signal<T> = State<T> | Binding<T>;
+
 export class View {
   /** Apply a custom modifier */
   modifier(mod: ViewModifier): this;
 
   // Layout Modifiers
   /** Add padding around the view */
-  padding(value?: number | EdgeInsets): this;
+  padding(value?: number | EdgeInsets | Signal<number | EdgeInsets>): this;
   /** Set explicit width and/or height */
-  frame(options: FrameOptions): this;
+  frame(options: FrameOptions | Signal<FrameOptions>): this;
 
   // Style Modifiers
   /** Set the foreground (text/icon) color */
-  foregroundColor(color: Color | string): this;
+  foregroundColor(color: Color | string | Signal<Color | string>): this;
   /** Set the background color or view */
-  background(color: Color | string | View): this;
+  background(color: Color | string | View | Signal<Color | string>): this;
   /** Set the font style */
-  font(font: Font): this;
+  font(font: Font | Signal<Font>): this;
   /** Set opacity (0.0 - 1.0) */
-  opacity(value: number): this;
+  opacity(value: number | Signal<number>): this;
   /** Round the corners */
-  cornerRadius(radius: number): this;
+  cornerRadius(radius: number | Signal<number>): this;
   /** Add a border */
   border(color: Color | string, width?: number): this;
   /** Add a shadow */
-  shadow(options?: ShadowOptions): this;
+  shadow(options?: ShadowOptions | Signal<ShadowOptions>): this;
   /** Clip to a shape */
   clipShape(shape: Shape): this;
 
@@ -96,9 +102,9 @@ export class View {
   sheet(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
 
   // Accessibility Modifiers
-  accessibilityLabel(label: string | number | View): this;
-  accessibilityValue(value: string | number | View): this;
-  accessibilityHint(hint: string | number | View): this;
+  accessibilityLabel(label: string | number | View | Signal<string | number>): this;
+  accessibilityValue(value: string | number | View | Signal<string | number>): this;
+  accessibilityHint(hint: string | number | View | Signal<string | number>): this;
   accessibilityIdentifier(identifier: string): this;
 
   // Gesture Modifiers
@@ -382,7 +388,7 @@ export class EnvironmentObject<T extends ObservableObject> {
 // =============================================================================
 
 /** Display text content */
-export function Text(content: string | number | (() => string | number | null | undefined)): View & {
+export function Text(content: string | number | Signal<string | number> | (() => string | number | null | undefined)): View & {
   /** Set font style */
   font(font: Font): View;
   /** Set font weight */

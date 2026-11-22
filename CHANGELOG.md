@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Signal-as-value (#52, `docs/adr/0001-reactivity.md`): `Text(state)`,
+  `Text(binding)` and style modifiers given a `State` or `Binding`
+  (`.opacity(isVisible)`, `.foregroundColor(color)`, `.padding(spacing)` and
+  others) update on their own, with no thunk. `Text(state.value)` is still a
+  static snapshot.
 - The export lists move to `src/exports.js` and `src/core-exports.js`. The
   entries `src/index.js` and `src/core.js` re-export them and build their
   default export from the same list, so it is the only one to maintain (no

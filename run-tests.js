@@ -542,6 +542,49 @@ async function runTests() {
         };
       };
 
+      // #52 signal-as-value: a State or Binding passed directly subscribes.
+      it('Text(state) and Text(binding) update without a thunk', () => {
+        const count = new State(1);
+        const { root, teardown } = mountInRoot(() =>
+          VStack(ModifierText(count), ModifierText(count.binding))
+        );
+        const stack = root.children[0];
+        expect(stack.children[0].textContent).toBe('1');
+        expect(stack.children[1].textContent).toBe('1');
+        count.value = 2;
+        Scheduler.flushSync();
+        expect(stack.children[0].textContent).toBe('2');
+        expect(stack.children[1].textContent).toBe('2');
+        teardown();
+      });
+
+      it('a style modifier given a State re-applies when it changes', () => {
+        const visible = new State(1);
+        const label = new State('Hidden');
+        const { root, teardown } = mountInRoot(() =>
+          VStack(ModifierText('A').opacity(visible).accessibilityLabel(label))
+        );
+        const text = root.children[0].children[0];
+        expect(String(text.style.opacity)).toBe('1');
+        expect(text.getAttribute('aria-label')).toBe('Hidden');
+        visible.value = 0.25;
+        label.value = 'Shown';
+        Scheduler.flushSync();
+        expect(String(text.style.opacity)).toBe('0.25');
+        expect(text.getAttribute('aria-label')).toBe('Shown');
+        teardown();
+      });
+
+      it('Text(state.value) stays a static snapshot', () => {
+        const count = new State(1);
+        const { root, teardown } = mountInRoot(() => VStack(ModifierText(count.value)));
+        const text = root.children[0].children[0];
+        count.value = 2;
+        Scheduler.flushSync();
+        expect(text.textContent).toBe('1');
+        teardown();
+      });
+
       it('binds a Text thunk in the branch Show switches to after mount', () => {
         const on = new State(false);
         const n = new State(1);
