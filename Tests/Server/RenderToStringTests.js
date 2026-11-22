@@ -160,6 +160,11 @@ describe('renderToString (#40)', () => {
     expect(renderToString(() => Stepper(Text('Count'), new State(1).binding)).includes('Count')).toBe(true);
   });
 
+  it('serializes properties controls set on inputs (autocapitalize)', async () => {
+    const { TextField } = await import('../../src/index.js');
+    expect(renderToString(() => TextField('Name', new State('').binding)).includes('autocapitalize="sentences"')).toBe(true);
+  });
+
   it('accepts a descriptor, a factory and a legacy View', () => {
     expect(renderToString(Text('a'))).toBe(renderToString(() => Text('a')));
     expect(renderToString(Toggle('x', new State(false).binding)).startsWith('<')).toBe(true);

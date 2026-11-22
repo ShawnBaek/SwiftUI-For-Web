@@ -79,17 +79,27 @@ export function mount(viewFactory, container, options = {}) {
 // share. Not style (serializers format it differently) and not generated
 // ids or the attributes that reference them (counters differ per page).
 const UNCOMPARED = new Set(['style', 'id', 'for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant']);
+// Form state is compared as properties: one side may set the property and
+// the other the attribute.
+const FORM_STATE = new Set(['value', 'checked', 'selected']);
+const FORM_TAGS = new Set(['input', 'textarea', 'select', 'option']);
 
 function signature(node) {
   if (!node) return '';
   if (node.nodeType === 3) return (node.textContent || node.data || '').trim() ? `#${(node.textContent ?? node.data).trim()}` : '';
   if (node.nodeType !== 1) return '';
+  const tag = String(node.tagName).toLowerCase();
+  const form = FORM_TAGS.has(tag);
   const attributes = (node.getAttributeNames?.() ?? [])
-    .filter((name) => !UNCOMPARED.has(name))
+    .filter((name) => !UNCOMPARED.has(name) && !(form && FORM_STATE.has(name)))
     .sort()
-    .map((name) => `${name}=${node.getAttribute(name)}`)
-    .join(' ');
-  return `<${String(node.tagName).toLowerCase()} ${attributes}>`;
+    .map((name) => `${name}=${node.getAttribute(name)}`);
+  if (form) {
+    if (tag === 'option') attributes.push(`:selected=${Boolean(node.selected)}`);
+    else if (node.type === 'checkbox' || node.type === 'radio') attributes.push(`:checked=${Boolean(node.checked)}`);
+    else attributes.push(`:value=${node.value ?? ''}`);
+  }
+  return `<${tag} ${attributes.join(' ')}>`;
 }
 
 function firstDifference(server, client, path = 'root') {
@@ -116,8 +126,10 @@ function pathTo(container, node) {
 
 function adoptPrepare(container, element) {
   if (DEV_BUILD) {
-    const server = container.firstElementChild ?? container.firstChild;
-    const difference = firstDifference(server, element);
+    // Compare every top-level node the server rendered with the client's.
+    const serverRoot = { nodeType: 0, childNodes: Array.from(container.childNodes || []) };
+    const clientRoot = { nodeType: 0, childNodes: element ? [element] : [] };
+    const difference = firstDifference(serverRoot, clientRoot);
     if (difference) {
       console.warn(`SwiftUI-For-Web: mount(host, { mode: 'adopt' }) found client markup that differs from the server markup at ${difference}. Render both from the same state.`);
     }

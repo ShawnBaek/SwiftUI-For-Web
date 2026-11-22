@@ -345,7 +345,9 @@ const STRING_PROPERTIES = {
   preload: 'preload', width: 'width', height: 'height', rows: 'rows', cols: 'cols',
   maxLength: 'maxlength', minLength: 'minlength', span: 'span', colSpan: 'colspan',
   rowSpan: 'rowspan', label: 'label', draggable: 'draggable', contentEditable: 'contenteditable',
-  spellcheck: 'spellcheck',
+  spellcheck: 'spellcheck', autocapitalize: 'autocapitalize', autocorrect: 'autocorrect',
+  translate: 'translate', accessKey: 'accesskey', crossOrigin: 'crossorigin',
+  referrerPolicy: 'referrerpolicy',
 };
 const BOOLEAN_PROPERTIES = {
   hidden: 'hidden', inert: 'inert', disabled: 'disabled', checked: 'checked',
