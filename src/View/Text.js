@@ -55,6 +55,8 @@ function chainable(descriptor) {
   Object.assign(chain, descriptor);
 
   // Standard modifiers
+  chain.environment = (key, value) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] })));
+  chain.environmentObject = (object) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [], objects: [object] })));
   chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
   chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
   chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));

@@ -384,6 +384,9 @@ export const ModifierType = {
   // Identifies a view inside a Picker or TabView, like SwiftUI's .tag(_:).
   // It carries data only and renders nothing.
   TAG: 'tag',
+  // Scoped environment for this view and its descendants (#49):
+  // { values: [[key, value]], objects: [object] }.
+  ENVIRONMENT: 'environment',
   CUSTOM: 'custom'
 };
 

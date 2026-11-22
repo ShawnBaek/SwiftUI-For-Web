@@ -1,4 +1,4 @@
-import { trackObservers, notifyObserversSet } from './Signal.js';
+import { trackObservers, notifyObserversSet, readContext, runWithContext } from './Signal.js';
 
 /**
  * Environment - Provides access to environment values
@@ -137,6 +137,28 @@ export function currentDeviceIdiom() {
 /**
  * Environment - Global environment for storing values
  */
+/**
+ * Context key for a scoped environment value. Objects are keyed by their
+ * constructor, values by this string, so the two never collide.
+ */
+export function environmentValueKey(key) {
+  return `environment:${String(key)}`;
+}
+
+/**
+ * Run `fn` with scoped environment entries: `values` is a Map of environment
+ * key to value, `objects` a list of environment objects (keyed by their
+ * constructor). Reads inside `fn`, including effects created there, see them.
+ */
+export function withEnvironment(values, objects, fn) {
+  const entries = new Map();
+  for (const [key, value] of values) entries.set(environmentValueKey(key), value);
+  for (const object of objects) {
+    if (object && object.constructor) entries.set(object.constructor, object);
+  }
+  return runWithContext(entries, fn);
+}
+
 class EnvironmentStore {
   constructor() {
     this._values = new Map();
@@ -269,6 +291,10 @@ class EnvironmentStore {
    * @returns {*} The environment value
    */
   get(key) {
+    // A value set with .environment(key, value) on an enclosing view wins
+    // over the app-wide value (#49).
+    const scoped = readContext(environmentValueKey(key));
+    if (scoped.found) return scoped.value;
     this._ensureDefaults();
     trackObservers(this._observersForKey(key));
     return this._values.get(key);
@@ -341,6 +367,8 @@ class EnvironmentStore {
    * @returns {Object|null} The object instance or null
    */
   object(type) {
+    const scoped = readContext(type);
+    if (scoped.found) return scoped.value;
     return this._objects.get(type) ?? null;
   }
 
@@ -387,24 +415,38 @@ export function extendViewWithEnvironment(ViewClass) {
    * @param {*} value - Value to set
    */
   ViewClass.prototype.environment = function (keyPath, value) {
-    // Store environment override for this view tree
-    if (!this._environmentOverrides) {
-      this._environmentOverrides = new Map();
-    }
-    this._environmentOverrides.set(keyPath, value);
+    scopeLegacyRender(this).values.set(keyPath, value);
     return this;
   };
 
   /**
-   * Inject an environment object for this view and its descendants
+   * Inject an environment object for this view and its descendants.
+   * EnvironmentObject(Type) read while this view renders returns it. The
+   * object is also registered app-wide as a fallback for reads outside any
+   * render, as before.
    * @param {Object} object - Observable object to inject
    */
   ViewClass.prototype.environmentObject = function (object) {
     if (object && object.constructor) {
+      scopeLegacyRender(this).objects.push(object);
       Environment.setObject(object.constructor, object);
     }
     return this;
   };
+}
+
+// Wrap a legacy view's _render once so it renders inside its scoped
+// environment entries.
+function scopeLegacyRender(view) {
+  if (!view._environmentScope) {
+    const scope = { values: new Map(), objects: [] };
+    const render = view._render;
+    view._environmentScope = scope;
+    view._render = function (...args) {
+      return withEnvironment(scope.values, scope.objects, () => render.apply(this, args));
+    };
+  }
+  return view._environmentScope;
 }
 
 export default Environment;

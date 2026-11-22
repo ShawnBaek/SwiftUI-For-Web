@@ -24,6 +24,7 @@ import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
 import { applyFrame } from './Frame.js';
+import { withEnvironment } from '../Data/Environment.js';
 import { State } from '../Data/State.js';
 import { Binding } from '../Data/Binding.js';
 
@@ -107,6 +108,25 @@ export function render(descriptor) {
     return renderUnknown(descriptor);
   }
 
+  // .environment / .environmentObject scope this view and its descendants
+  // (#49): render the whole subtree inside those context entries.
+  let values = null;
+  let objects = null;
+  for (let i = 0; i < descriptor.modifiers.length; i++) {
+    const modifier = descriptor.modifiers[i];
+    if (modifier.type !== ModifierType.ENVIRONMENT) continue;
+    values ??= new Map();
+    objects ??= [];
+    for (const [key, value] of modifier.value.values) values.set(key, value);
+    objects.push(...modifier.value.objects);
+  }
+  if (values) {
+    return withEnvironment(values, objects, () => renderDescriptorBody(descriptor, renderer));
+  }
+  return renderDescriptorBody(descriptor, renderer);
+}
+
+function renderDescriptorBody(descriptor, renderer) {
   // Render the element
   const element = renderer(descriptor.props, descriptor.children);
 
