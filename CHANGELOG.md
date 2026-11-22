@@ -11,6 +11,44 @@ The first release of the 3.x line. It includes everything from the
 
 Each entry includes its migration notes.
 
+- **BREAKING: `Chart` and the chart marks are descriptors** (#48). `Chart`,
+  `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RuleMark`,
+  `RectangleMark` and `SectorMark` now build descriptors with
+  `chainable(createDescriptor(...), extras)`, and `Chart` registers a
+  renderer that draws the marks into one SVG. Chart-specific methods
+  (`.chartXAxis`, `.chartYAxis`, `.chartXScale`, `.chartYScale`,
+  `.chartLegend`, `.chartBackground`, `.chartPlotStyle`, and `.frame` for
+  the chart's size) and mark methods (`.foregroundStyle`, also `by:` a
+  series, `.opacity`, `.cornerRadius`, `.symbol`, `.symbolSize`,
+  `.lineStyle`, `.interpolationMethod`, `.annotation`, `.stacking`) return
+  new descriptors; every shared modifier chains on a chart as before. With
+  this, no built-in view uses the deprecated `View` class.
+  - Removed: the `Mark` base class export (from `swiftui-for-web`,
+    `swiftui-for-web/charts` and its `index.d.ts`, where `Mark` is now an
+    interface), and the classes behind the factories (`Chart`, `BarMark`, …
+    are plain functions; `new Chart(...)` still works, `instanceof` does
+    not). Removed instance APIs: `getX`, `getY`, `markType`, `clone`,
+    `render`, `getPointData`, `getAngleValue` and the static
+    `LineMark.generatePath`/`AreaMark.generateAreaPath`, plus the class
+    internals (`_marks`, `_buildMarks`, `_render`, …).
+  - Kept: `createChart`, `createBarMark`, … are now aliases of the factories;
+    `PlottableValue`, `value` and `MarkDimension` are unchanged.
+  - Output: the SVG is the same, attribute for attribute (checked against
+    the `Examples/Charts` page and a server render covering every mark,
+    symbol, interpolation and legend). Deliberate differences: the chart's
+    container has `data-view="Chart"`; `Chart([marks])` (an array of marks
+    with no builder) now draws them, where it drew an empty plot before
+    (the "Bar Chart with Target Line" example was blank); the `cross` and
+    `plus` point symbols' path data is written on one line; a chart redraws
+    when a `State` its data or builder reads changes (`Chart(state, build)`,
+    `Chart(() => marks)`), under the current owner; the content builder runs
+    once per render instead of three times; a mark used on its own renders
+    as a one-mark chart; and the `Charts` namespace object now includes
+    `PlottableValue`, as its declaration said.
+  - Migration: replace `mark instanceof BarMark` with
+    `mark.type === 'BarMark'`, `mark.x` with `mark.props.x`, and
+    `chart._render()` with `render(chart)`.
+
 - **BREAKING: every built-in view is a descriptor; one view model** (#48).
   The containers, navigation, shapes and the rest of the former `View`
   subclasses now build descriptors with `chainable(createDescriptor(...))`

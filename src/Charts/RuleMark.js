@@ -1,105 +1,54 @@
 /**
- * RuleMark - Represents a horizontal or vertical line/rule
- * Mirrors Swift Charts RuleMark API
+ * RuleMark - a horizontal or vertical rule (Swift Charts RuleMark).
  *
- * Usage:
- *   RuleMark(y: .value("Threshold", 100))  // Horizontal line
- *   RuleMark(x: .value("Date", targetDate)) // Vertical line
- *   RuleMark(
- *     xStart: .value("Start", start),
- *     xEnd: .value("End", end),
- *     y: .value("Y", yPos)
- *   )
+ *   RuleMark({ y: value('Threshold', 100) })    // horizontal
+ *   RuleMark({ x: value('Date', targetDate) })  // vertical
+ *   RuleMark({ xStart, xEnd, y })               // horizontal segment
  */
 
-import { Mark } from './Mark.js';
+import { mark, svg, position } from './Mark.js';
 
-export class RuleMark extends Mark {
-  constructor(options = {}) {
-    super(options);
-    this._lineStyle = { lineWidth: 1, dash: null };
-  }
-
-  get markType() {
-    return 'RuleMark';
-  }
-
-  /**
-   * Render rule mark to SVG element
-   * @param {Object} context - Rendering context
-   * @returns {SVGElement}
-   */
-  render(context) {
-    const { xScale, yScale, width, height } = context;
-
-    let x1, y1, x2, y2;
-
-    // Determine line orientation and position
-    if (this.x && !this.y) {
-      // Vertical line at X
-      const xPos = this.x.type === 'nominal'
-        ? xScale(this.x.rawValue) + (xScale.bandwidth?.() || 0) / 2
-        : xScale(this.x.numericValue);
-      x1 = x2 = xPos;
-      y1 = 0;
-      y2 = height;
-    } else if (this.y && !this.x) {
-      // Horizontal line at Y
-      const yPos = this.y.type === 'nominal'
-        ? yScale(this.y.rawValue) + (yScale.bandwidth?.() || 0) / 2
-        : yScale(this.y.numericValue);
-      y1 = y2 = yPos;
-      x1 = 0;
-      x2 = width;
-    } else if (this.xStart && this.xEnd && this.y) {
-      // Horizontal segment
-      x1 = this.xStart.type === 'nominal'
-        ? xScale(this.xStart.rawValue)
-        : xScale(this.xStart.numericValue);
-      x2 = this.xEnd.type === 'nominal'
-        ? xScale(this.xEnd.rawValue) + (xScale.bandwidth?.() || 0)
-        : xScale(this.xEnd.numericValue);
-      y1 = y2 = this.y.type === 'nominal'
-        ? yScale(this.y.rawValue) + (yScale.bandwidth?.() || 0) / 2
-        : yScale(this.y.numericValue);
-    } else if (this.yStart && this.yEnd && this.x) {
-      // Vertical segment
-      y1 = this.yStart.type === 'nominal'
-        ? yScale(this.yStart.rawValue)
-        : yScale(this.yStart.numericValue);
-      y2 = this.yEnd.type === 'nominal'
-        ? yScale(this.yEnd.rawValue) + (yScale.bandwidth?.() || 0)
-        : yScale(this.yEnd.numericValue);
-      x1 = x2 = this.x.type === 'nominal'
-        ? xScale(this.x.rawValue) + (xScale.bandwidth?.() || 0) / 2
-        : xScale(this.x.numericValue);
-    } else {
-      return null;
-    }
-
-    // Get color
-    const color = this._foregroundStyle || '#999999';
-
-    // Create line element
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', x1);
-    line.setAttribute('y1', y1);
-    line.setAttribute('x2', x2);
-    line.setAttribute('y2', y2);
-    line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', this._lineStyle.lineWidth || 1);
-    line.setAttribute('opacity', this._opacity);
-
-    if (this._lineStyle.dash) {
-      line.setAttribute('stroke-dasharray', this._lineStyle.dash);
-    }
-
-    return line;
-  }
+/**
+ * @param {Object} options - x, y, or a start/end pair with the other axis
+ * @returns {Object} Chainable mark descriptor
+ */
+export function RuleMark(options) {
+  return mark('RuleMark', options, { lineStyle: { lineWidth: 1, dash: null } });
 }
 
-export function createRuleMark(options) {
-  return new RuleMark(options);
-}
+/** Draw a rule in the plot area. */
+export function drawRuleMark(props, { xScale, yScale, width, height }) {
+  const { x, y, xStart, xEnd, yStart, yEnd } = props;
+  let x1, y1, x2, y2;
+  if (x && !y) {
+    x1 = x2 = position(x, xScale);
+    y1 = 0;
+    y2 = height;
+  } else if (y && !x) {
+    y1 = y2 = position(y, yScale);
+    x1 = 0;
+    x2 = width;
+  } else if (xStart && xEnd && y) {
+    x1 = position(xStart, xScale, 0);
+    x2 = position(xEnd, xScale, 1);
+    y1 = y2 = position(y, yScale);
+  } else if (yStart && yEnd && x) {
+    y1 = position(yStart, yScale, 0);
+    y2 = position(yEnd, yScale, 1);
+    x1 = x2 = position(x, xScale);
+  } else {
+    return null;
+  }
 
-export default RuleMark;
+  const line = svg('line', {
+    x1,
+    y1,
+    x2,
+    y2,
+    stroke: props.foregroundStyle || '#999999',
+    'stroke-width': props.lineStyle.lineWidth || 1,
+    opacity: props.opacity,
+  });
+  if (props.lineStyle.dash) line.setAttribute('stroke-dasharray', props.lineStyle.dash);
+  return line;
+}

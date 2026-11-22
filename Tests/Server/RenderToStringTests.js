@@ -12,6 +12,7 @@ import {
   VStack, HStack, Text, Button, Spacer, Toggle, State, Color, Font,
   List, NavigationStack, NavigationLink, TabView, Picker, PickerStyle,
   WindowGroup, Divider,
+  Chart, BarMark, LineMark, PointMark, RuleMark, SectorMark, MarkDimension, value,
 } from '../../src/index.js';
 import { renderToString, renderDocument, DocumentMetadata, sitemap, serializeJSONLD } from '../../src/server.js';
 import { getLifecycleStats } from '../../src/Core/LifecycleObserver.js';
@@ -59,6 +60,23 @@ const views = {
     Text('outside').background(Color.blue).padding(8),
     Text('stacked').padding(8).padding({ top: 4 }),
     Text('same').padding(8).background(Color.gray).cornerRadius(4).opacity(0.5),
+  ),
+  // #48: Chart and the marks are descriptors; the SVG is drawn by the
+  // Chart renderer.
+  chart: () => VStack(
+    Chart([{ m: 'Jan', v: 120, s: 'Sales' }, { m: 'Feb', v: 150, s: 'Sales' }, { m: 'Jan', v: 45, s: 'Profit' }, { m: 'Feb', v: 55, s: 'Profit' }], (row) => [
+      BarMark({ x: value('Month', row.m), y: value('Value', row.v) }).foregroundStyle({ by: value('Type', row.s) }).cornerRadius(2),
+      PointMark({ x: value('Month', row.m), y: value('Value', row.v) }).symbol('diamond'),
+    ]).frame({ width: 240, height: 160 }),
+    Chart([
+      LineMark({ x: value('Day', 1), y: value('Price', 10) }).interpolationMethod('monotone'),
+      LineMark({ x: value('Day', 2), y: value('Price', 14) }).interpolationMethod('monotone'),
+      LineMark({ x: value('Day', 3), y: value('Price', 12) }).interpolationMethod('monotone'),
+      RuleMark({ y: value('Target', 13) }).foregroundStyle(Color.red).lineStyle({ lineWidth: 2, dash: [4, 2] }),
+    ]).frame({ width: 240, height: 160 }).chartYScale({ domain: [8, 16] }),
+    Chart([['A', 2], ['B', 1]], ([name, share]) =>
+      SectorMark({ angle: value('Share', share), innerRadius: MarkDimension.ratio(0.5) }).foregroundStyle({ by: value('Name', name) }),
+    ).frame({ width: 160, height: 160 }),
   ),
   'navigation-and-tabs': () => VStack(
     NavigationStack(VStack(Text('Home'), NavigationLink('Details', () => Text('Detail')))),

@@ -6,7 +6,7 @@
  * @version 3.1.0
  */
 
-import { View, Color } from '../index.js';
+import { View, Color, State, Binding } from '../index.js';
 
 // =============================================================================
 // PlottableValue
@@ -62,7 +62,7 @@ export class PlottableValue {
 export function value(label: string, val: any): PlottableValue;
 
 // =============================================================================
-// Mark Base Class
+// Marks
 // =============================================================================
 
 /** Mark styling options */
@@ -80,15 +80,21 @@ export interface ForegroundStyleOptions {
 }
 
 /**
- * Base class for all chart marks
- * Provides common modifiers for styling
+ * What every mark has. A mark is a view descriptor (#48): each method
+ * returns a new descriptor, and `Chart` reads its props to draw it. Used on
+ * its own, a mark renders as a chart of that one mark.
  */
-export class Mark {
-  /** X-axis value */
-  x: PlottableValue | null;
-
-  /** Y-axis value */
-  y: PlottableValue | null;
+export interface Mark extends View {
+  /** The mark's plottable values and style, as the chart reads them. */
+  readonly props: Readonly<{
+    x: PlottableValue | null;
+    y: PlottableValue | null;
+    xStart: PlottableValue | null;
+    xEnd: PlottableValue | null;
+    yStart: PlottableValue | null;
+    yEnd: PlottableValue | null;
+    [key: string]: any;
+  }>;
 
   /**
    * Set the fill/stroke color
@@ -127,7 +133,10 @@ export class Mark {
    * Set symbol type for point marks
    * @param symbol - Symbol type
    */
-  symbol(symbol: SymbolType): this;
+  symbol(symbol: SymbolType | ForegroundStyleOptions): this;
+
+  /** Set the symbol size (an area in points squared) */
+  symbolSize(size: number): this;
 
   /**
    * Set line style for line/rule marks
@@ -140,6 +149,9 @@ export class Mark {
    * @param method - Interpolation method
    */
   interpolationMethod(method: InterpolationMethod): this;
+
+  /** Set the stacking mode */
+  stacking(mode: 'standard' | 'normalized' | 'center'): this;
 }
 
 // =============================================================================
@@ -518,7 +530,7 @@ export type ChartLegendConfig = 'visible' | 'hidden' | {
 };
 
 /** Mark content builder */
-export type MarkBuilder<T> = (item: T, index: number) => Mark | Mark[];
+export type MarkBuilder<T> = (item: T) => Mark | Mark[] | null;
 
 /**
  * Chart container - the main charting component
@@ -605,21 +617,24 @@ export interface Chart extends View {
    */
   chartPlotStyle(insets: { top?: number; leading?: number; bottom?: number; trailing?: number }): this;
 }
-/** Create a Chart. Call it directly, as in Swift Charts; `new` also works. */
+/**
+ * Create a Chart. Call it directly, as in Swift Charts; `new` also works.
+ * The chart redraws when a State its data or mark builder reads changes.
+ */
 export const Chart: {
   /**
    * Create a chart with data and mark builder
    * @param data - Array of data items
    * @param content - Function that creates marks for each item
    */
-  <T>(data: T[], content: MarkBuilder<T>): Chart;
+  <T>(data: T[] | State<T[]> | Binding<T[]> | (() => T[]), content: MarkBuilder<T>): Chart;
   /**
    * Create a chart with direct marks array
    * @param marks - Array of marks to render
    */
-  (marks: Mark[]): Chart;
-  new <T>(data: T[], content: MarkBuilder<T>): Chart;
-  new (marks: Mark[]): Chart;
+  (marks: Mark | Mark[] | (() => Mark | Mark[])): Chart;
+  new <T>(data: T[] | State<T[]> | Binding<T[]> | (() => T[]), content: MarkBuilder<T>): Chart;
+  new (marks: Mark | Mark[] | (() => Mark | Mark[])): Chart;
 };
 
 /**
@@ -628,8 +643,7 @@ export const Chart: {
  * @example
  * createChart(data, item => BarMark({...}))
  */
-export function createChart<T>(data: T[], content: MarkBuilder<T>): Chart;
-export function createChart(marks: Mark[]): Chart;
+export const createChart: typeof Chart;
 
 // =============================================================================
 // Factory Functions for Marks
@@ -665,7 +679,6 @@ export const Charts: {
   SectorMark: typeof SectorMark;
   PlottableValue: typeof PlottableValue;
   value: typeof value;
-  Mark: typeof Mark;
   MarkDimension: typeof MarkDimension;
 };
 

@@ -6,6 +6,7 @@
  */
 
 import { VStack, HStack, Text, Button, TextField, Toggle, Spacer, State, Color } from '../../src/index.js';
+import { Chart, BarMark, LineMark, value } from '../../src/Charts/index.js';
 
 export const fixtures = {
   counter() {
@@ -47,5 +48,18 @@ export const fixtures = {
       Text(() => `Total: ${count.value}`),
     );
     return { view, count };
+  },
+
+  // A chart (#48): SVG marks, axes and a legend; the data is a State.
+  chart() {
+    const rows = new State([{ m: 'Jan', v: 3, s: 'A' }, { m: 'Feb', v: 5, s: 'A' }, { m: 'Jan', v: 2, s: 'B' }, { m: 'Feb', v: 4, s: 'B' }]);
+    const view = () => VStack(
+      Text('Sales'),
+      Chart(rows, (row) => [
+        BarMark({ x: value('Month', row.m), y: value('Sales', row.v) }).foregroundStyle({ by: value('Series', row.s) }),
+        LineMark({ x: value('Month', row.m), y: value('Sales', row.v) }).foregroundStyle({ by: value('Series', row.s) }),
+      ]).frame({ width: 300, height: 200 }),
+    );
+    return { view, rows };
   },
 };

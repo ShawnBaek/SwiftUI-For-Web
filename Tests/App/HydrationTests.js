@@ -292,6 +292,36 @@ describe('Hydration (adopt mode, #39)', () => {
     host.remove();
   });
 
+  it('adopts a chart: every SVG node is reused, and the chart redraws from its State', async () => {
+    const host = await serverHost('chart');
+    const before = Array.from(host.querySelectorAll('*'));
+    expect(host.querySelectorAll('svg rect').length).toBe(4);
+    const fixture = fixtures.chart();
+    const { warnings } = captureWarnings(() => {
+      host._app = App(fixture.view).mount(host, { mode: 'adopt' });
+    });
+    expect(warnings.filter((w) => w.includes('adopt'))).toEqual([]);
+    const after = Array.from(host.querySelectorAll('*'));
+    expect(after.length).toBe(before.length);
+    expect(after.every((element, i) => element === before[i])).toBe(true);
+    expect(host.querySelector('svg').namespaceURI).toBe('http://www.w3.org/2000/svg');
+
+    const fresh = document.createElement('div');
+    document.body.appendChild(fresh);
+    const freshApp = App(fixtures.chart().view).mount(fresh);
+    expect(shape(host.firstElementChild)).toBe(shape(fresh.firstElementChild));
+    freshApp.unmount();
+    fresh.remove();
+
+    const container = host.querySelector('[data-view="Chart"]');
+    fixture.rows.value = [...fixture.rows.value, { m: 'Mar', v: 6, s: 'A' }];
+    flushSync();
+    expect(host.querySelector('[data-view="Chart"]')).toBe(container);
+    expect(host.querySelectorAll('svg rect').length).toBe(5);
+    host._app.unmount();
+    host.remove();
+  });
+
   it('replace mode still swaps in new nodes', async () => {
     const host = await serverHost('counter');
     const root = host.firstElementChild;

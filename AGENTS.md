@@ -89,7 +89,7 @@ Fine-grained updates (signals → textContent / attributes / styles)
 
 - Every built-in view is a descriptor with its own renderer (#48). Write new
   views the same way. `src/Core/View.js` is only a deprecated adapter for
-  user-defined class views (and `Chart`); don't extend it in `src`.
+  user-defined class views; don't extend it in `src`.
 - Reactive wiring happens in `Renderer.render`, while each element is built
   (`bindReactive` in `src/Core/Renderer.js`, #44). Never bind by walking the
   mounted DOM afterwards.

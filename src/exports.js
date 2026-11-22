@@ -187,7 +187,6 @@ import {
   RectangleMark, createRectangleMark,
   SectorMark, createSectorMark,
   PlottableValue, value,
-  Mark,
   MarkDimension,
   Charts
 } from './Charts/index.js';
@@ -359,7 +358,6 @@ export {
   RectangleMark, createRectangleMark,
   SectorMark, createSectorMark,
   PlottableValue, value,
-  Mark,
   MarkDimension,
   Charts,
 

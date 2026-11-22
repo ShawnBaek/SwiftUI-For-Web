@@ -4437,6 +4437,131 @@ async function runTests() {
       });
     }
 
+    const ChartsModule = await import('./src/Charts/index.js');
+    const { value: plot } = ChartsModule;
+    const { isDescriptor: isChartDescriptor } = await import('./src/Core/ViewDescriptor.js');
+    describe('Charts are descriptors (#48)', () => {
+      const C = ChartsModule;
+      const tagsOf = (element) => findAll(element, (n) => n.namespaceURI === 'http://www.w3.org/2000/svg').map((n) => n.tagName.toLowerCase());
+      const sales = [{ m: 'Jan', v: 10 }, { m: 'Feb', v: 20 }];
+
+      it('Chart and every mark return frozen descriptors with the shared modifiers', () => {
+        const x = plot('X', 1);
+        const y = plot('Y', 2);
+        const views = [
+          C.Chart(sales, (item) => C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) })),
+          C.BarMark({ x, y }), C.LineMark({ x, y }), C.AreaMark({ x, y }), C.PointMark({ x, y }),
+          C.RuleMark({ y }), C.RectangleMark({ x, y }), C.SectorMark({ angle: x }),
+        ];
+        expect(views.map((view) => view.type)).toEqual(['Chart', 'BarMark', 'LineMark', 'AreaMark', 'PointMark', 'RuleMark', 'RectangleMark', 'SectorMark']);
+        for (const view of views) {
+          expect(isChartDescriptor(view)).toBe(true);
+          expect(Object.isFrozen(view)).toBe(true);
+          expect(typeof view.padding).toBe('function');
+        }
+        expect(C.createChart).toBe(C.Chart);
+        expect('Mark' in ChartsModule).toBe(false);
+      });
+
+      it('mark and chart methods return new descriptors and keep the original unchanged', () => {
+        const bar = C.BarMark({ x: plot('M', 'a'), y: plot('V', 1) });
+        const styled = bar.foregroundStyle('red').cornerRadius(4).opacity(0.5);
+        expect([styled.props.foregroundStyle, styled.props.cornerRadius, styled.props.opacity]).toEqual(['red', 4, 0.5]);
+        expect([bar.props.foregroundStyle, bar.props.cornerRadius, bar.props.opacity]).toEqual([null, 0, 1]);
+        expect(styled.modifiers.length).toBe(0);
+        expect(bar.foregroundStyle({ by: plot('S', 'a') }).props.foregroundStyleField.rawValue).toBe('a');
+        expect(C.RuleMark({}).lineStyle({ dash: [5, 5] }).props.lineStyle).toEqual({ lineWidth: 1, dash: [5, 5] });
+        const chart = C.Chart([bar]);
+        const configured = chart.frame({ width: 500 }).chartYScale({ domain: [0, 10] }).chartXAxis('hidden').chartLegend('visible');
+        expect([configured.props.width, configured.props.height]).toEqual([500, 300]);
+        expect(configured.props.yDomain).toEqual([0, 10]);
+        expect(configured.props.xAxis.visible).toBe(false);
+        expect(configured.props.legend.visible).toBe(true);
+        expect([chart.props.width, chart.props.xAxis.visible, chart.props.yDomain]).toEqual([400, true, null]);
+      });
+
+      it('draws a bar chart: grid, bars, axes, and the shared modifiers on the container', () => {
+        const element = render(C.Chart(sales, (item) =>
+          C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) }).foregroundStyle('#f00').cornerRadius(2),
+        ).frame({ width: 300, height: 200 }).padding(8));
+        expect(element.dataset.view).toBe('Chart');
+        expect(element.style.width).toBe('300px');
+        expect(element.style.padding).toBe('8px');
+        const root = element.children[0];
+        expect([root.getAttribute('width'), root.getAttribute('height')]).toEqual(['300', '200']);
+        const bars = findAll(root, (n) => n.tagName === 'RECT');
+        expect(bars.length).toBe(2);
+        expect(bars.map((bar) => [bar.getAttribute('fill'), bar.getAttribute('rx')])).toEqual([['#f00', '2'], ['#f00', '2']]);
+        // The taller bar reaches the top of the plot area.
+        expect(bars[1].getAttribute('y')).toBe('0');
+        const labels = findAll(root, (n) => n.tagName === 'TEXT').map((n) => n.textContent);
+        expect(labels.slice(0, 2)).toEqual(['Jan', 'Feb']);
+        // One series: no legend.
+        expect(element.children.length).toBe(1);
+      });
+
+      it('draws marks given directly, series lines, a legend and a pie', () => {
+        const direct = render(C.Chart([C.BarMark({ x: plot('M', 'a'), y: plot('V', 5) }), C.RuleMark({ y: plot('T', 3) }).lineStyle({ dash: [5, 5] })]));
+        expect(tagsOf(direct).filter((tag) => tag === 'rect').length).toBe(1);
+        const rule = findAll(direct, (n) => n.getAttribute && n.getAttribute('stroke-dasharray'))[0];
+        expect(rule.getAttribute('stroke-dasharray')).toBe('5,5');
+
+        const temps = [['SF', 1, 5], ['SF', 2, 6], ['NY', 1, 2], ['NY', 2, 8]];
+        const lines = render(C.Chart(temps, ([city, day, t]) =>
+          C.LineMark({ x: plot('Day', day), y: plot('T', t) }).foregroundStyle({ by: plot('City', city) })));
+        const paths = findAll(lines, (n) => n.tagName === 'PATH');
+        expect(paths.map((path) => path.getAttribute('stroke'))).toEqual(['#007AFF', '#34C759']);
+        const legend = lines.children[1];
+        expect(legend.children.map((item) => item.children[1].textContent)).toEqual(['SF', 'NY']);
+
+        const pie = render(C.Chart([['A', 1], ['B', 3]], ([name, share]) =>
+          C.SectorMark({ angle: plot('Share', share), innerRadius: C.MarkDimension.ratio(0.5) }).foregroundStyle({ by: plot('Name', name) })));
+        const sectors = findAll(pie, (n) => n.tagName === 'PATH');
+        expect(sectors.map((sector) => sector.getAttribute('fill'))).toEqual(['#007AFF', '#34C759']);
+        expect(sectors[0].getAttribute('d').startsWith('M ')).toBe(true);
+        expect(tagsOf(pie).includes('g')).toBe(false);
+      });
+
+      it('a mark on its own renders as a one-mark chart', () => {
+        const element = render(C.PointMark({ x: plot('X', 1), y: plot('Y', 1) }).symbol('square'));
+        expect(element.dataset.view).toBe('PointMark');
+        expect(tagsOf(element).includes('rect')).toBe(true);
+      });
+
+      it('redraws when a State its data or marks read changes, and stops when disposed', () => {
+        const rows = new State([{ m: 'a', v: 1 }]);
+        let element = null;
+        const dispose = Signal.createRoot((d) => {
+          element = render(C.Chart(rows, (item) => C.BarMark({ x: plot('M', item.m), y: plot('V', item.v) })));
+          return d;
+        });
+        const bars = () => findAll(element, (n) => n.tagName === 'RECT').length;
+        expect(bars()).toBe(1);
+        rows.value = [{ m: 'a', v: 1 }, { m: 'b', v: 2 }, { m: 'c', v: 3 }];
+        Scheduler.flushSync();
+        expect(bars()).toBe(3);
+        expect(element.children.length).toBe(1);
+
+        const target = new State(2);
+        let ruled = null;
+        const disposeRule = Signal.createRoot((d) => {
+          ruled = render(C.Chart(() => [C.BarMark({ x: plot('M', 'a'), y: plot('V', 4) }), C.RuleMark({ y: plot('T', target.value) })]));
+          return d;
+        });
+        const ruleY = () => findAll(ruled, (n) => n.tagName === 'LINE' && n.getAttribute('stroke') === '#999999')[0].getAttribute('y1');
+        const before = ruleY();
+        target.value = 3;
+        Scheduler.flushSync();
+        expect(ruleY() !== before).toBe(true);
+
+        dispose();
+        disposeRule();
+        rows.value = [];
+        Scheduler.flushSync();
+        expect(bars()).toBe(3);
+      });
+    });
+
     // Gesture composition (#50): .simultaneousGesture, .highPriorityGesture,
     // .gesture(_:including:).
     describe('Gesture composition: simultaneous, high priority, GestureMask', () => {
