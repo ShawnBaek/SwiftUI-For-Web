@@ -133,11 +133,12 @@ chain.accessibilityHeading = (level) => {
 3. Create elements with `acquireElement(tagName)`, not `document.createElement`.
 4. Bind reactive props inside the renderer with `createEffect`, under the
    current owner, and clean up through the owner.
-5. Export the view from `src/index.js`, in both the default namespace and the
-   named exports, and add it to `src/index.d.ts`.
+5. Add the view to the `export { … }` list in `src/exports.js` (the entry
+   `src/index.js` re-exports it and builds the default namespace from it) and
+   declare it in `src/core.d.ts`.
 6. Add behavior tests in `Tests/View/<Name>Tests.js` and import them in
    [Tests/TestRunner.html](Tests/TestRunner.html). Add the view to
-   `src/core.js` as well, unless it belongs to Charts.
+   `src/core-exports.js` as well, unless it belongs to Charts.
 
 ### 4.3 Chainable freeze
 
@@ -229,7 +230,7 @@ those with the real signature by hand. Don't add names to
 - [ ] Failing test written first; tests assert behavior on the live path
 - [ ] `npm test` passes (unit, DOM-free suites, package checks, builder), and `node scripts/run-browser-tests.js` passes
 - [ ] New views are descriptors with `acquireElement`; reactive props bound in the renderer under an owner
-- [ ] Exported from src/index.js (default + named) and typed in src/index.d.ts
+- [ ] Listed in src/exports.js (and src/core-exports.js unless Charts) and typed in src/core.d.ts
 - [ ] Docs updated: ARCHITECTURE invariant status / ROADMAP / README as needed
 ```
 

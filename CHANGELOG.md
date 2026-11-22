@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The export lists move to `src/exports.js` and `src/core-exports.js`. The
+  entries `src/index.js` and `src/core.js` re-export them and build their
+  default export from the same list, so it is the only one to maintain (no
+  self-import, so bundling the entry with Rollup still works). The default namespace's members are read-only getters for the
+  same values, and it now also includes the `extend…` helpers (#47).
 - Type declarations for `GeometryProxy` (now a class, as at runtime),
   `ViewBuilder`, `TupleView`, `ConditionalContent`, `Empty`, `Any`,
   `UnevenRoundedRectangle`, `Bindable`, `NavigationDestination`,

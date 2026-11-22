@@ -437,7 +437,7 @@ function parseNamedImports(clause) {
 }
 
 async function createPublicExportMap() {
-  const indexFile = path.join(srcDir, 'index.js');
+  const indexFile = path.join(srcDir, 'exports.js');
   const source = await readFile(indexFile, 'utf8');
   const bindings = new Map();
 
