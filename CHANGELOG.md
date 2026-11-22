@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `DisclosureGroup` and `Menu` expose their state (#51). The disclosure
+  header reports `aria-expanded` and `aria-controls`; `Menu` follows the
+  menu-button pattern (`aria-haspopup="menu"`, `aria-expanded`,
+  `role="menu"`, `role="menuitem"`, and Escape returns focus to the button).
+  Collapsed content and a closed menu are `inert` and `aria-hidden`, so they
+  are no longer reachable by Tab or read by screen readers while hidden.
 - `TextField` (plain style), `Picker` (menu), `Slider` and `DatePicker` no
   longer set an inline `outline: none`, which hid the keyboard focus ring.
   The `:focus-visible` rule in the stylesheets now applies (#51).

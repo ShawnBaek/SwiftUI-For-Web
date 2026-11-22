@@ -25,6 +25,12 @@
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
+let menuCount = 0;
+function nextMenuId() {
+  menuCount += 1;
+  return `swiftui-menu-${menuCount}`;
+}
+
 /**
  * Menu view class
  */
@@ -129,6 +135,16 @@ export class MenuView extends View {
     dropdown.style.transformOrigin = 'top left';
     dropdown.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
     dropdown.style.pointerEvents = 'none';
+    // #51: menu-button pattern. The closed menu is hidden from keyboard and
+    // screen-reader access, not only made transparent.
+    dropdown.setAttribute('role', 'menu');
+    dropdown.id = nextMenuId();
+    dropdown.inert = true;
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.type = 'button';
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', dropdown.id);
     dropdown.style.display = 'flex';
     dropdown.style.flexDirection = 'column';
 
@@ -137,6 +153,7 @@ export class MenuView extends View {
       if (item instanceof View) {
         const menuItem = document.createElement('div');
         menuItem.dataset.menuItem = 'true';
+        menuItem.setAttribute('role', 'menuitem');
 
         // Check if it's a divider
         if (item.constructor.name === 'DividerView') {
@@ -188,6 +205,9 @@ export class MenuView extends View {
     // Toggle menu
     const openMenu = () => {
       this._isOpen = true;
+      trigger.setAttribute('aria-expanded', 'true');
+      dropdown.inert = false;
+      dropdown.removeAttribute('aria-hidden');
       dropdown.style.opacity = '1';
       dropdown.style.transform = 'scale(1) translateY(0)';
       dropdown.style.pointerEvents = 'auto';
@@ -196,6 +216,9 @@ export class MenuView extends View {
 
     const closeMenu = () => {
       this._isOpen = false;
+      trigger.setAttribute('aria-expanded', 'false');
+      dropdown.inert = true;
+      dropdown.setAttribute('aria-hidden', 'true');
       dropdown.style.opacity = '0';
       dropdown.style.transform = 'scale(0.95) translateY(-8px)';
       dropdown.style.pointerEvents = 'none';
@@ -224,6 +247,7 @@ export class MenuView extends View {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._isOpen) {
         closeMenu();
+        trigger.focus?.();
       }
     });
 

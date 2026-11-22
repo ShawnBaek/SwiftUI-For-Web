@@ -379,6 +379,8 @@ async function runTests() {
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack } = await import('./src/View/Navigation/NavigationStack.js');
     const { Picker } = await import('./src/View/Control/Picker.js');
+    const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
+    const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
     const focusRingControls = {
       Slider: (await import('./src/View/Control/Slider.js')).Slider,
       DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
@@ -2880,6 +2882,46 @@ async function runTests() {
 
       // #51: the switch is a native button with role="switch".
       // #51: no control suppresses the :focus-visible ring with inline styles.
+      it('DisclosureGroup exposes aria-expanded and hides collapsed content', () => {
+        const element = A11yDisclosureGroup('Details', new GroupView(ModifierText('Body')))._render();
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const header = find(element, (node) => node.dataset?.disclosurePart === 'header');
+        const content = find(element, (node) => node.dataset?.disclosurePart === 'content');
+        expect(header.getAttribute('aria-expanded')).toBe('false');
+        expect(header.getAttribute('aria-controls')).toBe(content.id);
+        expect(content.inert).toBe(true);
+        expect(content.getAttribute('aria-hidden')).toBe('true');
+        header.click();
+        expect(header.getAttribute('aria-expanded')).toBe('true');
+        expect(content.inert).toBe(false);
+        expect(content.getAttribute('aria-hidden')).toBe(null);
+      });
+
+      it('Menu follows the menu-button pattern and hides the closed menu', () => {
+        // The Node test document has no addEventListener; Menu registers
+        // outside-click and Escape listeners on it.
+        const hadListener = typeof document.addEventListener === 'function';
+        if (!hadListener) document.addEventListener = () => {};
+        let element;
+        try {
+          element = A11yMenu('Actions', new GroupView(ModifierText('Copy')))._render();
+        } finally {
+          if (!hadListener) delete document.addEventListener;
+        }
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const trigger = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
+        const menu = find(element, (node) => node.dataset?.menuPart === 'dropdown');
+        expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(trigger.getAttribute('aria-controls')).toBe(menu.id);
+        expect(menu.getAttribute('role')).toBe('menu');
+        expect(menu.inert).toBe(true);
+        trigger.click();
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        expect(menu.inert).toBe(false);
+        expect(menu.getAttribute('aria-hidden')).toBe(null);
+      });
+
       it('form controls leave the focus ring to :focus-visible', () => {
         const { Slider, DatePicker, TextField } = focusRingControls;
         const all = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => all(c, out)); return out; };
