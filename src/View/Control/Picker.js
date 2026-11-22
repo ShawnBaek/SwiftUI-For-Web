@@ -19,6 +19,7 @@
  * .pickerStyle(PickerStyle.wheel)
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
@@ -465,8 +466,11 @@ export class PickerView extends View {
 /**
  * Factory function for Picker
  */
+// A view descriptor rendered by PickerView (#48).
+const makePicker = defineControl('Picker', PickerView, ['pickerStyle']);
+
 export function Picker(...args) {
-  return new PickerView(...args);
+  return makePicker(...args);
 }
 
 // Add tag method to View class

@@ -13,13 +13,13 @@ describe('Toggle', () => {
   describe('Factory Function', () => {
     it('should create a ToggleView instance', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle).toBeInstanceOf(ToggleView);
     });
 
     it('should create a View instance', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle).toBeInstanceOf(View);
     });
   });
@@ -27,7 +27,7 @@ describe('Toggle', () => {
   describe('Constructor - Binding Only', () => {
     it('should accept binding only', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle._isOn).toBeInstanceOf(Binding);
       expect(toggle._label).toBeNull();
     });
@@ -36,7 +36,7 @@ describe('Toggle', () => {
   describe('Constructor - Label and Binding', () => {
     it('should accept string label and binding', () => {
       const state = new State(false);
-      const toggle = Toggle('Enable notifications', state.binding);
+      const toggle = new ToggleView('Enable notifications', state.binding);
       expect(toggle._label).toBe('Enable notifications');
       expect(toggle._isOn).toBeInstanceOf(Binding);
     });
@@ -45,7 +45,7 @@ describe('Toggle', () => {
   describe('Constructor - Options Object', () => {
     it('should accept options object', () => {
       const state = new State(true);
-      const toggle = Toggle({
+      const toggle = new ToggleView({
         label: 'Dark Mode',
         isOn: state.binding
       });
@@ -59,7 +59,7 @@ describe('Toggle', () => {
       const state = new State(false);
       // Toggle checks `instanceof View`, so we need a real View instance
       const labelView = new View();
-      const toggle = Toggle(labelView, state.binding);
+      const toggle = new ToggleView(labelView, state.binding);
       expect(toggle._labelView).toBe(labelView);
     });
   });
@@ -67,28 +67,28 @@ describe('Toggle', () => {
   describe('_render() - Switch Style', () => {
     it('should render a div container', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       const element = toggle._render();
       expect(element.tagName).toBe('DIV');
     });
 
     it('should set data-view to Toggle', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       const element = toggle._render();
       expect(element.dataset.view).toBe('Toggle');
     });
 
     it('should set cursor to pointer', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       const element = toggle._render();
       expect(element.style.cursor).toBe('pointer');
     });
 
     it('should render label text', () => {
       const state = new State(false);
-      const toggle = Toggle('My Label', state.binding);
+      const toggle = new ToggleView('My Label', state.binding);
       const element = toggle._render();
       expect(element.textContent).toContain('My Label');
     });
@@ -97,14 +97,14 @@ describe('Toggle', () => {
   describe('_render() - Checkbox Style', () => {
     it('should render a label element', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox');
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
       const element = toggle._render();
       expect(element.tagName).toBe('LABEL');
     });
 
     it('should contain a checkbox input', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox');
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
       const element = toggle._render();
       const checkbox = element.children[0];
       expect(checkbox.tagName).toBe('INPUT');
@@ -113,7 +113,7 @@ describe('Toggle', () => {
 
     it('should reflect initial state', () => {
       const state = new State(true);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox');
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
       const element = toggle._render();
       const checkbox = element.children[0];
       expect(checkbox.checked).toBe(true);
@@ -123,14 +123,14 @@ describe('Toggle', () => {
   describe('_render() - Button Style', () => {
     it('should render a button element', () => {
       const state = new State(false);
-      const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+      const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button');
       const element = toggle._render();
       expect(element.tagName).toBe('BUTTON');
     });
 
     it('should show label as button text', () => {
       const state = new State(false);
-      const toggle = Toggle('Click Me', state.binding).toggleStyle('button');
+      const toggle = new ToggleView('Click Me', state.binding).toggleStyle('button');
       const element = toggle._render();
       expect(element.textContent).toBe('Click Me');
     });
@@ -139,7 +139,7 @@ describe('Toggle', () => {
   describe('Two-Way Binding', () => {
     it('should update binding when toggled (switch)', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       const element = toggle._render();
 
       element.click();
@@ -149,7 +149,7 @@ describe('Toggle', () => {
 
     it('should toggle back to false', () => {
       const state = new State(true);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       const element = toggle._render();
 
       element.click();
@@ -159,7 +159,7 @@ describe('Toggle', () => {
 
     it('should update binding when checkbox changes', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox');
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
       const element = toggle._render();
       const checkbox = element.children[0];
 
@@ -171,7 +171,7 @@ describe('Toggle', () => {
 
     it('should update binding when button clicked', () => {
       const state = new State(false);
-      const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+      const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button');
       const element = toggle._render();
 
       element.click();
@@ -183,21 +183,21 @@ describe('Toggle', () => {
   describe('disabled()', () => {
     it('should set cursor to not-allowed', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).disabled();
+      const toggle = new ToggleView(state.binding).disabled();
       const element = toggle._render();
       expect(element.style.cursor).toBe('not-allowed');
     });
 
     it('should set opacity to 0.5', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).disabled();
+      const toggle = new ToggleView(state.binding).disabled();
       const element = toggle._render();
       expect(element.style.opacity).toBe('0.5');
     });
 
     it('should not toggle when disabled', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).disabled();
+      const toggle = new ToggleView(state.binding).disabled();
       const element = toggle._render();
 
       element.click();
@@ -207,7 +207,7 @@ describe('Toggle', () => {
 
     it('should disable checkbox input', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox').disabled();
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox').disabled();
       const element = toggle._render();
       const checkbox = element.children[0];
       expect(checkbox.disabled).toBe(true);
@@ -215,21 +215,21 @@ describe('Toggle', () => {
 
     it('should disable button', () => {
       const state = new State(false);
-      const toggle = Toggle('Toggle', state.binding).toggleStyle('button').disabled();
+      const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button').disabled();
       const element = toggle._render();
       expect(element.disabled).toBe(true);
     });
 
     it('should accept false to enable', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).disabled(false);
+      const toggle = new ToggleView(state.binding).disabled(false);
       const element = toggle._render();
       expect(element.style.cursor).toBe('pointer');
     });
 
     it('should return this for chaining', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle.disabled()).toBe(toggle);
     });
   });
@@ -237,25 +237,25 @@ describe('Toggle', () => {
   describe('toggleStyle()', () => {
     it('should default to switch style', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle._style).toBe('switch');
     });
 
     it('should set checkbox style', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('checkbox');
+      const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
       expect(toggle._style).toBe('checkbox');
     });
 
     it('should set button style', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).toggleStyle('button');
+      const toggle = new ToggleView(state.binding).toggleStyle('button');
       expect(toggle._style).toBe('button');
     });
 
     it('should return this for chaining', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle.toggleStyle('checkbox')).toBe(toggle);
     });
   });
@@ -263,13 +263,13 @@ describe('Toggle', () => {
   describe('tint()', () => {
     it('should set tint color', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).tint('purple');
+      const toggle = new ToggleView(state.binding).tint('purple');
       expect(toggle._tint).toBe('purple');
     });
 
     it('should return this for chaining', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding);
+      const toggle = new ToggleView(state.binding);
       expect(toggle.tint('blue')).toBe(toggle);
     });
   });
@@ -277,14 +277,14 @@ describe('Toggle', () => {
   describe('Modifier Chaining', () => {
     it('should support padding modifier', () => {
       const state = new State(false);
-      const toggle = Toggle(state.binding).padding(20);
+      const toggle = new ToggleView(state.binding).padding(20);
       const element = toggle._render();
       expect(element.style.padding).toBe('20px');
     });
 
     it('should support chaining multiple modifiers', () => {
       const state = new State(false);
-      const toggle = Toggle('Label', state.binding)
+      const toggle = new ToggleView('Label', state.binding)
         .toggleStyle('checkbox')
         .disabled()
         .padding(10);

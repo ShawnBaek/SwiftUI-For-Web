@@ -30,6 +30,8 @@
  * })
  */
 
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderAnyView } from '../../Core/Renderer.js';
 import { View } from '../../Core/View.js';
 import { Environment, EnvironmentValues, UserInterfaceSizeClass } from '../../Data/Environment.js';
 
@@ -166,8 +168,8 @@ class NavigationSplitViewClass extends View {
 
     if (this.sidebarBuilder) {
       const sidebarView = this.sidebarBuilder(this._createNavigationContext());
-      if (sidebarView instanceof View) {
-        sidebarWrapper.appendChild(sidebarView._render());
+      if (sidebarView instanceof View || isDescriptor(sidebarView)) {
+        sidebarWrapper.appendChild(renderAnyView(sidebarView));
       }
     }
 
@@ -214,8 +216,8 @@ class NavigationSplitViewClass extends View {
     `;
     if (this.detailBuilder) {
       const detailView = this.detailBuilder();
-      if (detailView instanceof View) {
-        detailContent.appendChild(detailView._render());
+      if (detailView instanceof View || isDescriptor(detailView)) {
+        detailContent.appendChild(renderAnyView(detailView));
       }
     }
     detailWrapper.appendChild(detailContent);
@@ -262,8 +264,8 @@ class NavigationSplitViewClass extends View {
 
       if (this.sidebarBuilder) {
         const sidebarView = this.sidebarBuilder(this._createNavigationContext());
-        if (sidebarView instanceof View) {
-          sidebar.appendChild(sidebarView._render());
+        if (sidebarView instanceof View || isDescriptor(sidebarView)) {
+          sidebar.appendChild(renderAnyView(sidebarView));
         }
       }
       container.appendChild(sidebar);
@@ -281,8 +283,8 @@ class NavigationSplitViewClass extends View {
 
     if (this.detailBuilder) {
       const detailView = this.detailBuilder();
-      if (detailView instanceof View) {
-        detail.appendChild(detailView._render());
+      if (detailView instanceof View || isDescriptor(detailView)) {
+        detail.appendChild(renderAnyView(detailView));
       }
     }
     container.appendChild(detail);
@@ -322,8 +324,8 @@ class NavigationSplitViewClass extends View {
 
       if (this.sidebarBuilder) {
         const sidebarView = this.sidebarBuilder(this._createNavigationContext());
-        if (sidebarView instanceof View) {
-          sidebar.appendChild(sidebarView._render());
+        if (sidebarView instanceof View || isDescriptor(sidebarView)) {
+          sidebar.appendChild(renderAnyView(sidebarView));
         }
       }
       container.appendChild(sidebar);
@@ -345,8 +347,8 @@ class NavigationSplitViewClass extends View {
       `;
 
       const contentView = this.contentBuilder();
-      if (contentView instanceof View) {
-        content.appendChild(contentView._render());
+      if (contentView instanceof View || isDescriptor(contentView)) {
+        content.appendChild(renderAnyView(contentView));
       }
       container.appendChild(content);
     }
@@ -363,8 +365,8 @@ class NavigationSplitViewClass extends View {
 
     if (this.detailBuilder) {
       const detailView = this.detailBuilder();
-      if (detailView instanceof View) {
-        detail.appendChild(detailView._render());
+      if (detailView instanceof View || isDescriptor(detailView)) {
+        detail.appendChild(renderAnyView(detailView));
       }
     }
     container.appendChild(detail);
@@ -388,9 +390,9 @@ class NavigationSplitViewClass extends View {
 
             // Update detail content
             const detailContent = this._detailWrapper.querySelector('div:last-child');
-            if (detailContent && view instanceof View) {
+            if (detailContent && (view instanceof View || isDescriptor(view))) {
               detailContent.innerHTML = '';
-              detailContent.appendChild(view._render());
+              detailContent.appendChild(renderAnyView(view));
             }
           }
         } else {
@@ -414,9 +416,9 @@ class NavigationSplitViewClass extends View {
     if (!this._container) return;
 
     const detailColumn = this._container.querySelector('[data-column="detail"]');
-    if (detailColumn && view instanceof View) {
+    if (detailColumn && (view instanceof View || isDescriptor(view))) {
       detailColumn.innerHTML = '';
-      detailColumn.appendChild(view._render());
+      detailColumn.appendChild(renderAnyView(view));
     }
   }
 

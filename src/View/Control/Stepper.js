@@ -17,6 +17,7 @@
  * })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
@@ -233,8 +234,11 @@ export class StepperView extends View {
 /**
  * Factory function for Stepper
  */
+// A view descriptor rendered by StepperView (#48).
+const makeStepper = defineControl('Stepper', StepperView, []);
+
 export function Stepper(...args) {
-  return new StepperView(...args);
+  return makeStepper(...args);
 }
 
 export default Stepper;

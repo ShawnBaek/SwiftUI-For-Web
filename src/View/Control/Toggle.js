@@ -10,6 +10,7 @@
  *   Toggle({ label: 'Label', isOn: binding })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
@@ -320,8 +321,11 @@ export class ToggleView extends View {
  * @param {Binding} [isOnBinding] - Boolean binding
  * @returns {ToggleView}
  */
+// A view descriptor rendered by ToggleView (#48).
+const makeToggle = defineControl('Toggle', ToggleView, ['disabled', 'toggleStyle', 'tint']);
+
 export function Toggle(labelOrBindingOrOptions, isOnBinding) {
-  return new ToggleView(labelOrBindingOrOptions, isOnBinding);
+  return makeToggle(labelOrBindingOrOptions, isOnBinding);
 }
 
 export default Toggle;

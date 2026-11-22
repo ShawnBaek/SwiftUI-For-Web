@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- One view model (#48). `Toggle`, `Slider`, `Stepper`, `TextField`,
+  `SecureField`, `Picker`, `DatePicker` and `ColorPicker` return view
+  descriptors with the full modifier table plus their own methods
+  (`toggleStyle`, `pickerStyle`, `textFieldStyle`, …, usable after any
+  modifier). They render through `Renderer.render`, so ordered modifier
+  layers, owned reactive modifiers and static rendering apply to them. The
+  `*View` classes stay exported for one minor release; code that read a
+  factory result's internals (`Toggle(...)._label`) should construct the
+  class instead. Every descriptor view shares one modifier table
+  (`src/Core/Chainable.js`) instead of eight drifting copies, and the dead
+  `Core/ViewFactory.js` and `Core/index.js` are removed.
+  `NavigationSplitView`, `Label`, `WindowGroup` scenes and `ViewBuilder`
+  render descriptor content too.
 - Security: `NavigationLink`'s `url` accepts only relative URLs and
   `http:`, `https:`, `mailto:` and `tel:`. A `javascript:`, `data:` or other
   scheme (including ones disguised with whitespace or case) is dropped with

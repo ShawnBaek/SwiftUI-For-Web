@@ -27,6 +27,8 @@
  * );
  */
 
+import { isDescriptor } from './ViewDescriptor.js';
+import { render as renderAnyView } from './Renderer.js';
 import { View } from './View.js';
 
 /**
@@ -139,8 +141,8 @@ export class TupleView extends View {
     const fragment = document.createDocumentFragment();
 
     for (const view of this._views) {
-      if (view instanceof View) {
-        fragment.appendChild(view._render());
+      if (view instanceof View || isDescriptor(view)) {
+        fragment.appendChild(renderAnyView(view));
       } else if (view instanceof Node) {
         fragment.appendChild(view);
       }
@@ -207,8 +209,8 @@ export class AnyView extends View {
   }
 
   _render() {
-    if (this._wrappedView instanceof View) {
-      return this._wrappedView._render();
+    if (this._wrappedView instanceof View || isDescriptor(this._wrappedView)) {
+      return renderAnyView(this._wrappedView);
     }
     return document.createComment('AnyView: empty');
   }
@@ -229,7 +231,7 @@ export function Any(view) {
 export function buildView(builder) {
   const result = builder();
 
-  if (result instanceof View) {
+  if (result instanceof View || isDescriptor(result)) {
     return result;
   }
 

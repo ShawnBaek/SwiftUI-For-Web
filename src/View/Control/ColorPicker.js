@@ -10,6 +10,7 @@
  * ColorPicker($color, { supportsOpacity: false })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
@@ -164,8 +165,11 @@ export class ColorPickerView extends View {
 /**
  * Factory function for ColorPicker
  */
+// A view descriptor rendered by ColorPickerView (#48).
+const makeColorPicker = defineControl('ColorPicker', ColorPickerView, []);
+
 export function ColorPicker(...args) {
-  return new ColorPickerView(...args);
+  return makeColorPicker(...args);
 }
 
 export default ColorPicker;

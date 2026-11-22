@@ -10,6 +10,8 @@
  * Label({ title: () => Text('Custom'), icon: () => Image.systemName('heart') })
  */
 
+import { isDescriptor } from '../Core/ViewDescriptor.js';
+import { render as renderAnyView } from '../Core/Renderer.js';
 import { View } from '../Core/View.js';
 import { Color } from '../Graphic/Color.js';
 
@@ -157,8 +159,8 @@ export class LabelView extends View {
 
       if (this._iconBuilder) {
         const iconView = this._iconBuilder();
-        if (iconView instanceof View) {
-          const rendered = iconView._render();
+        if (iconView instanceof View || isDescriptor(iconView)) {
+          const rendered = renderAnyView(iconView);
           iconEl.appendChild(rendered);
         }
       } else if (this._systemImage) {
@@ -183,8 +185,8 @@ export class LabelView extends View {
 
       if (this._titleBuilder) {
         const titleView = this._titleBuilder();
-        if (titleView instanceof View) {
-          const rendered = titleView._render();
+        if (titleView instanceof View || isDescriptor(titleView)) {
+          const rendered = renderAnyView(titleView);
           titleEl.appendChild(rendered);
         }
       } else if (this._title) {

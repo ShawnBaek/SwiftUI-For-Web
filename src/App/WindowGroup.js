@@ -29,6 +29,7 @@
  * )
  */
 
+import { render as renderAnyView } from '../Core/Renderer.js';
 import { View } from '../Core/View.js';
 import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../Core/Renderer.js';
@@ -39,7 +40,7 @@ function renderSceneContent(content) {
   const view = typeof content === 'function' && !(content instanceof View) && !isDescriptor(content)
     ? content()
     : content;
-  if (view instanceof View) return view._render();
+  if (view instanceof View || isDescriptor(view)) return renderAnyView(view);
   if (isDescriptor(view)) return renderDescriptor(view);
   return null;
 }
@@ -240,8 +241,8 @@ export class DocumentGroupView extends View {
     if (typeof this._content === 'function') {
       // Content receives document binding
       const view = this._content({ document: null });
-      if (view instanceof View) {
-        container.appendChild(view._render());
+      if (view instanceof View || isDescriptor(view)) {
+        container.appendChild(renderAnyView(view));
       }
     }
 
