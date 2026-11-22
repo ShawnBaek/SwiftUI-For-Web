@@ -13,6 +13,12 @@ const testResults = {
 
 let currentSuite = null;
 
+// Promises of async tests that have not settled yet
+const pendingTests = [];
+
+// The async test that is running, followed by the tests queued behind it
+let asyncChain = null;
+
 // Stack of beforeEach/afterEach hooks for nested describe blocks
 const hookStack = [];
 
@@ -57,6 +63,12 @@ export function describe(name, fn) {
   try {
     fn();
   } catch (e) {
+    // A suite that throws while it is being defined is a failure, not a
+    // suite with fewer tests.
+    testResults.total++;
+    testResults.failed++;
+    suite.failed++;
+    suite.tests.push({ name: '(suite setup)', passed: false, error: e.message });
     console.error(`Suite error: ${e.message}`);
   }
 
@@ -86,34 +98,94 @@ function collectHooks(type) {
  */
 export function it(name, fn) {
   testResults.total++;
+  const suite = currentSuite;
+  const afterHooks = collectHooks('afterEach');
 
-  try {
-    // Run all beforeEach hooks (outer to inner)
-    for (const hook of collectHooks('beforeEach')) {
-      hook();
-    }
-
-    fn();
-
-    // Run all afterEach hooks (outer to inner)
-    for (const hook of collectHooks('afterEach')) {
-      hook();
-    }
-
+  const pass = () => {
     testResults.passed++;
-    if (currentSuite) {
-      currentSuite.passed++;
-      currentSuite.tests.push({ name, passed: true });
+    if (suite) {
+      suite.passed++;
+      suite.tests.push({ name, passed: true });
     }
     console.log(`  %c\u2713 ${name}`, 'color: #34C759;');
-  } catch (e) {
+  };
+  const fail = (e) => {
+    const message = e && e.message ? e.message : String(e);
     testResults.failed++;
-    if (currentSuite) {
-      currentSuite.failed++;
-      currentSuite.tests.push({ name, passed: false, error: e.message });
+    if (suite) {
+      suite.failed++;
+      suite.tests.push({ name, passed: false, error: message });
     }
     console.log(`  %c\u2717 ${name}`, 'color: #FF3B30;');
-    console.error(`    ${e.message}`);
+    console.error(`    ${message}`);
+  };
+  // afterEach hooks always run, so a failing test cannot leak its state into
+  // the next one. The test's own error wins over a hook error.
+  const finish = (error, failed) => {
+    for (const hook of afterHooks) {
+      try {
+        hook();
+      } catch (hookError) {
+        if (!failed) {
+          failed = true;
+          error = hookError;
+        }
+      }
+    }
+    if (failed) fail(error);
+    else pass();
+  };
+
+  const beforeHooks = collectHooks('beforeEach');
+  // Runs the test. Returns a promise if the test is async.
+  const run = () => {
+    let result;
+    try {
+      // Run all beforeEach hooks (outer to inner)
+      for (const hook of beforeHooks) {
+        hook();
+      }
+      result = fn();
+    } catch (e) {
+      finish(e, true);
+      return undefined;
+    }
+    if (result && typeof result.then === 'function') {
+      return result.then(() => finish(undefined, false), (e) => finish(e, true));
+    }
+    finish(undefined, false);
+    return undefined;
+  };
+
+  // Tests never overlap: while an async test is running, later tests wait
+  // for it. The runner waits for all of them with whenSettled() before it
+  // reports.
+  if (asyncChain) {
+    asyncChain = asyncChain.then(run);
+    return;
+  }
+  const running = run();
+  if (running) {
+    asyncChain = running;
+    pendingTests.push(drainAsyncChain());
+  }
+}
+
+async function drainAsyncChain() {
+  while (asyncChain) {
+    const current = asyncChain;
+    await current;
+    if (asyncChain === current) asyncChain = null;
+  }
+}
+
+/**
+ * Wait for every async test started so far.
+ * @returns {Promise<void>}
+ */
+export async function whenSettled() {
+  while (pendingTests.length > 0) {
+    await Promise.all(pendingTests.splice(0));
   }
 }
 
@@ -344,6 +416,16 @@ export function printSummary() {
 export function renderResults(selector = '#test-output') {
   const container = document.querySelector(selector);
   if (!container) return;
+
+  // Machine-readable result for scripts/run-browser-tests.js.
+  container.dataset.total = String(testResults.total);
+  container.dataset.passed = String(testResults.passed);
+  container.dataset.failed = String(testResults.failed);
+  container.dataset.failures = JSON.stringify(
+    testResults.suites.flatMap((suite) => suite.tests
+      .filter((test) => !test.passed)
+      .map((test) => ({ suite: suite.name, test: test.name, error: test.error })))
+  );
 
   const html = `
     <style>

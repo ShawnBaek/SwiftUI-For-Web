@@ -77,19 +77,27 @@ describe('Shader / ShaderLibrary', () => {
     it('sets element.style.filter to url(#shaderId)', () => {
       const shader = ShaderLibrary.default.grayscale(1);
       const el = render(Text('Hi').colorEffect(shader));
-      expect(el.style.filter).toContain(`url(#${shader.id})`);
+      // Browsers serialize url(#id) as url("#id"), so look for the id.
+      expect(el.style.filter).toContain(shader.id);
     });
 
     it('composes chained effects with space-separated url() refs', () => {
       const a = ShaderLibrary.default.invert(1);
       const b = ShaderLibrary.default.blur(2);
       const el = render(Text('Hi').colorEffect(a).layerEffect(b));
-      expect(el.style.filter).toContain(`url(#${a.id})`);
-      expect(el.style.filter).toContain(`url(#${b.id})`);
+      // Browsers serialize url(#id) as url("#id"), so look for the ids.
+      expect(el.style.filter).toContain(a.id);
+      expect(el.style.filter).toContain(b.id);
       // a comes before b — CSS filter applies left-to-right.
-      const aIdx = el.style.filter.indexOf(`url(#${a.id})`);
-      const bIdx = el.style.filter.indexOf(`url(#${b.id})`);
+      const aIdx = el.style.filter.indexOf(a.id);
+      const bIdx = el.style.filter.indexOf(b.id);
       expect(aIdx < bIdx).toBeTruthy();
+    });
+
+    it('does not repeat a shader that is applied twice', () => {
+      const shader = ShaderLibrary.default.grayscale(1);
+      const el = render(Text('Hi').colorEffect(shader).colorEffect(shader));
+      expect(el.style.filter.split(shader.id).length - 1).toBe(1);
     });
 
     it('returns a new immutable descriptor', () => {

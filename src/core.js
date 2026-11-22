@@ -59,13 +59,13 @@ import {
 // =============================================================================
 // View Components
 // =============================================================================
-import { Text, TextView } from './View/Text.js';
+import { Text, AccessibilityHeadingLevel } from './View/Text.js';
 import { Image, ImageView, ContentMode } from './View/Image.js';
 import { Label, LabelView, LabelStyle, SystemIcons } from './View/Label.js';
 import { SearchFieldPlacement } from './View/Search.js';
 
 // Controls
-import { Button, ButtonView } from './View/Control/Button.js';
+import { Button } from './View/Control/Button.js';
 import { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
 import { Toggle, ToggleView } from './View/Control/Toggle.js';
 import { Slider, SliderView } from './View/Control/Slider.js';
@@ -77,7 +77,16 @@ import { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
 
 // Lists
 import { List, ListView, ListStyle } from './View/List/List.js';
-import { ForEach, ForEachView, Range } from './View/List/ForEach.js';
+import { ForEach, Range } from './View/List/ForEach.js';
+
+// Reactive control flow (signal engine)
+import { Show } from './View/ControlFlow/Show.js';
+import { For } from './View/ControlFlow/For.js';
+
+// Public reactive helpers — for modifier-body reactivity that the
+// framework can't infer (e.g. setting el.style from a tracked read).
+// Returns a disposer; cleanup happens automatically via the active owner.
+import { createEffect as effect, untrack } from './Data/Signal.js';
 
 // Containers
 import { ScrollView, ScrollViewView, Axis } from './View/Container/ScrollView.js';
@@ -99,11 +108,11 @@ import {
 // =============================================================================
 // Layout
 // =============================================================================
-import { VStack, VStackView } from './Layout/Stack/VStack.js';
-import { HStack, HStackView } from './Layout/Stack/HStack.js';
-import { ZStack, ZStackView } from './Layout/Stack/ZStack.js';
-import { Spacer, SpacerView } from './Layout/Spacer.js';
-import { Divider, DividerView } from './Layout/Divider.js';
+import { VStack } from './Layout/Stack/VStack.js';
+import { HStack } from './Layout/Stack/HStack.js';
+import { ZStack } from './Layout/Stack/ZStack.js';
+import { Spacer } from './Layout/Spacer.js';
+import { Divider } from './Layout/Divider.js';
 import { GeometryReader, GeometryReaderView, GeometryProxy } from './Layout/GeometryReader.js';
 import { Alignment, HorizontalAlignment, VerticalAlignment } from './Layout/Alignment.js';
 import {
@@ -140,6 +149,7 @@ import {
 import { Color, ColorValue } from './Graphic/Color.js';
 import { Font, FontValue } from './Graphic/Font.js';
 import { LinearGradient, RadialGradient, AngularGradient, GradientDirection, UnitPoint } from './Graphic/Gradient.js';
+import { Shader, ShaderLibrary, ShaderKind } from './Graphic/Shader.js';
 
 // =============================================================================
 // Animation
@@ -155,8 +165,48 @@ import {
   currentAnimation,
   extendViewWithAnimation,
   isViewTransitionSupported,
-  prefersReducedMotion
+  prefersReducedMotion,
+  promoteToGPULayer,
+  demoteFromGPULayer
 } from './Animation/Animation.js';
+
+// =============================================================================
+// Performance Infrastructure
+// =============================================================================
+import {
+  scheduleWork,
+  schedulePostFlush,
+  batchUpdates,
+  endBatch,
+  batch,
+  flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats,
+  resetSchedulerStats,
+  SyncLane,
+  DiscreteLane,
+  DefaultLane,
+  TransitionLane,
+  IdleLane
+} from './Core/Scheduler.js';
+import {
+  acquireElement,
+  releaseElement,
+  releaseTree,
+  getPoolStats,
+  clearPools
+} from './Core/ElementPool.js';
+import {
+  delegateEvent,
+  undelegateEvent,
+  initDelegation,
+  teardownDelegation
+} from './Core/EventDelegate.js';
+import {
+  onAppear as lifecycleOnAppear,
+  onDisappear as lifecycleOnDisappear,
+  getLifecycleStats
+} from './Core/LifecycleObserver.js';
 
 // =============================================================================
 // Gestures
@@ -192,6 +242,13 @@ const VERSION = '2.0.0-alpha.1';
 // =============================================================================
 // Default Export - Core SwiftUI (without Charts)
 // =============================================================================
+/**
+ * SwiftUI-For-Web core namespace: everything in the full entry except Charts.
+ * Import with: import SwiftUI from 'swiftui-for-web/core'
+ *
+ * Keep this file in step with src/index.js: `npm test` fails when the two
+ * export lists differ by anything other than the ./charts exports.
+ */
 const SwiftUICore = {
   // Version
   VERSION,
@@ -217,13 +274,14 @@ const SwiftUICore = {
   UserInterfaceSizeClass, UserInterfaceIdiom, currentDeviceIdiom,
 
   // Views
-  Text, TextView,
+  Text,
+  AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
   SearchFieldPlacement,
 
   // Controls
-  Button, ButtonView,
+  Button,
   TextField, TextFieldView,
   SecureField, SecureFieldView,
   Toggle, ToggleView,
@@ -236,7 +294,13 @@ const SwiftUICore = {
 
   // Lists
   List, ListView, ListStyle,
-  ForEach, ForEachView, Range,
+  ForEach, Range,
+
+  // Reactive control flow (signal engine)
+  Show,
+  For,
+  effect,
+  untrack,
 
   // Containers
   ScrollView, ScrollViewView, Axis,
@@ -252,11 +316,11 @@ const SwiftUICore = {
   TabView, TabViewView, TabViewStyle,
 
   // Layout
-  VStack, VStackView,
-  HStack, HStackView,
-  ZStack, ZStackView,
-  Spacer, SpacerView,
-  Divider, DividerView,
+  VStack,
+  HStack,
+  ZStack,
+  Spacer,
+  Divider,
   GeometryReader, GeometryReaderView, GeometryProxy,
   Alignment, HorizontalAlignment, VerticalAlignment,
   Grid, GridView,
@@ -284,6 +348,7 @@ const SwiftUICore = {
   Font, FontValue,
   LinearGradient, RadialGradient, AngularGradient,
   GradientDirection, UnitPoint,
+  Shader, ShaderLibrary, ShaderKind,
 
   // Animation
   Animation, AnyTransition, Namespace,
@@ -304,14 +369,25 @@ const SwiftUICore = {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView
+  DocumentGroup, DocumentGroupView,
+
+  // Performance Infrastructure
+  scheduleWork, schedulePostFlush,
+  batchUpdates, endBatch, batch, flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats, resetSchedulerStats,
+  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
+  acquireElement, releaseElement, releaseTree,
+  getPoolStats, clearPools,
+  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
+  promoteToGPULayer, demoteFromGPULayer
 };
 
 // Default export
 export default SwiftUICore;
 
 // =============================================================================
-// Named Exports
+// Named Exports (for backward compatibility and tree-shaking)
 // =============================================================================
 export {
   VERSION,
@@ -338,13 +414,14 @@ export {
   extendViewWithEnvironment,
 
   // Views
-  Text, TextView,
+  Text,
+  AccessibilityHeadingLevel,
   Image, ImageView, ContentMode,
   Label, LabelView, LabelStyle, SystemIcons,
   SearchFieldPlacement,
 
   // Controls
-  Button, ButtonView,
+  Button,
   TextField, TextFieldView,
   SecureField, SecureFieldView,
   Toggle, ToggleView,
@@ -357,7 +434,13 @@ export {
 
   // Lists
   List, ListView, ListStyle,
-  ForEach, ForEachView, Range,
+  ForEach, Range,
+
+  // Reactive control flow (signal engine)
+  Show,
+  For,
+  effect,
+  untrack,
 
   // Containers
   ScrollView, ScrollViewView, Axis,
@@ -374,11 +457,11 @@ export {
   TabView, TabViewView, TabViewStyle,
 
   // Layout
-  VStack, VStackView,
-  HStack, HStackView,
-  ZStack, ZStackView,
-  Spacer, SpacerView,
-  Divider, DividerView,
+  VStack,
+  HStack,
+  ZStack,
+  Spacer,
+  Divider,
   GeometryReader, GeometryReaderView, GeometryProxy,
   Alignment, HorizontalAlignment, VerticalAlignment,
   Grid, GridView,
@@ -406,6 +489,7 @@ export {
   Font, FontValue,
   LinearGradient, RadialGradient, AngularGradient,
   GradientDirection, UnitPoint,
+  Shader, ShaderLibrary, ShaderKind,
 
   // Animation
   Animation, AnyTransition, Namespace,
@@ -428,5 +512,16 @@ export {
   WindowGroup, WindowGroupView,
   WindowResizability, WindowStyle,
   Scene, Settings, SettingsView,
-  DocumentGroup, DocumentGroupView
+  DocumentGroup, DocumentGroupView,
+
+  // Performance Infrastructure
+  scheduleWork, schedulePostFlush,
+  batchUpdates, endBatch, batch, flushSync,
+  enqueueDOMWrite,
+  getSchedulerStats, resetSchedulerStats,
+  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
+  acquireElement, releaseElement, releaseTree,
+  getPoolStats, clearPools,
+  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
+  promoteToGPULayer, demoteFromGPULayer
 };

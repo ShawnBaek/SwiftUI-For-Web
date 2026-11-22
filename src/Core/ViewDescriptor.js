@@ -370,6 +370,7 @@ export const ModifierType = {
   ON_APPEAR: 'onAppear',
   ON_DISAPPEAR: 'onDisappear',
   ON_CHANGE: 'onChange',
+  TASK: 'task',
   SEARCHABLE: 'searchable',
   SHEET: 'sheet',
   ACCESSIBILITY_LABEL: 'accessibilityLabel',

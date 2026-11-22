@@ -12,7 +12,7 @@ Under the hood, view bodies run **once at mount**. State changes execute only th
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Reactive](https://img.shields.io/badge/reactive-fine--grained%20signals-purple.svg)](#architecture)
 [![Animation](https://img.shields.io/badge/animation%20engine-native%20browser-2ea44f.svg)](#animation-engine-native-browser-under-the-hood)
-[![Bundle](https://img.shields.io/badge/gzipped-~126KB-brightgreen.svg)](#bundle-size)
+[![Bundle](https://img.shields.io/badge/gzipped-~93KB-brightgreen.svg)](#bundle-size)
 
 > **[Live demos](https://shawnbaek.github.io/SwiftUI-For-Web/docs/)** · **[Architecture](#architecture)** · **[Migration from v1](#migrating-from-v1-reconciler)**
 
@@ -88,6 +88,41 @@ VStack(
 of truth. `.sheet` follows the same rule for presentation. The browser input,
 dialog, keyboard dismissal, focus restoration, and ARIA mapping stay internal
 to the framework.
+
+### Asynchronous work with `.task`
+
+`.task` runs asynchronous work for as long as a view is on screen, like
+SwiftUI's [`task(priority:_:)`](https://developer.apple.com/documentation/swiftui/view/task(priority:_:))
+and [`task(id:priority:_:)`](https://developer.apple.com/documentation/swiftui/view/task(id:priority:_:)).
+The action starts when the view appears and is cancelled when it disappears.
+With an `id`, a change of the id cancels the running action and starts a new
+one.
+
+```javascript
+const query = new State('');
+const samples = new State([]);
+
+VStack(
+  For(() => samples.value, (sample) => Text(sample.title), (sample) => sample.id)
+)
+  .searchable(query.binding, { prompt: 'Search samples' })
+  .task({ id: () => query.value }, async (signal) => {
+    const response = await fetch(`/search.json?q=${encodeURIComponent(query.value)}`, { signal });
+    const results = await response.json();
+    if (signal.aborted) return;
+    samples.value = results;
+  });
+```
+
+The action receives an [`AbortSignal`](https://developer.mozilla.org/docs/Web/API/AbortSignal),
+which stands in for Swift's task cancellation: `signal.aborted` is
+`Task.isCancelled`, and `signal.throwIfAborted()` is `Task.checkCancellation()`.
+Pass it to `fetch`, and check it after any other `await` before you write
+state, so a cancelled run cannot overwrite a newer result. An error thrown
+after cancellation is ignored; any other error is logged. `id` is a value, a
+`State` or `Binding`, or a getter that reads state, and is compared with
+`Object.is`, like `.onChange`. SwiftUI's `priority:` has no counterpart,
+because the browser runs this work on one thread.
 
 ---
 
@@ -474,7 +509,7 @@ The `Counter`, `HelloWorld`, `TodoApp`, and `Airbnb/Views/Listing/ListingGrid` e
 
 ## Performance
 
-The benchmark harness (`npm run bench:capture`) was built for the v1 reconciler model — it bypasses State setters and triggers updates via the now-no-op `app.refresh()`. The first 7 list-workload scenarios therefore measure "nothing happening" on the v2 engine and report sub-millisecond times that are NOT comparable.
+The benchmark harness (`Tests/Benchmark/capture.spec.js`, an optional Playwright spec) was built for the v1 reconciler model — it bypasses State setters and triggers updates via the now-no-op `app.refresh()`. The first 7 list-workload scenarios therefore measure "nothing happening" on the v2 engine and report sub-millisecond times that are NOT comparable.
 
 Until the harness is rewritten to use signal-driven mutations, only the **5 complex view tree** scenarios at the bottom are honest comparisons. See [`Tests/Benchmark/RESULTS.md`](Tests/Benchmark/RESULTS.md) for the full table and the historical "after C.3" v1 baseline.
 
@@ -506,9 +541,13 @@ files compressed independently:
 
 | Build | Gzipped | Retained graph |
 |---|---:|---|
-| HelloWorld release | 28.7 KB | 28 retained, 68 removed |
-| Netflix release | 39.7 KB | 34 retained, 62 removed |
-| Full library source graph | 85.7 KB | every JavaScript/CSS module |
+| HelloWorld release | 33.7 KB | 28 retained, 70 removed |
+| Netflix release | 45.4 KB | 34 retained, 64 removed |
+| Full library source graph | 93.0 KB | every JavaScript/CSS module |
+
+Reproduce with `node scripts/build.js --entry Examples/HelloWorld/index.html --out-dir <dir>`
+(the builder prints the totals), and `node scripts/build.js && node scripts/size.js dist`
+for the full library.
 
 This is conservative module-level tree shaking. Named imports are routed to
 their defining modules, while each retained module stays intact. The builder
@@ -521,8 +560,13 @@ does not perform unsafe statement deletion or identifier mangling.
 The required local and CI loop uses Node built-ins only:
 
 ```bash
-node run-tests.js
-node scripts/build-tests.js
+npm test                           # the four commands below
+node run-tests.js                  # unit tests on a DOM mock
+node scripts/run-node-suites.js    # the Tests/** suites that need no DOM
+node scripts/check-package.js      # package entries, exports, and index.d.ts against the runtime
+node scripts/build-tests.js        # release builder
+
+node scripts/run-browser-tests.js  # Tests/TestRunner.html in an installed Chrome, Chromium, Edge, or Brave (headless)
 node scripts/build.js
 node scripts/size.js dist
 ```
@@ -532,10 +576,12 @@ validation. They are not required to clone, edit, serve, build, or deploy.
 
 The visual harness uses seeded RNG, frozen `Date`, normalized fonts, and blocks external image hosts so screenshots are byte-identical across machines. It is the load-bearing safety net for engine changes.
 
-Re-record baselines after intentional UI changes:
+Playwright is not a dependency of this package, so there are no npm scripts
+for it. With Playwright installed separately, re-record baselines after
+intentional UI changes:
 
 ```bash
-npm run test:visual:update
+npx playwright test Tests/visual --update-snapshots
 ```
 
 ---

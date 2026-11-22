@@ -6,7 +6,7 @@
  * @version 2.0.0-alpha.1
  */
 
-import { View, Color } from '../index';
+import { View, Color } from '../index.js';
 
 // =============================================================================
 // PlottableValue
@@ -188,9 +188,12 @@ export interface BarMarkOptions {
  *   .foregroundStyle({ by: value("Product", item.product) })
  * )
  */
-export class BarMark extends Mark {
-  constructor(options: BarMarkOptions);
-}
+export interface BarMark extends Mark {}
+/** Create a BarMark. Call it directly, as in Swift Charts; `new` also works. */
+export const BarMark: {
+  (options: BarMarkOptions): BarMark;
+  new (options: BarMarkOptions): BarMark;
+};
 
 /** Line mark options */
 export interface LineMarkOptions {
@@ -225,9 +228,7 @@ export interface LineMarkOptions {
  *   .foregroundStyle({ by: value("City", item.city) })
  * )
  */
-export class LineMark extends Mark {
-  constructor(options: LineMarkOptions);
-
+export interface LineMark extends Mark {
   /**
    * Set line interpolation method
    * - 'linear': Straight lines between points
@@ -239,6 +240,11 @@ export class LineMark extends Mark {
    */
   interpolationMethod(method: InterpolationMethod): this;
 }
+/** Create a LineMark. Call it directly, as in Swift Charts; `new` also works. */
+export const LineMark: {
+  (options: LineMarkOptions): LineMark;
+  new (options: LineMarkOptions): LineMark;
+};
 
 /** Point mark options */
 export interface PointMarkOptions {
@@ -272,15 +278,18 @@ export interface PointMarkOptions {
  *   .symbol('diamond')
  * )
  */
-export class PointMark extends Mark {
-  constructor(options: PointMarkOptions);
-
+export interface PointMark extends Mark {
   /**
    * Set the symbol type
    * Options: 'circle', 'square', 'triangle', 'diamond', 'cross', 'plus', 'star'
    */
   symbol(symbol: SymbolType): this;
 }
+/** Create a PointMark. Call it directly, as in Swift Charts; `new` also works. */
+export const PointMark: {
+  (options: PointMarkOptions): PointMark;
+  new (options: PointMarkOptions): PointMark;
+};
 
 /** Area mark options */
 export interface AreaMarkOptions {
@@ -312,12 +321,15 @@ export interface AreaMarkOptions {
  *   .opacity(0.3)
  * )
  */
-export class AreaMark extends Mark {
-  constructor(options: AreaMarkOptions);
-
+export interface AreaMark extends Mark {
   /** Set line interpolation method */
   interpolationMethod(method: InterpolationMethod): this;
 }
+/** Create an AreaMark. Call it directly, as in Swift Charts; `new` also works. */
+export const AreaMark: {
+  (options: AreaMarkOptions): AreaMark;
+  new (options: AreaMarkOptions): AreaMark;
+};
 
 /** Rule mark options */
 export interface RuleMarkOptions {
@@ -352,12 +364,15 @@ export interface RuleMarkOptions {
  *   x: value("Threshold", 50)
  * })
  */
-export class RuleMark extends Mark {
-  constructor(options: RuleMarkOptions);
-
+export interface RuleMark extends Mark {
   /** Set line style (width, dash pattern) */
   lineStyle(style: MarkStyle): this;
 }
+/** Create a RuleMark. Call it directly, as in Swift Charts; `new` also works. */
+export const RuleMark: {
+  (options: RuleMarkOptions): RuleMark;
+  new (options: RuleMarkOptions): RuleMark;
+};
 
 /** Rectangle mark options */
 export interface RectangleMarkOptions {
@@ -385,9 +400,12 @@ export interface RectangleMarkOptions {
  * .foregroundStyle(Color.yellow)
  * .opacity(0.2)
  */
-export class RectangleMark extends Mark {
-  constructor(options: RectangleMarkOptions);
-}
+export interface RectangleMark extends Mark {}
+/** Create a RectangleMark. Call it directly, as in Swift Charts; `new` also works. */
+export const RectangleMark: {
+  (options: RectangleMarkOptions): RectangleMark;
+  new (options: RectangleMarkOptions): RectangleMark;
+};
 
 /** Dimension specification for radius */
 export interface MarkDimensionRatio {
@@ -438,9 +456,12 @@ export interface SectorMarkOptions {
  *   })
  * )
  */
-export class SectorMark extends Mark {
-  constructor(options: SectorMarkOptions);
-}
+export interface SectorMark extends Mark {}
+/** Create a SectorMark. Call it directly, as in Swift Charts; `new` also works. */
+export const SectorMark: {
+  (options: SectorMarkOptions): SectorMark;
+  new (options: SectorMarkOptions): SectorMark;
+};
 
 /**
  * Helper for creating radius dimension values
@@ -519,20 +540,7 @@ export type MarkBuilder<T> = (item: T, index: number) => Mark | Mark[];
  *   RuleMark({...})
  * ])
  */
-export class Chart extends View {
-  /**
-   * Create a chart with data and mark builder
-   * @param data - Array of data items
-   * @param content - Function that creates marks for each item
-   */
-  constructor<T>(data: T[], content: MarkBuilder<T>);
-
-  /**
-   * Create a chart with direct marks array
-   * @param marks - Array of marks to render
-   */
-  constructor(marks: Mark[]);
-
+export interface Chart extends View {
   /**
    * Set chart dimensions
    * @param frame - Width and height
@@ -592,17 +600,27 @@ export class Chart extends View {
   chartBackground(color: Color | string): this;
 
   /**
-   * Add chart overlay content
-   * @param content - Overlay view builder
-   */
-  chartOverlay(content: () => View): this;
-
-  /**
    * Set plot area insets
    * @param insets - Edge insets
    */
   chartPlotStyle(insets: { top?: number; leading?: number; bottom?: number; trailing?: number }): this;
 }
+/** Create a Chart. Call it directly, as in Swift Charts; `new` also works. */
+export const Chart: {
+  /**
+   * Create a chart with data and mark builder
+   * @param data - Array of data items
+   * @param content - Function that creates marks for each item
+   */
+  <T>(data: T[], content: MarkBuilder<T>): Chart;
+  /**
+   * Create a chart with direct marks array
+   * @param marks - Array of marks to render
+   */
+  (marks: Mark[]): Chart;
+  new <T>(data: T[], content: MarkBuilder<T>): Chart;
+  new (marks: Mark[]): Chart;
+};
 
 /**
  * Factory function to create a Chart

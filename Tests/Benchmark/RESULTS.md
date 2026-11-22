@@ -23,7 +23,7 @@ a single-signal `createEffect` model (matches "framework re-runs body" semantics
 
 How to reproduce:
 ```
-npm run bench:capture        # 3-way; writes Tests/Benchmark/results-baseline.json
+npx playwright test Tests/Benchmark/capture.spec.js   # 3-way; needs Playwright installed separately (it is not a dependency)
 ```
 Open `Tests/Benchmark/index.html` in a browser to run interactively and export JSON.
 

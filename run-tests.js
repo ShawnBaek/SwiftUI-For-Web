@@ -1251,6 +1251,556 @@ async function runTests() {
       }
     });
 
+    // #57: a mutation batch is processed by walking only the subtrees it added
+    // or removed, not by checking every registered element.
+    console.log('\n📦 LifecycleObserver processes only mutated subtrees (#57)');
+    {
+      const microtask = () => new Promise((resolve) => queueMicrotask(resolve));
+      // Installs a MutationObserver that the test drives by hand, and records
+      // every element passed to document.contains.
+      const withObserver = async (fn) => {
+        const previousObserver = globalThis.MutationObserver;
+        const originalContains = document.contains;
+        const observers = [];
+        const checked = [];
+        globalThis.MutationObserver = class {
+          constructor(callback) { this.callback = callback; observers.push(this); }
+          observe() {}
+          disconnect() { this.disconnected = true; }
+        };
+        document.contains = function (element) {
+          checked.push(element);
+          return originalContains.call(this, element);
+        };
+        const registered = [];
+        const context = {
+          checked,
+          track(element) { registered.push(element); return element; },
+          async deliver(record) {
+            const active = observers.filter((observer) => !observer.disconnected).pop();
+            if (!active) throw new Error('No active MutationObserver');
+            active.callback([{ addedNodes: [], removedNodes: [], ...record }]);
+            await microtask();
+          },
+        };
+        try {
+          await fn(context);
+        } finally {
+          for (const element of registered) Lifecycle.removeCallbacks(element);
+          Lifecycle.flushLifecycleCallbacks();
+          document.contains = originalContains;
+          globalThis.MutationObserver = previousObserver;
+        }
+      };
+      // A long list: `count` attached rows with onDisappear, and `count`
+      // detached rows still waiting for onAppear.
+      const longList = async (context, count, log) => {
+        const list = document.createElement('div');
+        document.body.appendChild(list);
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+          const row = context.track(document.createElement('div'));
+          list.appendChild(row);
+          Lifecycle.onDisappear(row, () => log.push('disappear ' + i));
+          rows.push(row);
+          const waiting = context.track(document.createElement('div'));
+          Lifecycle.onAppear(waiting, () => log.push('appear ' + i));
+        }
+        await microtask();
+        return { list, rows };
+      };
+
+      await itAsync('an added subtree does not check registered elements outside it', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list } = await longList(context, 50, log);
+          const other = document.createElement('div');
+          const inner = document.createElement('div');
+          const target = context.track(document.createElement('span'));
+          inner.appendChild(target);
+          other.appendChild(inner);
+          Lifecycle.onAppear(target, () => log.push('target appeared'));
+          await microtask();
+
+          context.checked.length = 0;
+          document.body.appendChild(other);
+          await context.deliver({ addedNodes: [other] });
+          expect(log).toEqual(['target appeared']);
+          expect(context.checked.every((element) => element === other)).toBe(true);
+
+          other.remove();
+          list.remove();
+        });
+      });
+
+      await itAsync('a removed subtree does not check registered elements outside it', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list, rows } = await longList(context, 50, log);
+
+          context.checked.length = 0;
+          const removed = rows[7];
+          removed.remove();
+          await context.deliver({ removedNodes: [removed] });
+          expect(log).toEqual(['disappear 7']);
+          expect(context.checked.every((element) => element === removed)).toBe(true);
+
+          list.remove();
+        });
+      });
+
+      await itAsync('fires for registered descendants of an added or removed ancestor', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list } = await longList(context, 20, log);
+          const section = document.createElement('div');
+          const group = document.createElement('div');
+          const leaf = context.track(document.createElement('span'));
+          group.appendChild(leaf);
+          section.appendChild(group);
+          Lifecycle.onAppear(leaf, () => log.push('leaf appeared'));
+          Lifecycle.onDisappear(leaf, () => log.push('leaf disappeared'));
+          await microtask();
+
+          document.body.appendChild(section);
+          await context.deliver({ addedNodes: [section] });
+          expect(log).toEqual(['leaf appeared']);
+
+          section.remove();
+          await context.deliver({ removedNodes: [section] });
+          expect(log).toEqual(['leaf appeared', 'leaf disappeared']);
+
+          // Each fires once.
+          await context.deliver({ addedNodes: [section], removedNodes: [section] });
+          expect(log).toHaveLength(2);
+          list.remove();
+        });
+      });
+
+      await itAsync('does not fire onDisappear for a subtree moved within the document', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list, rows } = await longList(context, 20, log);
+          const elsewhere = document.createElement('div');
+          document.body.appendChild(elsewhere);
+
+          const moved = rows[3];
+          moved.remove();
+          elsewhere.appendChild(moved);
+          await context.deliver({ removedNodes: [moved] });
+          await context.deliver({ addedNodes: [moved] });
+          expect(log).toEqual([]);
+
+          elsewhere.remove();
+          await context.deliver({ removedNodes: [elsewhere] });
+          expect(log).toEqual(['disappear 3']);
+          list.remove();
+        });
+      });
+
+      await itAsync('does not fire onAppear for a subtree added and removed in one batch', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list } = await longList(context, 20, log);
+          const flash = document.createElement('div');
+          const child = context.track(document.createElement('span'));
+          flash.appendChild(child);
+          Lifecycle.onAppear(child, () => log.push('flash appeared'));
+          await microtask();
+
+          document.body.appendChild(flash);
+          flash.remove();
+          await context.deliver({ addedNodes: [flash], removedNodes: [flash] });
+          expect(log).toEqual([]);
+
+          document.body.appendChild(flash);
+          await context.deliver({ addedNodes: [flash] });
+          expect(log).toEqual(['flash appeared']);
+          flash.remove();
+          list.remove();
+        });
+      });
+
+      await itAsync('keeps appear and disappear working with only a few registered elements', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const holder = document.createElement('div');
+          const element = context.track(document.createElement('span'));
+          holder.appendChild(element);
+          Lifecycle.onAppear(element, () => log.push('appeared'));
+          Lifecycle.onDisappear(element, () => log.push('disappeared'));
+          await microtask();
+          expect(log).toEqual([]);
+
+          document.body.appendChild(holder);
+          await context.deliver({ addedNodes: [holder] });
+          expect(log).toEqual(['appeared']);
+
+          holder.remove();
+          await context.deliver({ removedNodes: [holder] });
+          expect(log).toEqual(['appeared', 'disappeared']);
+        });
+      });
+
+      await itAsync('fires onAppear for an element attached right after it registers, with no mutation record', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list } = await longList(context, 20, log);
+          const element = context.track(document.createElement('span'));
+          Lifecycle.onAppear(element, () => log.push('appeared'));
+          document.body.appendChild(element);
+          await microtask();
+          expect(log).toEqual(['appeared']);
+          element.remove();
+          list.remove();
+        });
+      });
+
+      await itAsync('an explicit flushLifecycleCallbacks() still checks every registered element', async () => {
+        await withObserver(async (context) => {
+          const log = [];
+          const { list, rows } = await longList(context, 20, log);
+          const late = context.track(document.createElement('span'));
+          Lifecycle.onAppear(late, () => log.push('late appeared'));
+          await microtask();
+
+          // No mutation record is delivered for either change.
+          document.body.appendChild(late);
+          rows[5].remove();
+          Lifecycle.flushLifecycleCallbacks();
+          expect(log).toEqual(['late appeared', 'disappear 5']);
+          late.remove();
+          list.remove();
+        });
+      });
+    }
+
+    // #37: .task(_:) and .task(id:_:) run asynchronous work for the view's
+    // lifetime. https://developer.apple.com/documentation/swiftui/view/task(priority:_:)
+    console.log('\n📦 .task and .task(id:) (#37)');
+    {
+      const { HStack: TaskHStack } = await import('./src/Layout/Stack/HStack.js');
+      const { ZStack: TaskZStack } = await import('./src/Layout/Stack/ZStack.js');
+      const { Spacer: TaskSpacer } = await import('./src/Layout/Spacer.js');
+      const { Divider: TaskDivider } = await import('./src/Layout/Divider.js');
+      const { ForEach: TaskForEach } = await import('./src/View/List/ForEach.js');
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+      // Lifecycle changes are flushed by hand, as in the #46 tests.
+      const withTaskHarness = async (fn) => {
+        const previousObserver = globalThis.MutationObserver;
+        const previousError = console.error;
+        const errors = [];
+        globalThis.MutationObserver = class { observe() {} disconnect() {} };
+        console.error = (...args) => errors.push(args);
+        const roots = [];
+        const attachedRoot = () => {
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          roots.push(root);
+          return root;
+        };
+        try {
+          await fn({ attachedRoot, errors, appear: () => Lifecycle.flushLifecycleCallbacks() });
+        } finally {
+          for (const root of roots) root.remove();
+          Lifecycle.flushLifecycleCallbacks();
+          console.error = previousError;
+          globalThis.MutationObserver = previousObserver;
+        }
+      };
+      // An awaitable that rejects when the signal aborts, the way fetch does.
+      const abortable = (signal) => {
+        let resolve;
+        const promise = new Promise((res, reject) => {
+          resolve = res;
+          signal.addEventListener('abort', () => {
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        });
+        return { promise, resolve };
+      };
+
+      await itAsync('starts the action when the view appears, not before', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const signals = [];
+          const detached = document.createElement('div');
+          const app = App(() => ModifierText('Loading').task((signal) => { signals.push(signal); })).mount(detached);
+          appear();
+          expect(signals).toHaveLength(0);
+
+          attachedRoot().appendChild(detached);
+          appear();
+          expect(signals).toHaveLength(1);
+          expect(signals[0].aborted).toBe(false);
+          appear();
+          expect(signals).toHaveLength(1);
+          app.unmount();
+        });
+      });
+
+      await itAsync('cancels the action when the view disappears', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const signals = [];
+          const visible = new State(true);
+          const app = App(() => VStack(
+            Show(() => visible.value, ModifierText('Row').task((signal) => { signals.push(signal); }))
+          )).mount(attachedRoot());
+          appear();
+          expect(signals).toHaveLength(1);
+
+          visible.value = false;
+          Scheduler.flushSync();
+          expect(signals[0].aborted).toBe(true);
+
+          // Appearing again runs a new task.
+          visible.value = true;
+          Scheduler.flushSync();
+          appear();
+          expect(signals).toHaveLength(2);
+          expect(signals[1].aborted).toBe(false);
+
+          app.unmount();
+          expect(signals[1].aborted).toBe(true);
+        });
+      });
+
+      await itAsync('never starts when the view is disposed before it appears', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          let started = 0;
+          const detached = document.createElement('div');
+          const app = App(() => ModifierText('Never shown').task(() => { started++; })).mount(detached);
+          app.unmount();
+          attachedRoot().appendChild(detached);
+          appear();
+          expect(started).toBe(0);
+        });
+      });
+
+      await itAsync('.task(id:) cancels and restarts the action when the id changes', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const query = new State('swift');
+          const runs = [];
+          const app = App(() => ModifierText('Results').task(
+            { id: () => query.value },
+            (signal) => { runs.push({ query: query.value, signal }); }
+          )).mount(attachedRoot());
+          appear();
+          expect(runs.map((run) => run.query)).toEqual(['swift']);
+
+          query.value = 'swiftui';
+          Scheduler.flushSync();
+          expect(runs.map((run) => run.query)).toEqual(['swift', 'swiftui']);
+          expect(runs[0].signal.aborted).toBe(true);
+          expect(runs[1].signal.aborted).toBe(false);
+
+          // Writing an equal value does not restart it.
+          query.value = 'swiftui';
+          Scheduler.flushSync();
+          expect(runs).toHaveLength(2);
+
+          app.unmount();
+          expect(runs[1].signal.aborted).toBe(true);
+          query.value = 'after unmount';
+          Scheduler.flushSync();
+          expect(runs).toHaveLength(2);
+        });
+      });
+
+      await itAsync('.task(id:) accepts a State or Binding as the id', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const page = new State(1);
+          const pages = [];
+          const app = App(() => VStack(
+            ModifierText('A').task({ id: page }, () => { pages.push('state ' + page.value); }),
+            ModifierText('B').task({ id: page.binding }, () => { pages.push('binding ' + page.value); })
+          )).mount(attachedRoot());
+          appear();
+          page.value = 2;
+          Scheduler.flushSync();
+          expect(pages).toEqual(['state 1', 'binding 1', 'state 2', 'binding 2']);
+          app.unmount();
+        });
+      });
+
+      await itAsync('.task(id:) does not start a task for an id change before the view appears', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const id = new State(0);
+          const seen = [];
+          const detached = document.createElement('div');
+          const app = App(() => ModifierText('Waiting').task({ id: () => id.value }, () => { seen.push(id.value); })).mount(detached);
+          id.value = 1;
+          Scheduler.flushSync();
+          expect(seen).toEqual([]);
+          attachedRoot().appendChild(detached);
+          appear();
+          expect(seen).toEqual([1]);
+          app.unmount();
+        });
+      });
+
+      await itAsync('writes no State after cancellation when the awaited work is aborted', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear, errors }) => {
+          const result = new State('none');
+          const requests = [];
+          const app = App(() => ModifierText(() => result.value).task(async (signal) => {
+            const request = abortable(signal);
+            requests.push(request);
+            result.value = await request.promise;
+          })).mount(attachedRoot());
+          appear();
+          expect(requests).toHaveLength(1);
+
+          app.unmount();
+          requests[0].resolve('late response');
+          await tick();
+          expect(result.value).toBe('none');
+          // Cancellation is not an error.
+          expect(errors).toHaveLength(0);
+        });
+      });
+
+      await itAsync('a superseded .task(id:) run cannot overwrite the newer result', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const query = new State('a');
+          const result = new State('');
+          const requests = [];
+          const app = App(() => ModifierText(() => result.value).task({ id: () => query.value }, async (signal) => {
+            const request = abortable(signal);
+            requests.push(request);
+            const value = await request.promise;
+            if (signal.aborted) return;
+            result.value = value;
+          })).mount(attachedRoot());
+          appear();
+          query.value = 'b';
+          Scheduler.flushSync();
+          expect(requests).toHaveLength(2);
+
+          requests[1].resolve('result for b');
+          await tick();
+          requests[0].resolve('result for a');
+          await tick();
+          expect(result.value).toBe('result for b');
+          app.unmount();
+        });
+      });
+
+      await itAsync('reports an error from the action, but not one thrown after cancellation', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear, errors }) => {
+          const app = App(() => VStack(
+            ModifierText('Async').task(async () => { throw new Error('async failure'); }),
+            ModifierText('Sync').task(() => { throw new Error('sync failure'); }),
+            ModifierText('Cancelled').task(async (signal) => {
+              await new Promise((resolve) => signal.addEventListener('abort', resolve));
+              throw new Error('thrown after cancel');
+            })
+          )).mount(attachedRoot());
+          appear();
+          await tick();
+          app.unmount();
+          await tick();
+          const messages = errors.map((args) => args[1] && args[1].message);
+          expect(messages.includes('async failure')).toBe(true);
+          expect(messages.includes('sync failure')).toBe(true);
+          expect(messages.includes('thrown after cancel')).toBe(false);
+          expect(errors.every((args) => args[0] === 'task action error:')).toBe(true);
+        });
+      });
+
+      await itAsync('cancels when the element leaves the document and restarts when it returns', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const signals = [];
+          const root = attachedRoot();
+          const app = App(() => ModifierText('Tab content').task((signal) => { signals.push(signal); })).mount(root);
+          appear();
+          const element = root.children[0];
+
+          // A container detaches the element without disposing its owner.
+          root.removeChild(element);
+          appear();
+          expect(signals[0].aborted).toBe(true);
+
+          root.appendChild(element);
+          appear();
+          expect(signals).toHaveLength(2);
+          expect(signals[1].aborted).toBe(false);
+          app.unmount();
+          expect(signals[1].aborted).toBe(true);
+        });
+      });
+
+      await itAsync('does not run the previous view\'s task on a reused pooled element', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          ElementPool.clearPools();
+          let started = 0;
+          const root = attachedRoot();
+          const app = App(() => ModifierText('Old').task(() => { started++; })).mount(root);
+          appear();
+          const oldText = root.children[0];
+          app.unmount();
+          expect(started).toBe(1);
+
+          const reused = ElementPool.acquireElement('span');
+          expect(reused).toBe(oldText);
+          root.appendChild(reused);
+          appear();
+          root.removeChild(reused);
+          appear();
+          root.appendChild(reused);
+          appear();
+          expect(started).toBe(1);
+        });
+      });
+
+      await itAsync('runs next to onAppear and onDisappear on the same view, and repeated onAppear all fire', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const log = [];
+          const app = App(() => ModifierText('Composed')
+            .onAppear(() => log.push('appear 1'))
+            .task((signal) => {
+              log.push('task');
+              signal.addEventListener('abort', () => log.push('task cancelled'));
+            })
+            .onAppear(() => log.push('appear 2'))
+            .onDisappear(() => log.push('disappear 1'))
+            .onDisappear(() => log.push('disappear 2'))
+          ).mount(attachedRoot());
+          appear();
+          expect(log).toEqual(['appear 1', 'appear 2', 'task']);
+          app.unmount();
+          appear();
+          expect(log).toEqual(['appear 1', 'appear 2', 'task', 'task cancelled', 'disappear 1', 'disappear 2']);
+        });
+      });
+
+      await itAsync('is available on every descriptor view family and on legacy views', async () => {
+        await withTaskHarness(async ({ attachedRoot, appear }) => {
+          const started = [];
+          const signals = [];
+          const run = (name) => (signal) => { started.push(name); signals.push(signal); };
+          const app = App(() => VStack(
+            ModifierText('t').task(run('Text')),
+            Button('b', () => {}).task(run('Button')),
+            VStack().task(run('VStack')),
+            TaskHStack().task(run('HStack')),
+            TaskZStack().task(run('ZStack')),
+            TaskSpacer().task(run('Spacer')),
+            TaskDivider().task(run('Divider')),
+            TaskForEach([1], () => ModifierText('row')).task(run('ForEach')),
+            new GroupView(ModifierText('legacy')).task(run('legacy View'))
+          )).mount(attachedRoot());
+          appear();
+          await tick();
+          expect([...started].sort()).toEqual(['Button', 'Divider', 'ForEach', 'HStack', 'Spacer', 'Text', 'VStack', 'ZStack', 'legacy View']);
+          app.unmount();
+          appear();
+          expect(signals.every((signal) => signal.aborted)).toBe(true);
+        });
+      });
+    }
+
     console.log('\n📦 Scheduler microtask flush (#45)');
     await itAsync('isolates errors in Discrete lane work flushed by the microtask', async () => {
       const uncaught = [];

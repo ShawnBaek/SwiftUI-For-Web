@@ -8,6 +8,7 @@ import { Button } from '../../../src/View/Control/Button.js';
 import { Text } from '../../../src/View/Text.js';
 import { HStack } from '../../../src/Layout/Stack/HStack.js';
 import { render } from '../../../src/Core/Renderer.js';
+import { initDelegation, teardownDelegation } from '../../../src/Core/EventDelegate.js';
 
 describe('Button', () => {
   describe('Factory Function', () => {
@@ -85,10 +86,18 @@ describe('Button', () => {
       const button = Button('Click', () => { clicked = true; });
       const element = render(button);
 
-      // Event delegation requires element to be in DOM
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
+      // The action is delegated: the click is handled by the listener on a
+      // root that has delegation, as App.mount sets up.
+      const root = document.createElement('div');
+      document.body.appendChild(root);
+      initDelegation(root);
+      try {
+        root.appendChild(element);
+        element.click();
+      } finally {
+        teardownDelegation(root);
+        root.remove();
+      }
 
       expect(clicked).toBe(true);
     });

@@ -166,7 +166,8 @@ describe('TextField', () => {
     it('should apply plain style', () => {
       const field = TextField('Placeholder').textFieldStyle('plain');
       const element = field._render();
-      expect(element.style.border).toBe('none');
+      // Browsers read `border: none` back through the longhand.
+      expect(element.style.borderStyle).toBe('none');
     });
 
     it('should return this for chaining', () => {

@@ -12,7 +12,7 @@
  *
  * Text(() => ...) thunks and reactive modifiers are bound by Renderer.render
  * while each element is built, under the current owner. This module mounts
- * the tree and implements the reactive modifiers (onChange, searchable,
+ * the tree and implements the reactive modifiers (onChange, task, searchable,
  * sheet) that the renderer and legacy View subclasses install.
  */
 
@@ -20,7 +20,12 @@ import { render } from './Renderer.js';
 import { ModifierType } from './ViewDescriptor.js';
 import { releaseTree } from './ElementPool.js';
 import { initDelegation, teardownDelegation } from './EventDelegate.js';
-import { createRoot, createEffect, onCleanup, untrack } from '../Data/Signal.js';
+import {
+  onAppear as lifecycleOnAppear,
+  onDisappear as lifecycleOnDisappear,
+  cancelAppear
+} from './LifecycleObserver.js';
+import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/Signal.js';
 
 /**
  * Mount a view tree into a container with fine-grained reactivity.
@@ -68,6 +73,9 @@ export function installReactiveModifier(element, modifier) {
     case ModifierType.ON_CHANGE:
       installOnChange(modifier.value);
       break;
+    case ModifierType.TASK:
+      installTask(element, modifier.value);
+      break;
     case ModifierType.SEARCHABLE:
       installSearchable(element, modifier.value);
       break;
@@ -113,6 +121,97 @@ function installOnChange(value) {
     const oldValue = previousValue;
     previousValue = currentValue;
     untrack(() => action(oldValue, currentValue));
+  });
+}
+
+/**
+ * `.task(_:)` and `.task(id:_:)`: asynchronous work tied to the view's
+ * lifetime. The action starts when the element appears and is cancelled when
+ * the element disappears or its owner is disposed. With an `id`, a change of
+ * the id cancels the running action and starts a new one.
+ *
+ * The action receives an AbortSignal, the JavaScript counterpart of Swift's
+ * task cancellation: `signal.aborted` is `Task.isCancelled`, and
+ * `signal.throwIfAborted()` is `Task.checkCancellation()`. An error the action
+ * throws after it was cancelled is ignored; any other error is reported.
+ *
+ * @see https://developer.apple.com/documentation/swiftui/view/task(priority:_:)
+ * @see https://developer.apple.com/documentation/swiftui/view/task(id:priority:_:)
+ */
+function installTask(element, value) {
+  const { optionsOrAction, action: explicitAction } = value || {};
+  const options = typeof optionsOrAction === 'object' && optionsOrAction !== null
+    ? optionsOrAction
+    : {};
+  const action = typeof optionsOrAction === 'function' ? optionsOrAction : explicitAction;
+  if (typeof action !== 'function') return;
+
+  const owned = Boolean(getOwner());
+  let controller = null;
+  let visible = false;
+  let disposed = false;
+
+  const report = (error, signal) => {
+    if (!signal.aborted) console.error('task action error:', error);
+  };
+  const cancel = () => {
+    if (!controller) return;
+    const running = controller;
+    controller = null;
+    running.abort();
+  };
+  const start = () => {
+    cancel();
+    const current = new AbortController();
+    controller = current;
+    try {
+      const result = action(current.signal);
+      if (result && typeof result.then === 'function') {
+        result.then(undefined, (error) => report(error, current.signal));
+      }
+    } catch (error) {
+      report(error, current.signal);
+    }
+  };
+  const appear = () => {
+    if (disposed || visible) return;
+    visible = true;
+    start();
+    lifecycleOnDisappear(element, disappear);
+  };
+  const disappear = () => {
+    if (!visible) return;
+    visible = false;
+    cancel();
+    // The view can appear again while its owner is alive (for example when a
+    // container re-attaches its content), and the task then starts again.
+    if (owned && !disposed) lifecycleOnAppear(element, appear);
+  };
+
+  lifecycleOnAppear(element, appear);
+  if (!owned) return;
+
+  if ('id' in options) {
+    let isInitialRead = true;
+    let previousID;
+    createEffect(() => {
+      const id = readValue(options.id);
+      if (isInitialRead) {
+        isInitialRead = false;
+        previousID = id;
+        return;
+      }
+      if (Object.is(previousID, id)) return;
+      previousID = id;
+      if (visible) untrack(start);
+    });
+  }
+
+  onCleanup(() => {
+    disposed = true;
+    visible = false;
+    cancel();
+    cancelAppear(element);
   });
 }
 

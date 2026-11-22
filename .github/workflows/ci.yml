@@ -40,6 +40,18 @@ jobs:
       - name: Unit tests (node run-tests.js)
         run: node run-tests.js
 
+      - name: Tests/** suites that need no DOM
+        run: node scripts/run-node-suites.js
+
+      - name: Package entries, exports, and index.d.ts against the runtime
+        run: node scripts/check-package.js
+
+      # Runs Tests/TestRunner.html headless in the runner's installed
+      # Chromium-family browser. No npm dependencies; set BROWSER_BIN on the
+      # runner if the browser is not in a standard location.
+      - name: Browser unit tests (Tests/TestRunner.html)
+        run: node scripts/run-browser-tests.js
+
       - name: Production builder tests
         run: node scripts/build-tests.js
 
