@@ -370,7 +370,7 @@ async function runTests() {
     const { Text: ModifierText } = await import('./src/View/Text.js');
     const { VStack } = await import('./src/Layout/Stack/VStack.js');
     const { Button } = await import('./src/View/Control/Button.js');
-    const { render } = await import('./src/Core/Renderer.js');
+    const { render, taskHasID } = await import('./src/Core/Renderer.js');
     const { Show } = await import('./src/View/ControlFlow/Show.js');
     const { For } = await import('./src/View/ControlFlow/For.js');
     const { TabView } = await import('./src/View/Navigation/TabView.js');
@@ -1606,6 +1606,20 @@ async function runTests() {
           Scheduler.flushSync();
           expect(runs).toHaveLength(2);
         });
+      });
+
+      it('.task(id:) needs a reactive owner but .task(_:) does not', () => {
+        // Rendered outside an owner, a task with an id cannot restart when the
+        // id changes, so it must trigger the unowned-render warning.
+        const modifierOf = (view) => view._descriptor
+          ? view._descriptor.modifiers.find((m) => m.type === 'task')
+          : view.modifiers?.find((m) => m.type === 'task');
+        const withID = ModifierText('A').task({ id: 1 }, () => {});
+        const withoutID = ModifierText('B').task(() => {});
+        const describe = (view) => (typeof view.toDescriptor === 'function' ? view.toDescriptor() : view);
+        expect(taskHasID(modifierOf(describe(withID)))).toBe(true);
+        expect(taskHasID(modifierOf(describe(withoutID)))).toBe(false);
+        expect(taskHasID(undefined)).toBe(false);
       });
 
       await itAsync('.task(id:) accepts a State or Binding as the id', async () => {

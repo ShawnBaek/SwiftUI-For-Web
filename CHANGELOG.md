@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `swiftui-for-web/core` has its own type declarations (`src/core.d.ts`), so
+  importing a Charts name from it is now a type error instead of a load-time
+  failure. `scripts/check-package.js` checks `./core` declarations against the
+  `./core` runtime (#47).
+- A `.task(id:_:)` rendered outside a reactive owner now triggers the
+  unowned-render warning, since it cannot restart when `id` changes. A task
+  without an id still needs no owner.
+- **Deprecation:** the performance internals exported from the main entry
+  (`acquireElement`, `releaseElement`, `releaseTree`, `clearPools`,
+  `getPoolStats`, `batchUpdates`, `endBatch`, `enqueueDOMWrite`,
+  `scheduleWork`, `schedulePostFlush`, `getSchedulerStats`,
+  `resetSchedulerStats`, `promoteToGPULayer`, `demoteFromGPULayer`,
+  `initDelegation`, `teardownDelegation`, `delegateEvent`, `undelegateEvent`)
+  will leave the main entry in the next major release. Import them from
+  `swiftui-for-web/internal/*` if you depend on them (#47).
 - Add `.task(_:)` and `.task(id:_:)`: asynchronous work that starts when a view
   appears, is cancelled when it disappears, and restarts when `id` changes
   (#37). The action receives an `AbortSignal`.
