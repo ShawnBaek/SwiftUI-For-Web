@@ -49,3 +49,21 @@ export function warnUntrackedRead() {
     + `Read at: ${site || 'unknown'}`
   );
 }
+
+// The framework's own source directory, to skip its frames in stack traces.
+// (String math, not new URL(..., import.meta.url), which build tools treat
+// as an asset reference.)
+const FRAMEWORK_ROOT = String(import.meta.url).replace(/Core\/Dev\.js(?:[?#].*)?$/, '');
+
+/**
+ * The first stack frame of `error` outside the framework: where user code
+ * created a view. Empty when unknown.
+ * @internal
+ */
+export function userFrame(error) {
+  const lines = String(error?.stack || '').split('\n').slice(1);
+  for (const line of lines) {
+    if (!line.includes(FRAMEWORK_ROOT) && /\d+:\d+\)?\s*$/.test(line)) return line.trim().replace(/^at\s+/, '');
+  }
+  return '';
+}

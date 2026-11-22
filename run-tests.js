@@ -551,6 +551,8 @@ async function runTests() {
     // rendered, under the current owner. Content that Show/For render after
     // mount must be as reactive as content rendered at mount.
     const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
+    const { registerRenderer } = await import('./src/Core/Renderer.js');
+    const { createDescriptor } = await import('./src/Core/ViewDescriptor.js');
     const { HStack: LayerHStack } = await import('./src/Layout/Stack/HStack.js');
     const { ZStack: LayerZStack } = await import('./src/Layout/Stack/ZStack.js');
     const { Spacer: LayerSpacer } = await import('./src/Layout/Spacer.js');
@@ -730,6 +732,29 @@ async function runTests() {
         root.querySelector('[data-view="Button"]').click();
         expect(calls).toEqual(['action', 'tap']);
         teardown();
+      });
+
+      // #42: render and modifier errors name the view and where it was created.
+      it('render and modifier errors name the view, the modifier and the creation site', () => {
+        registerRenderer('BoomView', () => { throw new Error('renderer exploded'); });
+        let caught = null;
+        try {
+          mountInRoot(() => VStack(createDescriptor('BoomView', {})));
+        } catch (error) {
+          caught = error;
+        }
+        expect(Boolean(caught)).toBe(true);
+        expect(caught.message.includes('BoomView failed to render: renderer exploded')).toBe(true);
+        expect(caught.message.includes('created at')).toBe(true);
+        expect(caught.message.includes('run-tests.js')).toBe(true);
+        expect(caught.cause.message).toBe('renderer exploded');
+        let modifierError = null;
+        try {
+          mountInRoot(() => VStack(ModifierText('x').padding(4).modifier(() => { throw new Error('bad modifier'); })));
+        } catch (error) {
+          modifierError = error;
+        }
+        expect(modifierError.message.includes('Text.custom() failed to render: bad modifier')).toBe(true);
       });
 
       // #52: in development, an untracked State read while building a view warns.

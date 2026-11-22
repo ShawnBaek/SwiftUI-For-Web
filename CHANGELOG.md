@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Render errors name the view (#42): an error thrown while rendering a view
+  or applying one of its modifiers is rethrown as
+  `SwiftUI-For-Web: Text.padding() failed to render: …`, with the original
+  error as `cause`. In development builds the message also gives where the
+  view was created (the first stack frame outside the framework), captured
+  when the descriptor is built; the optimized build skips the capture.
+- More HTML snapshots through `renderToString` (#42): accessibility
+  modifiers, `searchable` with `sheet`, and order-dependent modifier chains.
 - `Menu` renders view-descriptor items (#48): `Button(...)` items run their
   action and close the menu (a disabled one is `aria-disabled`), and
   `Divider()` is a separator. They were silently dropped, because the

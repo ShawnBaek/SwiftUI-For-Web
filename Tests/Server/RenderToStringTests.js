@@ -47,6 +47,19 @@ const views = {
     { selection: new State(2).binding },
     (item) => Text(item.name),
   ),
+  // #42: representative modifiers.
+  'accessibility-modifiers': () => VStack(
+    Text('42').accessibilityLabel('Answer').accessibilityValue('forty-two').accessibilityHint('The answer')
+      .accessibilityIdentifier('answer'),
+  ),
+  'searchable-and-sheet': () => VStack(Text('Results'))
+    .searchable(new State('swift').binding, { prompt: 'Search samples' })
+    .sheet(new State(false).binding, () => Text('Sheet content')),
+  'ordered-modifiers': () => VStack(
+    Text('outside').background(Color.blue).padding(8),
+    Text('stacked').padding(8).padding({ top: 4 }),
+    Text('same').padding(8).background(Color.gray).cornerRadius(4).opacity(0.5),
+  ),
   'navigation-and-tabs': () => VStack(
     NavigationStack(VStack(Text('Home'), NavigationLink('Details', () => Text('Detail')))),
     TabView(new State(0), Text('First'), Text('Second')),

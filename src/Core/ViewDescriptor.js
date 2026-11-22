@@ -22,6 +22,8 @@
  * const element = renderDescriptor(desc);
  */
 
+import { DEV_BUILD } from './Dev.js';
+
 /**
  * Symbol to identify view descriptors
  * @type {symbol}
@@ -62,6 +64,16 @@ export function createDescriptor(type, props = {}, children = [], key = null, mo
 
   descriptor._selfHash = computeSelfHash(descriptor);
   descriptor._hash = computeHash(descriptor);
+
+  // Development builds remember where the view was created, so render
+  // errors can point at the user's code (#42). The stack is only formatted
+  // if an error is reported.
+  if (DEV_BUILD) {
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 16;
+    Object.defineProperty(descriptor, '_source', { value: new Error(), enumerable: false });
+    Error.stackTraceLimit = limit;
+  }
 
   return Object.freeze(descriptor);
 }

@@ -13,6 +13,7 @@
  * 6. Eliminated data-view attributes in production (removed debug overhead)
  */
 
+import { DEV_BUILD, userFrame } from './Dev.js';
 import {
   isDescriptor,
   isLegacyView,
@@ -126,16 +127,41 @@ export function render(descriptor) {
   return renderDescriptorBody(descriptor, renderer);
 }
 
+// Errors thrown while rendering a view or applying its modifiers name the
+// view, the modifier and, in development builds, where the view was created
+// (#42). The original error is the `cause`; an error already described by a
+// nested view passes through unchanged.
+function describeRenderError(error, descriptor, modifier) {
+  if (error && error.swiftuiView) return error;
+  const what = modifier ? `${descriptor.type}.${modifier.type}()` : descriptor.type;
+  const site = DEV_BUILD ? userFrame(descriptor._source) : '';
+  const message = `SwiftUI-For-Web: ${what} failed to render: ${error?.message ?? error}`
+    + (site ? `\n    created at ${site}` : '');
+  const described = new Error(message, { cause: error });
+  described.swiftuiView = descriptor.type;
+  return described;
+}
+
 function renderDescriptorBody(descriptor, renderer) {
   // Render the element
-  const element = renderer(descriptor.props, descriptor.children);
+  let element;
+  try {
+    element = renderer(descriptor.props, descriptor.children);
+  } catch (error) {
+    throw describeRenderError(error, descriptor, null);
+  }
 
   // Apply modifiers in declaration order; a modifier whose meaning depends
   // on an earlier one gets its own layer (#50), so the result may be a
   // wrapper around the view's element.
-  const outer = descriptor.modifiers.length > 0
-    ? applyModifiers(element, descriptor.modifiers)
-    : element;
+  let outer = element;
+  if (descriptor.modifiers.length > 0) {
+    try {
+      outer = applyModifiers(element, descriptor.modifiers);
+    } catch (error) {
+      throw describeRenderError(error, descriptor, error?.swiftuiModifier ?? null);
+    }
+  }
 
   bindReactive(element, descriptor);
 
@@ -346,10 +372,18 @@ export function applyModifiers(element, modifiers) {
       }
       (categories ??= new Set()).add(category);
     }
-    if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
-      applySignalModifier(layer, modifier);
-    } else {
-      applyModifier(layer, modifier);
+    try {
+      if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
+        applySignalModifier(layer, modifier);
+      } else {
+        applyModifier(layer, modifier);
+      }
+    } catch (error) {
+      // Tell the caller which modifier failed.
+      if (error && typeof error === 'object' && !error.swiftuiModifier && Object.isExtensible(error)) {
+        error.swiftuiModifier = modifier;
+      }
+      throw error;
     }
   }
   return layer;
