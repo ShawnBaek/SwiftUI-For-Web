@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `TextField` (plain style), `Picker` (menu), `Slider` and `DatePicker` no
+  longer set an inline `outline: none`, which hid the keyboard focus ring.
+  The `:focus-visible` rule in the stylesheets now applies (#51).
 - The switch-style `Toggle` is accessible (#51). Its track is a native
   `<button role="switch">` with `aria-checked` following the binding, named
   by its label through `aria-labelledby`. It is focusable, Space and Enter

@@ -164,7 +164,6 @@ export class TextFieldView extends View {
         element.style.borderRadius = '0';
         element.style.padding = '8px 0';
         element.style.backgroundColor = 'transparent';
-        element.style.outline = 'none';
         break;
 
       case 'default':

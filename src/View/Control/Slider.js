@@ -85,7 +85,6 @@ export class SliderView extends View {
     input.style.appearance = 'none';
     input.style.background = 'rgba(120, 120, 128, 0.2)';
     input.style.borderRadius = '2px';
-    input.style.outline = 'none';
     input.style.cursor = 'pointer';
 
     // Apply tint color for filled portion

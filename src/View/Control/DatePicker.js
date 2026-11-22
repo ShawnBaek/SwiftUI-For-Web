@@ -184,7 +184,6 @@ export class DatePickerView extends View {
     input.style.backgroundColor = 'white';
     input.style.color = 'rgba(0, 122, 255, 1)';
     input.style.cursor = 'pointer';
-    input.style.outline = 'none';
 
     // Set min/max if range specified
     if (this._dateRange) {
