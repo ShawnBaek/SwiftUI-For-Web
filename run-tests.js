@@ -459,6 +459,8 @@ async function runTests() {
     });
 
     const PresentationEnvironment = await import('./src/Data/Environment.js');
+    const LifecycleModule = await import('./src/Core/LifecycleObserver.js');
+    const IslandsModule = await import('./src/islands.js');
     describe('SwiftUI-style modifiers', () => {
       it('maps accessibility modifiers to semantic attributes', () => {
         const element = render(
@@ -545,6 +547,74 @@ async function runTests() {
         expect(dismissCount).toBe(1);
         app.unmount();
         root.remove();
+      });
+
+      // #39: progressive activation.
+      it('mount mode replace swaps the static fallback for the view', () => {
+        const host = document.createElement('div');
+        const fallback = document.createElement('p');
+        fallback.textContent = 'Static fallback';
+        host.appendChild(fallback);
+        document.body.appendChild(host);
+        const app = App(() => ModifierText('Live')).mount(host, { mode: 'replace' });
+        expect(host.children.length).toBe(1);
+        expect(host.children[0].dataset.view).toBe('Text');
+        app.unmount();
+        expect(host.children.length).toBe(0);
+        host.remove();
+      });
+
+      it('unmount leaves no handlers or effects behind', () => {
+        const { getLifecycleStats } = LifecycleModule;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        let taps = 0;
+        let runs = 0;
+        const count = new State(0);
+        const app = App(() => VStack(
+          Button('Tap', () => { taps++; }),
+          ModifierText(() => { runs++; return String(count.value); })
+        )).mount(host);
+        const button = host.querySelector('[data-view="Button"]');
+        const runsAtMount = runs;
+        app.unmount();
+        button.click();
+        count.value = 1;
+        Scheduler.flushSync();
+        expect(taps).toBe(0);
+        expect(runs).toBe(runsAtMount);
+        expect(getLifecycleStats().observerActive).toBe(false);
+        host.remove();
+      });
+
+      it('whenVisible loads once when the host intersects, and can be cancelled', () => {
+        const { whenVisible } = IslandsModule;
+        const previous = globalThis.IntersectionObserver;
+        const observers = [];
+        globalThis.IntersectionObserver = class {
+          constructor(callback, options) { this.callback = callback; this.options = options; this.disconnected = false; observers.push(this); }
+          observe(element) { this.element = element; }
+          disconnect() { this.disconnected = true; }
+        };
+        try {
+          const host = document.createElement('div');
+          const loads = [];
+          whenVisible(host, (element) => loads.push(element));
+          expect(observers[0].options.rootMargin).toBe('200px');
+          observers[0].callback([{ isIntersecting: false }]);
+          expect(loads.length).toBe(0);
+          observers[0].callback([{ isIntersecting: true }]);
+          observers[0].callback([{ isIntersecting: true }]);
+          expect(loads.length).toBe(1);
+          expect(loads[0]).toBe(host);
+          expect(observers[0].disconnected).toBe(true);
+          const stop = whenVisible(document.createElement('div'), () => loads.push('never'));
+          stop();
+          observers[1].callback([{ isIntersecting: true }]);
+          expect(loads.length).toBe(1);
+        } finally {
+          globalThis.IntersectionObserver = previous;
+        }
       });
 
       // #38: alert, confirmation dialog and full-screen cover share the controller.

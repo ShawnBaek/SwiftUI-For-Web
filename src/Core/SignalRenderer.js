@@ -37,7 +37,7 @@ import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/
  * @param {HTMLElement} container - Target container.
  * @returns {() => void} Disposer.
  */
-export function mount(viewFactory, container) {
+export function mount(viewFactory, container, options = {}) {
   let dispose;
 
   createRoot((d) => {
@@ -46,10 +46,16 @@ export function mount(viewFactory, container) {
     const view = typeof viewFactory === 'function' ? buildingView(viewFactory) : viewFactory;
     const element = render(view);
 
-    const oldChild = container.firstChild;
-    if (oldChild) releaseTree(oldChild);
-    container.textContent = '';
-    if (element) container.appendChild(element);
+    if (options.replace && typeof container.replaceChildren === 'function') {
+      // Swap the host's static fallback for the view in one step (#39).
+      if (element) container.replaceChildren(element);
+      else container.replaceChildren();
+    } else {
+      const oldChild = container.firstChild;
+      if (oldChild) releaseTree(oldChild);
+      container.textContent = '';
+      if (element) container.appendChild(element);
+    }
 
     onCleanup(() => {
       if (element && element.parentNode === container) {

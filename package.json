@@ -17,6 +17,11 @@
       "import": "./src/core.js",
       "default": "./src/core.js"
     },
+    "./islands": {
+      "types": "./src/islands.d.ts",
+      "import": "./src/islands.js",
+      "default": "./src/islands.js"
+    },
     "./server": {
       "types": "./src/server.d.ts",
       "import": "./src/server.js",

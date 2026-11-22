@@ -316,6 +316,43 @@ and views that wait for an animation frame or a ResizeObserver
 (`GeometryReader`, `ViewThatFits`) render empty until the client mounts. `DocumentMetadata` is a web-only API: SwiftUI has
 no document `<head>`.
 
+## Islands on a static page
+
+Keep the page server-rendered and activate SwiftUI-For-Web only where it is
+interactive:
+
+```js
+// finder-island.js
+import { App, State, VStack, Text } from 'swiftui-for-web';
+export const query = new State('');            // static triggers write this
+App(() => FinderView(query)).mount('#finder', { mode: 'replace' });
+```
+
+```html
+<div id="finder"><p>Static fallback list…</p></div>
+<button data-query="swift">Swift</button>
+<script type="module">
+  import { whenVisible } from 'swiftui-for-web/islands'; // loads no framework code
+  whenVisible('#finder', async () => {
+    const { query } = await import('./finder-island.js');
+    for (const button of document.querySelectorAll('[data-query]')) {
+      button.addEventListener('click', () => { query.value = button.dataset.query; });
+    }
+  });
+</script>
+```
+
+- `mount(host, { mode: 'replace' })` keeps the fallback markup until the view
+  is rendered, swaps them in one step and holds the host's height until the
+  next frame, so activation causes no layout shift.
+- `unmount()` releases the island's handlers, effects, tasks and lifecycle
+  callbacks.
+- Static controls drive the island by writing a `State` the island module
+  exports: one `App` serves any number of triggers.
+- `whenVisible(host, load)` calls `load` once when the host comes within
+  200px of the viewport, so a page whose islands are off-screen loads no
+  framework JavaScript until they scroll near.
+
 ## Examples
 
 Nine runnable examples in `Examples/`, each a self-contained HTML + module:

@@ -1364,8 +1364,12 @@ export function RotationGesture(): Gesture & {
 
 /** Create and mount an app */
 export function App(content: () => View): {
-  /** Mount to a DOM element */
-  mount(selector: string | HTMLElement): void;
+  /**
+   * Mount to a DOM element. `mode: 'replace'` keeps the host's static
+   * fallback until the view is ready, swaps them in one step and holds the
+   * host's size meanwhile (no layout shift).
+   */
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' }): AppInstance;
   /** Refresh the UI */
   refresh(): void;
 };
@@ -1580,7 +1584,7 @@ export class SecureFieldView extends TextFieldView {}
 
 /** A mounted app, returned by `App(...).mount(...)`. */
 export class AppInstance {
-  mount(selector: string | HTMLElement): AppInstance;
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' }): AppInstance;
   unmount(): AppInstance;
 }
 

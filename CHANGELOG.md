@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Progressive activation (#39): `App(view).mount(host, { mode: 'replace' })`
+  keeps the host's static fallback until the view is rendered off-document,
+  swaps them in one step (`replaceChildren`) and holds the host's height
+  until the next frame, so there is no layout shift. A new
+  `swiftui-for-web/islands` entry exports `whenVisible(host, load)`, which
+  loads an island once its host nears the viewport and imports no framework
+  code itself. The README documents the static-trigger pattern (the island
+  exports a `State` that page buttons write).
 - Presentations share one controller (#38): `.fullScreenCover(isPresented,
   content)`, `.alert(title, isPresented, { actions, message })` and
   `.confirmationDialog(title, isPresented, { titleVisibility, actions,

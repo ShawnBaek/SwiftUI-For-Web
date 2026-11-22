@@ -222,7 +222,7 @@ async function main() {
 
   // 5. Declarations agree with the runtime.
   const baseline = JSON.parse(await readFile(path.join(root, 'scripts', 'types-baseline.json'), 'utf8'));
-  const declarationTargets = [['.', full], ['./core', core], ['./charts', charts], ['./server', loaded.get('./server')]];
+  const declarationTargets = [['.', full], ['./core', core], ['./charts', charts], ['./server', loaded.get('./server')], ['./islands', loaded.get('./islands')]];
   for (const [subpath, module] of declarationTargets) {
     if (!module) continue;
     const file = path.join(root, pkg.exports[subpath].types);
