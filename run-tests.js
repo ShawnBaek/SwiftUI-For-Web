@@ -2292,16 +2292,44 @@ async function runTests() {
 
       it('openURL opens with noopener and noreferrer', () => {
         const calls = [];
+        const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
         globalThis.window = { open: (...args) => { calls.push(args); } };
         try {
           EnvStore.get(EnvKeys.openURL)('https://example.com');
         } finally {
-          delete globalThis.window;
+          if (previous) Object.defineProperty(globalThis, 'window', previous);
+          else delete globalThis.window;
         }
         expect(calls.length).toBe(1);
         expect(calls[0][1]).toBe('_blank');
         expect(calls[0][2]).toBe('noopener,noreferrer');
       });
+    });
+    await itAsync('subscribe() alone starts the system listeners', async () => {
+      const listeners = [];
+      const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+      globalThis.window = {
+        innerWidth: 1024,
+        innerHeight: 768,
+        addEventListener() {},
+        matchMedia: (query) => ({
+          matches: false,
+          addEventListener: (type, listener) => { listeners.push({ query, listener }); },
+        }),
+      };
+      try {
+        // A fresh module instance, so no earlier get() has initialized it.
+        const fresh = await import('./src/Data/Environment.js?subscribe-only');
+        const seen = [];
+        fresh.Environment.subscribe(fresh.EnvironmentValues.colorScheme, (value) => { seen.push(value); });
+        const dark = listeners.find((entry) => entry.query.includes('prefers-color-scheme'));
+        expect(Boolean(dark)).toBe(true);
+        dark.listener({ matches: true });
+        expect(seen).toEqual([fresh.ColorScheme.dark]);
+      } finally {
+        if (previous) Object.defineProperty(globalThis, 'window', previous);
+        else delete globalThis.window;
+      }
     });
 
     // Test Color

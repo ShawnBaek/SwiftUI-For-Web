@@ -122,7 +122,8 @@ export const UserInterfaceIdiom = {
 export function currentDeviceIdiom() {
   if (typeof window === 'undefined') return UserInterfaceIdiom.unspecified;
   const width = window.innerWidth;
-  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const hasTouch = 'ontouchstart' in window
+    || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
 
   if (width < 768) {
     return UserInterfaceIdiom.phone;
@@ -302,6 +303,9 @@ class EnvironmentStore {
    * @returns {Function} Unsubscribe function
    */
   subscribe(key, callback) {
+    // Subscribing alone must start the system listeners (color scheme,
+    // reduced motion, resize), or a subscribe-only caller never hears changes.
+    this._ensureDefaults();
     if (!this._subscribers.has(key)) {
       this._subscribers.set(key, new Set());
     }
