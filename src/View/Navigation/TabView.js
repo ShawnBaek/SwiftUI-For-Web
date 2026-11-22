@@ -21,7 +21,7 @@
 
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
-import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
+import { VIEW_DESCRIPTOR, ModifierType } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
 import { createOwnedSlot } from '../../Core/OwnedSlot.js';
 import { releaseChildren } from '../../Core/ElementPool.js';
@@ -48,6 +48,11 @@ function getTabItem(tab) {
  */
 function getTag(tab, index) {
   if (isDescriptor(tab)) {
+    // The last .tag(_:) modifier wins, as in SwiftUI (#48); props._tag is the
+    // older descriptor form.
+    for (let i = tab.modifiers.length - 1; i >= 0; i--) {
+      if (tab.modifiers[i].type === ModifierType.TAG) return tab.modifiers[i].value;
+    }
     return tab.props._tag ?? index;
   }
   return tab._tag ?? index;
@@ -117,7 +122,7 @@ export class TabViewView extends View {
     }
     // Default to first tab's tag
     if (this._tabs.length > 0) {
-      return this._tabs[0]._tag ?? 0;
+      return getTag(this._tabs[0], 0);
     }
     return null;
   }
@@ -266,7 +271,7 @@ export class TabViewView extends View {
 
     // Update tab bar colors
     Array.from(tabBar.children).forEach((tabButton, index) => {
-      const tag = this._tabs[index]?._tag ?? index;
+      const tag = this._tabs[index] ? getTag(this._tabs[index], index) : index;
       const isSelected = tag === newSelection;
       tabButton.style.color = isSelected ? 'rgba(0, 122, 255, 1)' : 'rgba(153, 153, 153, 1)';
     });
@@ -295,7 +300,7 @@ export class TabViewView extends View {
     let selectedIndex = 0;
 
     this._tabs.forEach((tab, index) => {
-      const tag = tab._tag ?? index;
+      const tag = getTag(tab, index);
       if (tag === currentSelection) {
         selectedIndex = index;
       }
@@ -333,7 +338,7 @@ export class TabViewView extends View {
       dot.style.cursor = 'pointer';
 
       dot.addEventListener('click', () => {
-        const tag = this._tabs[index]._tag ?? index;
+        const tag = getTag(this._tabs[index], index);
         this._setSelection(tag);
         pagesContainer.style.transform = `translateX(-${index * 100}%)`;
 
@@ -367,7 +372,7 @@ export class TabViewView extends View {
 
       if (Math.abs(diff) > 50) {
         const currentIdx = this._tabs.findIndex((tab, i) =>
-          (tab._tag ?? i) === this._getSelection()
+          getTag(tab, i) === this._getSelection()
         );
 
         let newIndex;
@@ -379,7 +384,7 @@ export class TabViewView extends View {
           return;
         }
 
-        const tag = this._tabs[newIndex]._tag ?? newIndex;
+        const tag = getTag(this._tabs[newIndex], newIndex);
         this._setSelection(tag);
         pagesContainer.style.transform = `translateX(-${newIndex * 100}%)`;
 
