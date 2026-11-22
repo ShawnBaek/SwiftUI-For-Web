@@ -606,21 +606,44 @@ function applyModifier(element, modifier) {
 }
 
 // .navigationTitle(_:) (#40). SwiftUI shows it in the navigation bar; on
-// the web it is the document title while the view is shown. When the view
-// is disposed (a popped screen, a closed Show branch) the previous title
-// comes back. A State or Binding title follows its value.
+// the web it is the document title while the view is shown. Titles form a
+// stack: the latest shown wins, and when a view is disposed (a popped
+// screen, a closed Show branch) its entry leaves the stack and the title
+// falls back to the one below, or to the page's own title.
+const titleStack = [];
+let baseTitle = null;
+
+function showTopTitle() {
+  const top = titleStack[titleStack.length - 1];
+  document.title = top ? top.text : (baseTitle ?? '');
+  if (!top) baseTitle = null;
+}
+
 function applyNavigationTitle(value) {
   if (typeof document === 'undefined') return;
-  const previous = document.title;
   const owner = getOwner();
-  if (isSignalValue(value) && owner) {
+  if (!owner) {
+    // Nothing will dispose it: just set the title.
+    document.title = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+    return;
+  }
+  if (titleStack.length === 0) baseTitle = document.title;
+  const entry = { text: '' };
+  titleStack.push(entry);
+  if (isSignalValue(value)) {
     createEffect(() => {
-      document.title = String(value.value ?? '');
+      entry.text = String(value.value ?? '');
+      if (titleStack.includes(entry)) showTopTitle();
     });
   } else {
-    document.title = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+    entry.text = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+    showTopTitle();
   }
-  if (owner) onCleanup(() => { document.title = previous; });
+  onCleanup(() => {
+    const index = titleStack.indexOf(entry);
+    if (index !== -1) titleStack.splice(index, 1);
+    showTopTitle();
+  });
 }
 
 function accessibilityText(value) {

@@ -7,7 +7,8 @@
  *   Elsewhere it joins the accessible name: appended to an aria-label
  *   ("Volume, 50%"), or as visually hidden text inside the element.
  * - The hint is a hidden node the element points at with aria-describedby
- *   (aria-description is not reliably announced).
+ *   (aria-description is not reliably announced). Void elements (input,
+ *   img, …) can't hold that node and use aria-description.
  */
 
 import { nextElementId } from './ElementID.js';
@@ -106,30 +107,11 @@ export function applyAccessibilityHint(element, hint) {
   node.textContent = hint;
 }
 
-// A void element can't contain its hint node: describe it right away with
-// aria-description, then, once it is in the document, move the hint to a
-// hidden sibling referenced by aria-describedby.
+// A void element can't contain its hint node, and a sibling node would have
+// to follow the element through moves and removal. It uses aria-description
+// (announced by most current screen readers) instead.
 function applyVoidHint(element, hint) {
   element.setAttribute('aria-description', hint);
-  let node = element._accessibilityHintNode;
-  if (node) {
-    node.textContent = hint;
-    return;
-  }
-  node = document.createElement('span');
-  node.id = nextElementId('swiftui-hint');
-  node.dataset.accessibilityHint = '';
-  node.hidden = true;
-  node.textContent = hint;
-  element._accessibilityHintNode = node;
-  queueMicrotask(() => {
-    const parent = element.parentNode;
-    if (!parent || typeof parent.insertBefore !== 'function') return;
-    parent.insertBefore(node, element.nextSibling);
-    const described = element.getAttribute('aria-describedby');
-    element.setAttribute('aria-describedby', described ? `${described} ${node.id}` : node.id);
-    element.removeAttribute('aria-description');
-  });
 }
 
 /**

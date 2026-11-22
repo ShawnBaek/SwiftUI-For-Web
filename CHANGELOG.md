@@ -42,7 +42,9 @@
   progressbar, meter, scrollbar); elsewhere it joins the accessible name,
   appended to an `aria-label` ("Silence, off") or as visually hidden text
   (`.swiftui-visually-hidden`). The hint is a hidden node referenced by
-  `aria-describedby`, since `aria-description` isn't reliably announced.
+  `aria-describedby`, since `aria-description` isn't reliably announced;
+  void elements (`input`, `img`, …), which can't hold that node, use
+  `aria-description`.
 - Rows of a reactive `ForEach` inside a `List` are list rows (#52): they get
   the row styling, the `listitem`/`option` role, and take part in selection
   and keyboard navigation, including rows added later (the first row of an

@@ -55,7 +55,8 @@ function renderLazyRows(container, children, { axis, estimate, overscan }) {
   // A static ForEach gives one lazy row per item, laid out by the stack.
   const rows = [];
   for (const child of children) {
-    if (isDescriptor(child) && child.type === 'ForEach') rows.push(...child.children);
+    // (A ForEach with modifiers of its own stays one row, so they apply.)
+    if (isDescriptor(child) && child.type === 'ForEach' && child.modifiers.length === 0) rows.push(...child.children);
     else rows.push(child);
   }
 

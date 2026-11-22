@@ -136,6 +136,10 @@ describe('renderToString (#40)', () => {
     expect(text.includes(', on</span>')).toBe(true);
     const image = renderToString(() => Image('/a.png').accessibilityLabel('Chart').accessibilityValue('rising'));
     expect(image.includes('aria-label="Chart, rising"')).toBe(true);
+    // A void element's hint is an aria-description: no extra node to leak.
+    const field = renderToString(() => Image('/b.png').accessibilityHint('Opens the chart'));
+    expect(field.includes('aria-description="Opens the chart"')).toBe(true);
+    expect(field.includes('data-accessibility-hint')).toBe(false);
   });
 
   it('LazyVStack lays out a static ForEach as one row per item', async () => {

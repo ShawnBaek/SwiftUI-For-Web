@@ -1128,6 +1128,11 @@ async function runTests() {
           expect(document.title).toBe('Inbox (3)');
           teardown();
           expect(document.title).toBe('Before');
+          // Nested titles in one owner restore the page title, not an inner one.
+          const nested = mountInRoot(() => VStack(ModifierText('x').navigationTitle('B')).navigationTitle('A'));
+          expect(document.title).toBe('A');
+          nested.teardown();
+          expect(document.title).toBe('Before');
         } finally {
           document.title = previous;
         }
