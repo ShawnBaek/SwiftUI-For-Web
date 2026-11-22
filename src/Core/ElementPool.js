@@ -50,7 +50,25 @@ let _misses = 0;
  * @param {string} tagName - HTML tag name (e.g., 'div', 'span')
  * @returns {HTMLElement} A clean DOM element
  */
+// Static rendering (#40) renders into a different document; elements from
+// the live document must not cross into it, or the reverse.
+let _suspended = 0;
+
+/**
+ * Run `fn` with pooling off: elements are created fresh and not recycled.
+ * @internal
+ */
+export function withoutPooling(fn) {
+  _suspended++;
+  try {
+    return fn();
+  } finally {
+    _suspended--;
+  }
+}
+
 export function acquireElement(tagName) {
+  if (_suspended) return document.createElement(tagName);
   const tag = tagName.toLowerCase();
   const pool = _pools.get(tag);
 
@@ -79,6 +97,8 @@ export function releaseElement(element) {
   // pooled or not: delegated handlers and lifecycle callbacks (I3, #46).
   undelegateAll(element);
   releaseCallbacks(element);
+  // While pooling is suspended (static rendering), nothing is recycled.
+  if (_suspended) return;
 
   const tag = element.tagName.toLowerCase();
   if (!POOLABLE_TAGS.has(tag) || !_poolable.has(element)) return;

@@ -19,6 +19,7 @@ const suites = [
   'Tests/Data/ObservableObjectTests.js',
   'Tests/Graphic/ColorTests.js',
   'Tests/Graphic/FontTests.js',
+  'Tests/Server/RenderToStringTests.js',
 ];
 
 const load = (file) => import(pathToFileURL(path.join(root, file)).href);

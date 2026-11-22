@@ -142,6 +142,20 @@ export function cancelAppear(element) {
 }
 
 /**
+ * Forget an element's onAppear and onDisappear without running either, for
+ * an element that was never shown, such as one rendered by renderToString
+ * (#40).
+ *
+ * @param {HTMLElement} element
+ */
+export function discardCallbacks(element) {
+  _appearCallbacks.delete(element);
+  _newAppearElements.delete(element);
+  _disappearCallbacks.delete(element);
+  maybeDisconnectObserver();
+}
+
+/**
  * Process any pending appear/disappear callbacks, checking every registered
  * element: O(registered x depth). The shared observer does not use this path
  * for a large registry; it processes only the mutated subtrees (#57).

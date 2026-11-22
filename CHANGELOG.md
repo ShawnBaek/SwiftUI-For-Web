@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Static rendering (#40). A new `swiftui-for-web/server` entry renders views
+  to HTML in Node with no browser: `renderToString(view)` returns the markup
+  of the view's first render, and `renderDocument(view, options)` a full
+  document. The framework's own renderers run against a small DOM-like shim
+  (`src/Server/DOMShim.js`), so there is no second HTML implementation to
+  drift. Output is deterministic: attributes and styles keep their order,
+  ARIA ids restart per render (`src/Core/ElementID.js`), animation frames
+  and timers never run, and element pooling is off during the render.
+  Scene-level `DocumentMetadata` (title, description, canonical, robots,
+  Open Graph, Twitter card, JSON-LD), passed to `WindowGroup({ metadata })`
+  or `renderDocument`, escapes every value, rejects non-http(s) URLs and bad
+  robots directives, and serializes JSON-LD so it can't close its
+  `<script>`. `sitemap(routes, { baseURL })` writes sitemaps.org XML.
+  Snapshot tests live in `Tests/Server`.
 - `List` selection works and is accessible (#51). A selectable list is a
   WAI-ARIA `listbox` whose rows are `option`s with `aria-selected` and a
   roving `tabindex`; ↑/↓, Home and End move focus and Space (or a click)

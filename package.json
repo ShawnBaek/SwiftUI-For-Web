@@ -17,6 +17,11 @@
       "import": "./src/core.js",
       "default": "./src/core.js"
     },
+    "./server": {
+      "types": "./src/server.d.ts",
+      "import": "./src/server.js",
+      "default": "./src/server.js"
+    },
     "./charts": {
       "types": "./src/Charts/index.d.ts",
       "import": "./src/Charts/index.js",

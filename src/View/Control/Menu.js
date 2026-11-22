@@ -22,13 +22,12 @@
  * )
  */
 
+import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
-let menuCount = 0;
 function nextMenuId() {
-  menuCount += 1;
-  return `swiftui-menu-${menuCount}`;
+  return nextElementId('swiftui-menu');
 }
 
 /**

@@ -283,6 +283,38 @@ Native browser             Web Animations API, CSS transitions,
 
 ---
 
+## Static rendering (SEO)
+
+Render the same views to HTML in Node, so crawlers and link previews see the
+page without running JavaScript. The `swiftui-for-web/server` entry runs the
+framework's own renderers against a small DOM shim; there is no separate
+HTML template to keep in sync.
+
+```js
+import { WindowGroup, VStack, Text } from 'swiftui-for-web';
+import { renderDocument, DocumentMetadata, sitemap } from 'swiftui-for-web/server';
+
+const metadata = new DocumentMetadata({
+  title: 'NativeMobile',
+  description: 'Learn native iOS development.',
+  canonical: 'https://nativemobile.org/',
+  openGraph: { type: 'website', image: 'https://nativemobile.org/og.png' },
+  jsonLD: { '@context': 'https://schema.org', '@type': 'WebSite', name: 'NativeMobile' },
+});
+
+const html = renderDocument(
+  WindowGroup({ metadata }, () => VStack(Text('Hello'))),
+  { stylesheets: ['/styles/index.css'], scripts: ['/main.js'] },
+);
+const xml = sitemap(['/', '/lessons'], { baseURL: 'https://nativemobile.org' });
+```
+
+Output is deterministic (byte-identical for the same input), and every
+metadata value is escaped. There is no layout during a static render: sizes are 0,
+and views that wait for an animation frame or a ResizeObserver
+(`GeometryReader`, `ViewThatFits`) render empty until the client mounts. `DocumentMetadata` is a web-only API: SwiftUI has
+no document `<head>`.
+
 ## Examples
 
 Nine runnable examples in `Examples/`, each a self-contained HTML + module:

@@ -19,6 +19,7 @@
  * )
  */
 
+import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 import { VIEW_DESCRIPTOR, ModifierType } from '../../Core/ViewDescriptor.js';
@@ -77,7 +78,6 @@ export const TabViewStyle = {
   tabBar: 'tabBar'      // Bottom tab bar (default)
 };
 
-let tabViewCount = 0;
 /**
  * Give the first tab the Tab stop when no tab is selected (#51), so the
  * tablist stays reachable from the keyboard.
@@ -88,8 +88,7 @@ function ensureTabStop(tabList) {
 }
 
 function nextTabViewId() {
-  tabViewCount += 1;
-  return `swiftui-tabview-${tabViewCount}`;
+  return nextElementId('swiftui-tabview');
 }
 
 /**

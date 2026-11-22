@@ -10,14 +10,13 @@
  *   Toggle({ label: 'Label', isOn: binding })
  */
 
+import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
 
-let toggleLabelCount = 0;
 function nextToggleLabelId() {
-  toggleLabelCount += 1;
-  return `swiftui-toggle-label-${toggleLabelCount}`;
+  return nextElementId('swiftui-toggle-label');
 }
 
 /**

@@ -18,13 +18,12 @@
  * )
  */
 
+import { nextElementId } from '../../Core/ElementID.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
-let disclosureCount = 0;
 function nextDisclosureId() {
-  disclosureCount += 1;
-  return `swiftui-disclosure-${disclosureCount}`;
+  return nextElementId('swiftui-disclosure');
 }
 
 /**

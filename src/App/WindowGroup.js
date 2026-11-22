@@ -55,6 +55,7 @@ export class WindowGroupView extends View {
     this._id = null;
     this._content = null;
     this._defaultValue = null;
+    this._metadata = null;
 
     // Parse arguments
     if (typeof args[0] === 'string') {
@@ -67,6 +68,8 @@ export class WindowGroupView extends View {
       this._id = options.id ?? null;
       this._title = options.title ?? null;
       this._defaultValue = options.defaultValue ?? null;
+      // Scene-level document metadata (#40), read by renderDocument.
+      this._metadata = options.metadata ?? null;
       this._content = args[1];
     } else {
       // WindowGroup(content)
