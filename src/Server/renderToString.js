@@ -47,11 +47,17 @@ function resolveView(content) {
  * @returns {string}
  */
 export function renderToString(content) {
-  return withElementIdScope(() => withoutPooling(() => withDOMShim(() => createRoot((dispose) => {
+  return renderWithTitle(content).html;
+}
+
+// Render and also report the document title the view set with
+// .navigationTitle(_:) (#40), read before the render's owner is disposed.
+function renderWithTitle(content) {
+  return withElementIdScope(() => withoutPooling(() => withDOMShim((document) => createRoot((dispose) => {
     let element = null;
     try {
       element = render(resolveView(content));
-      return element ? serializeNode(element) : '';
+      return { html: element ? serializeNode(element) : '', title: document.title || null };
     } finally {
       dispose();
       discardTree(element);
@@ -65,7 +71,8 @@ export function renderToString(content) {
  * element the client app can mount into.
  *
  * Metadata comes from options.metadata, or from a WindowGroup's
- * `{ metadata }` (its title fills in a missing metadata title).
+ * `{ metadata }`. A missing title comes from the view's
+ * `.navigationTitle(_:)`, then from the WindowGroup's title.
  *
  * @param {View|Object|Function} content
  * @param {Object} [options]
@@ -79,10 +86,13 @@ export function renderToString(content) {
  */
 export function renderDocument(content, options = {}) {
   const view = resolveView(content);
+  const rendered = renderWithTitle(view);
   let metadata = DocumentMetadata.from(options.metadata ?? view?._metadata ?? null);
-  const sceneTitle = view?._title ?? null;
-  if (sceneTitle && (!metadata || metadata.title === null)) {
-    metadata = metadata ? metadata.merging({ title: sceneTitle }) : new DocumentMetadata({ title: sceneTitle });
+  // A missing metadata title comes from .navigationTitle(_:), then from the
+  // WindowGroup's title.
+  const fallbackTitle = rendered.title ?? view?._title ?? null;
+  if (fallbackTitle && (!metadata || metadata.title === null)) {
+    metadata = metadata ? metadata.merging({ title: fallbackTitle }) : new DocumentMetadata({ title: fallbackTitle });
   }
   const lang = options.lang ?? 'en';
   const rootId = options.rootId ?? 'root';
@@ -96,7 +106,7 @@ export function renderDocument(content, options = {}) {
   }
   for (const href of options.stylesheets ?? []) head.push(`<link rel="stylesheet" href="${escapeAttribute(href)}">`);
   if (options.head) head.push(String(options.head));
-  const body = [`<div id="${escapeAttribute(rootId)}">${renderToString(view)}</div>`];
+  const body = [`<div id="${escapeAttribute(rootId)}">${rendered.html}</div>`];
   for (const src of options.scripts ?? []) body.push(`<script type="module" src="${escapeAttribute(src)}"></script>`);
   return [
     '<!DOCTYPE html>',

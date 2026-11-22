@@ -1116,6 +1116,23 @@ async function runTests() {
         teardown();
       });
 
+      it('.navigationTitle sets the document title, follows a State and restores on unmount', () => {
+        const previous = document.title;
+        document.title = 'Before';
+        try {
+          const title = new State('Inbox');
+          const { teardown } = mountInRoot(() => VStack(ModifierText('x')).navigationTitle(title));
+          expect(document.title).toBe('Inbox');
+          title.value = 'Inbox (3)';
+          Scheduler.flushSync();
+          expect(document.title).toBe('Inbox (3)');
+          teardown();
+          expect(document.title).toBe('Before');
+        } finally {
+          document.title = previous;
+        }
+      });
+
       it('does not warn for reads inside untrack()', () => {
         const warnings = [];
         const originalWarn = console.warn;

@@ -88,6 +88,10 @@ export function chainable(descriptor, extras = null) {
   // TabView reads the builder from props._tabItem.
   chain.tabItem = (builder) => withProps({ _tabItem: builder });
 
+  // The document title while this view is shown (#40); a State or Binding
+  // keeps it in sync.
+  chain.navigationTitle = (title) => add(ModifierType.NAVIGATION_TITLE, title);
+
   chain.modifier = (mod) => add(ModifierType.CUSTOM, mod);
 
   if (extras) Object.assign(chain, extras({ descriptor, wrap, add, withProps }));

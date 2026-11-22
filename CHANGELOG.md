@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `.navigationTitle(_:)` (#40) sets the document title while its view is
+  shown and restores the previous one when the view goes away (a popped
+  screen, a closed branch); a `State` or `Binding` title stays in sync.
+  `renderDocument` uses it for a missing metadata title, before the
+  `WindowGroup` title.
 - In-place update benchmark (#53): `Tests/Benchmark/updates.html` measures
   the js-framework-benchmark scenarios as `State` writes on one mounted app
   (no remounts); `npm run bench` runs it in headless Chrome in real time and

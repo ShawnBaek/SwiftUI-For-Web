@@ -29,6 +29,7 @@ import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } fr
 import { delegateEvent } from './EventDelegate.js';
 import { createModifier, ModifierType } from './ViewDescriptor.js';
 import { installReactiveModifier } from './SignalRenderer.js';
+import { applyModifiers } from './Renderer.js';
 import { applyFrame } from './Frame.js';
 
 /** @type {number} Global view counter for generating unique IDs */
@@ -540,6 +541,12 @@ export class View {
   sheet(isPresented, optionsOrContent, content) {
     const modifier = createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content });
     return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /** `.navigationTitle(_:)` (#40): the document title while shown. */
+  navigationTitle(title) {
+    const modifier = createModifier(ModifierType.NAVIGATION_TITLE, title);
+    return this.modifier({ apply: (element) => applyModifiers(element, [modifier]) });
   }
 
   /** `.fullScreenCover(isPresented:onDismiss:content:)` (#38). */

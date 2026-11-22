@@ -100,6 +100,8 @@ export class View {
   sheet(isPresented: Binding<boolean>, content: () => View): this;
   /** Present content while a Boolean binding is true and handle dismissal */
   sheet(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+  /** The document title while this view is shown (#40); a State or Binding keeps it in sync. */
+  navigationTitle(title: string | State<string> | Binding<string>): this;
   /** Present content over the whole window while `isPresented` is true (#38). */
   fullScreenCover(isPresented: Binding<boolean>, content: () => View): this;
   fullScreenCover(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;

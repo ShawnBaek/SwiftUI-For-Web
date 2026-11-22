@@ -574,6 +574,10 @@ function applyModifier(element, modifier) {
       applyClipShape(element, value);
       break;
 
+    case ModifierType.NAVIGATION_TITLE:
+      applyNavigationTitle(value);
+      break;
+
     case ModifierType.COLOR_EFFECT:
     case ModifierType.DISTORTION_EFFECT:
     case ModifierType.LAYER_EFFECT:
@@ -594,6 +598,24 @@ function applyModifier(element, modifier) {
         modifier.apply(element);
       }
   }
+}
+
+// .navigationTitle(_:) (#40). SwiftUI shows it in the navigation bar; on
+// the web it is the document title while the view is shown. When the view
+// is disposed (a popped screen, a closed Show branch) the previous title
+// comes back. A State or Binding title follows its value.
+function applyNavigationTitle(value) {
+  if (typeof document === 'undefined') return;
+  const previous = document.title;
+  const owner = getOwner();
+  if (isSignalValue(value) && owner) {
+    createEffect(() => {
+      document.title = String(value.value ?? '');
+    });
+  } else {
+    document.title = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+  }
+  if (owner) onCleanup(() => { document.title = previous; });
 }
 
 function accessibilityText(value) {

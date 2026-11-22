@@ -181,6 +181,14 @@ describe('DocumentMetadata (#40)', () => {
     expect(renderDocument(scene, { stylesheets: ['/styles/index.css?v=1&x=2'], scripts: ['/main.js'] })).toBe(html);
   });
 
+  it('uses .navigationTitle for a missing metadata title, before the WindowGroup title', () => {
+    const scene = WindowGroup('Scene', () => VStack(Text('Lessons')).navigationTitle('Lessons & <Quizzes>'));
+    const html = renderDocument(scene);
+    expect(html.includes('<title>Lessons &amp; &lt;Quizzes&gt;</title>')).toBe(true);
+    const explicit = renderDocument(scene, { metadata: { title: 'Explicit' } });
+    expect(explicit.includes('<title>Explicit</title>')).toBe(true);
+  });
+
   it('uses the WindowGroup title when the metadata has none', () => {
     const html = renderDocument(WindowGroup('Only a title', () => Text('x')));
     expect(html.includes('<title>Only a title</title>')).toBe(true);
