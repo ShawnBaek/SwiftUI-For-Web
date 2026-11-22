@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Type declarations for `GeometryProxy` (now a class, as at runtime),
+  `ViewBuilder`, `TupleView`, `ConditionalContent`, `Empty`, `Any`,
+  `UnevenRoundedRectangle`, `Bindable`, `NavigationDestination`,
+  `CodableRepresentation`, and `NavigationPath.codable`. The untyped-export
+  baseline shrinks from 86 to 76 names (#47). `withObservationTracking` and
+  `ObservationTracking` stay untyped: `withObservationTracking` does not yet
+  call its `onChange` argument.
 - The default export's type (`import SwiftUI from …`) is now derived from the
   declared named exports, so it lists every typed view and modifier instead of
   a hand-kept subset of about 90, and it includes Charts for the main entry
