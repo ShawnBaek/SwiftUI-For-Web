@@ -23,11 +23,13 @@
  * }
  */
 
+import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint } from './Accessibility.js';
 import { ChangeTracker } from './ChangeTracker.js';
 import { onAppear as lifecycleOnAppear, onDisappear as lifecycleOnDisappear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createModifier, ModifierType } from './ViewDescriptor.js';
 import { installReactiveModifier } from './SignalRenderer.js';
+import { applyModifiers } from './Renderer.js';
 import { applyFrame } from './Frame.js';
 
 /** @type {number} Global view counter for generating unique IDs */
@@ -541,16 +543,40 @@ export class View {
     return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
   }
 
+  /** `.navigationTitle(_:)` (#40): the document title while shown. */
+  navigationTitle(title) {
+    const modifier = createModifier(ModifierType.NAVIGATION_TITLE, title);
+    return this.modifier({ apply: (element) => applyModifiers(element, [modifier]) });
+  }
+
+  /** `.fullScreenCover(isPresented:onDismiss:content:)` (#38). */
+  fullScreenCover(isPresented, optionsOrContent, content) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /** `.alert(title, isPresented:, actions:, message:)` (#38). */
+  alert(title, isPresented, options) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
+  /** `.confirmationDialog(title, isPresented:, titleVisibility:, actions:, message:)` (#38). */
+  confirmationDialog(title, isPresented, options) {
+    const modifier = createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options });
+    return this.modifier({ apply: (element) => installReactiveModifier(element, modifier) });
+  }
+
   accessibilityLabel(label) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-label', String(label ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityLabel(element, String(label ?? '')) });
   }
 
   accessibilityValue(value) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-valuetext', String(value ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityValue(element, String(value ?? '')) });
   }
 
   accessibilityHint(hint) {
-    return this.modifier({ apply: (element) => element.setAttribute('aria-description', String(hint ?? '')) });
+    return this.modifier({ apply: (element) => applyAccessibilityHint(element, String(hint ?? '')) });
   }
 
   accessibilityIdentifier(identifier) {

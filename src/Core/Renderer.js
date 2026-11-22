@@ -13,6 +13,8 @@
  * 6. Eliminated data-view attributes in production (removed debug overhead)
  */
 
+import { applyAccessibilityLabel, applyAccessibilityValue, applyAccessibilityHint, restoreAccessibilityNodes } from './Accessibility.js';
+import { DEV_BUILD, userFrame } from './Dev.js';
 import {
   isDescriptor,
   isLegacyView,
@@ -23,7 +25,7 @@ import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
-import { applyFrame } from './Frame.js';
+import { applyFrame, withStackAxis, currentStackAxis } from './Frame.js';
 import { withEnvironment } from '../Data/Environment.js';
 import { State } from '../Data/State.js';
 import { Binding } from '../Data/Binding.js';
@@ -84,9 +86,10 @@ export function render(descriptor) {
     return document.createComment('empty');
   }
 
-  // Handle legacy View instances (backward compatibility)
+  // Handle legacy View instances (backward compatibility). Their content
+  // is not a stack's children (#50).
   if (isLegacyView(descriptor)) {
-    return descriptor._render();
+    return withStackAxis(null, () => descriptor._render());
   }
 
   // Handle non-descriptor values (strings, numbers)
@@ -126,13 +129,50 @@ export function render(descriptor) {
   return renderDescriptorBody(descriptor, renderer);
 }
 
+// Views whose children are laid out by the enclosing stack, as in SwiftUI
+// (ForEach and Group are transparent; Spacer reads its parent's axis).
+const AXIS_TRANSPARENT = new Set(['Spacer', 'ForEach', 'Group']);
+
+// Errors thrown while rendering a view or applying its modifiers name the
+// view, the modifier and, in development builds, where the view was created
+// (#42). The original error is the `cause`; an error already described by a
+// nested view passes through unchanged.
+function describeRenderError(error, descriptor, modifier) {
+  if (error && error.swiftuiView) return error;
+  const what = modifier ? `${descriptor.type}.${modifier.type}()` : descriptor.type;
+  const site = DEV_BUILD ? userFrame(descriptor._source) : '';
+  const message = `SwiftUI-For-Web: ${what} failed to render: ${error?.message ?? error}`
+    + (site ? `\n    created at ${site}` : '');
+  const described = new Error(message, { cause: error });
+  described.swiftuiView = descriptor.type;
+  return described;
+}
+
 function renderDescriptorBody(descriptor, renderer) {
   // Render the element
-  const element = renderer(descriptor.props, descriptor.children);
+  let element;
+  try {
+    // A view's children see no stack axis unless the view is itself a
+    // stack (VStack/HStack set it for their children), so frame and Spacer
+    // inside a Button, ScrollView or List don't act on an outer stack's
+    // axis (#50). See AXIS_TRANSPARENT for the exceptions.
+    element = AXIS_TRANSPARENT.has(descriptor.type)
+      ? renderer(descriptor.props, descriptor.children)
+      : withStackAxis(null, () => renderer(descriptor.props, descriptor.children));
+  } catch (error) {
+    throw describeRenderError(error, descriptor, null);
+  }
 
-  // Apply modifiers in a single pass
+  // Apply modifiers in declaration order; a modifier whose meaning depends
+  // on an earlier one gets its own layer (#50), so the result may be a
+  // wrapper around the view's element.
+  let outer = element;
   if (descriptor.modifiers.length > 0) {
-    applyModifiers(element, descriptor.modifiers);
+    try {
+      outer = applyModifiers(element, descriptor.modifiers);
+    } catch (error) {
+      throw describeRenderError(error, descriptor, error?.swiftuiModifier ?? null);
+    }
   }
 
   bindReactive(element, descriptor);
@@ -147,7 +187,7 @@ function renderDescriptorBody(descriptor, renderer) {
   // Store descriptor reference for reconciliation
   element._descriptor = descriptor;
 
-  return element;
+  return outer;
 }
 
 /**
@@ -172,7 +212,10 @@ function bindReactive(element, descriptor) {
   if (!hasThunk && !hasReactiveModifier) return;
 
   if (!getOwner()) {
-    if (hasThunk) element.textContent = String(untrack(thunk) ?? '');
+    if (hasThunk) {
+      element.textContent = String(untrack(thunk) ?? '');
+      restoreAccessibilityNodes(element);
+    }
     // A task without an id needs no effect: it still starts when the element
     // appears and is cancelled when the element disappears. A task with an id
     // needs an owner to restart when the id changes, so warn like any other
@@ -192,6 +235,8 @@ function bindReactive(element, descriptor) {
   if (hasThunk) {
     createEffect(() => {
       element.textContent = String(thunk() ?? '');
+      // textContent removed accessibilityValue/Hint nodes (#51).
+      restoreAccessibilityNodes(element);
     });
   }
 
@@ -204,7 +249,8 @@ function isReactiveModifier(modifier) {
   return modifier.type === ModifierType.ON_CHANGE
     || modifier.type === ModifierType.TASK
     || modifier.type === ModifierType.SEARCHABLE
-    || modifier.type === ModifierType.SHEET;
+    || modifier.type === ModifierType.SHEET
+    || modifier.type === ModifierType.PRESENTATION;
 }
 
 /**
@@ -266,21 +312,102 @@ function renderUnknown(descriptor) {
   return element;
 }
 
+// Ordered modifier layers (#50). Each layout or drawing modifier marks a
+// category on the layer it writes to. A modifier that would change the
+// meaning of a category already on that layer (SwiftUI applies modifiers
+// outside-in, each wrapping the previous result) starts a new wrapper layer.
+// Chains whose order can't change the result stay on one element.
+const LAYER_CATEGORY = {
+  [ModifierType.PADDING]: 'padding',
+  [ModifierType.BACKGROUND]: 'background',
+  [ModifierType.FRAME]: 'frame',
+  [ModifierType.BORDER]: 'border',
+  [ModifierType.CORNER_RADIUS]: 'clip',
+  [ModifierType.CLIP_SHAPE]: 'clip',
+  [ModifierType.OPACITY]: 'opacity',
+  [ModifierType.SHADOW]: 'shadow',
+};
+
+// For each modifier, the categories already on the layer that force a new
+// layer before it is applied. For example .background(c).padding(8) pads
+// outside the background, and .padding(8).padding(4) adds up.
+const WRAPS_AFTER = {
+  [ModifierType.PADDING]: new Set(['padding', 'background', 'frame', 'border', 'clip', 'shadow']),
+  [ModifierType.BACKGROUND]: new Set(['background', 'clip', 'opacity']),
+  [ModifierType.FRAME]: new Set(['frame', 'background', 'border', 'clip', 'shadow']),
+  [ModifierType.BORDER]: new Set(['border', 'clip']),
+  [ModifierType.CORNER_RADIUS]: new Set(['clip']),
+  [ModifierType.CLIP_SHAPE]: new Set(['clip']),
+  [ModifierType.OPACITY]: new Set(['opacity']),
+  [ModifierType.SHADOW]: new Set(['shadow']),
+};
+
+// Properties that place an element in its parent. A new layer takes them
+// over, so the wrapped view keeps its position in a stack or grid.
+const PLACEMENT_PROPERTIES = ['flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'justifySelf', 'gridArea', 'order'];
+
+function wrapInLayer(inner) {
+  const layer = document.createElement('div');
+  layer.dataset.modifierLayer = '';
+  const display = inner.style.display || '';
+  const inline = inner.tagName === 'SPAN' || display.startsWith('inline');
+  layer.style.display = inline ? 'inline-flex' : 'flex';
+  layer.style.flexDirection = 'column';
+  for (const property of PLACEMENT_PROPERTIES) {
+    if (inner.style[property]) {
+      layer.style[property] = inner.style[property];
+      inner.style[property] = '';
+    }
+  }
+  // A view that fills its parent keeps filling: the layer fills the parent
+  // and the view fills the layer.
+  // The view fills its layer (stretched across by the column layer, grown
+  // along it), so a size set on the layer later, such as a container's
+  // height: 100%, reaches the view.
+  inner.style.flexGrow = '1';
+  if (inner.style.width === '100%') layer.style.width = '100%';
+  if (inner.style.height === '100%') layer.style.height = '100%';
+  layer.appendChild(inner);
+  return layer;
+}
+
 /**
- * Apply modifiers to a DOM element in a single pass.
+ * Apply modifiers to a DOM element in declaration order.
  *
  * @param {HTMLElement} element - DOM element
  * @param {Array} modifiers - Array of modifier descriptors
+ * @returns {HTMLElement} The outermost element: `element`, or the last layer
+ *   wrapped around it when order matters.
  */
 export function applyModifiers(element, modifiers) {
+  let layer = element;
+  let categories = null;
   for (let i = 0; i < modifiers.length; i++) {
     const modifier = modifiers[i];
-    if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
-      applySignalModifier(element, modifier);
-    } else {
-      applyModifier(element, modifier);
+    const category = LAYER_CATEGORY[modifier.type];
+    if (category) {
+      const wrapsAfter = WRAPS_AFTER[modifier.type];
+      if (categories && [...categories].some((existing) => wrapsAfter.has(existing))) {
+        layer = wrapInLayer(layer);
+        categories = null;
+      }
+      (categories ??= new Set()).add(category);
+    }
+    try {
+      if (SIGNAL_STYLE_MODIFIERS.has(modifier.type) && isSignalValue(modifier.value)) {
+        applySignalModifier(layer, modifier);
+      } else {
+        applyModifier(layer, modifier);
+      }
+    } catch (error) {
+      // Tell the caller which modifier failed.
+      if (error && typeof error === 'object' && !error.swiftuiModifier && Object.isExtensible(error)) {
+        error.swiftuiModifier = modifier;
+      }
+      throw error;
     }
   }
+  return layer;
 }
 
 function applySignalModifier(element, modifier) {
@@ -297,11 +424,14 @@ function applySignalModifier(element, modifier) {
   // `{ left }`, a color switched to null) and other modifiers on the element
   // are untouched.
   let previous = null;
+  // Re-runs happen after the parent stack has rendered; keep its axis so a
+  // State-driven frame fills the same way every time (#50).
+  const axis = currentStackAxis();
   createEffect(() => {
     const value = source.value;
     if (previous) restoreWrites(element, previous);
     previous = recordWrites(element, (target) => {
-      applyModifier(target, { ...modifier, value });
+      withStackAxis(axis, () => applyModifier(target, { ...modifier, value }));
     });
   });
 }
@@ -421,15 +551,15 @@ function applyModifier(element, modifier) {
       break;
 
     case ModifierType.ACCESSIBILITY_LABEL:
-      element.setAttribute('aria-label', accessibilityText(value));
+      applyAccessibilityLabel(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_VALUE:
-      element.setAttribute('aria-valuetext', accessibilityText(value));
+      applyAccessibilityValue(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_HINT:
-      element.setAttribute('aria-description', accessibilityText(value));
+      applyAccessibilityHint(element, accessibilityText(value));
       break;
 
     case ModifierType.ACCESSIBILITY_IDENTIFIER:
@@ -442,10 +572,15 @@ function applyModifier(element, modifier) {
     case ModifierType.TASK:
     case ModifierType.SEARCHABLE:
     case ModifierType.SHEET:
+    case ModifierType.PRESENTATION:
       break;
 
     case ModifierType.CLIP_SHAPE:
       applyClipShape(element, value);
+      break;
+
+    case ModifierType.NAVIGATION_TITLE:
+      applyNavigationTitle(element, value);
       break;
 
     case ModifierType.COLOR_EFFECT:
@@ -468,6 +603,75 @@ function applyModifier(element, modifier) {
         modifier.apply(element);
       }
   }
+}
+
+// .navigationTitle(_:) (#40). SwiftUI shows it in the navigation bar; on
+// the web it is the document title while the view is shown. Titles form a
+// stack: the latest shown wins, and when a view is disposed (a popped
+// screen, a closed Show branch) its entry leaves the stack and the title
+// falls back to the one below, or to the page's own title.
+const titleStack = [];
+let baseTitle = null;
+let titleCheckQueued = false;
+
+// The entry whose view is last in document order among the views on the
+// page: an inner view comes after its ancestors, and a detail column after
+// its sidebar, so the most specific title wins whatever order the views
+// rendered in. Entries whose views aren't in the document yet (or a DOM
+// without compareDocumentPosition) fall back to the latest shown.
+function topTitleEntry() {
+  let top = null;
+  for (const entry of titleStack) {
+    const element = entry.element;
+    if (!element?.isConnected || typeof element.compareDocumentPosition !== 'function') continue;
+    // DOCUMENT_POSITION_FOLLOWING (4): element comes after top.
+    if (!top || (top.element.compareDocumentPosition(element) & 4)) top = entry;
+  }
+  return top ?? titleStack[titleStack.length - 1] ?? null;
+}
+
+function showTopTitle() {
+  const top = topTitleEntry();
+  document.title = top ? top.text : (baseTitle ?? '');
+  if (!top) baseTitle = null;
+}
+
+// Views are attached after they render: check the order again then.
+function queueTitleCheck() {
+  if (titleCheckQueued) return;
+  titleCheckQueued = true;
+  queueMicrotask(() => {
+    titleCheckQueued = false;
+    if (titleStack.length) showTopTitle();
+  });
+}
+
+function applyNavigationTitle(element, value) {
+  if (typeof document === 'undefined') return;
+  const owner = getOwner();
+  if (!owner) {
+    // Nothing will dispose it: just set the title.
+    document.title = String(isSignalValue(value) ? untrack(() => value.value) : (value ?? ''));
+    return;
+  }
+  if (titleStack.length === 0) baseTitle = document.title;
+  const entry = { text: '', element };
+  titleStack.push(entry);
+  if (isSignalValue(value)) {
+    createEffect(() => {
+      entry.text = String(value.value ?? '');
+      if (titleStack.includes(entry)) showTopTitle();
+    });
+  } else {
+    entry.text = String(value ?? '');
+    showTopTitle();
+  }
+  queueTitleCheck();
+  onCleanup(() => {
+    const index = titleStack.indexOf(entry);
+    if (index !== -1) titleStack.splice(index, 1);
+    showTopTitle();
+  });
 }
 
 function accessibilityText(value) {
@@ -785,7 +989,7 @@ registerRenderer('VStack', (props, children) => {
   element.style.flexDirection = 'column';
   element.style.alignItems = alignmentToCSS(props.alignment, 'horizontal');
   element.style.gap = `${props.spacing ?? 8}px`;
-  element.appendChild(renderChildren(children));
+  element.appendChild(withStackAxis('vertical', () => renderChildren(children)));
   return element;
 });
 
@@ -796,7 +1000,7 @@ registerRenderer('HStack', (props, children) => {
   element.style.flexDirection = 'row';
   element.style.alignItems = alignmentToCSS(props.alignment, 'vertical');
   element.style.gap = `${props.spacing ?? 8}px`;
-  element.appendChild(renderChildren(children));
+  element.appendChild(withStackAxis('horizontal', () => renderChildren(children)));
   return element;
 });
 
@@ -809,9 +1013,26 @@ registerRenderer('ZStack', (props, children) => {
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     if (child != null) {
-      const childEl = render(child);
+      const childEl = withStackAxis(null, () => render(child));
       childEl.style.gridArea = '1 / 1';
-      applyZStackAlignment(childEl, props.alignment);
+      if (childEl.style.display === 'contents') {
+        // ForEach, For and Show render a display:contents wrapper. Make it
+        // an overlay cell of its own, so its rows stack too (#50); rows it
+        // adds later get grid-area from the [data-zstack-layer] rule in
+        // base.css.
+        childEl.style.display = 'grid';
+        childEl.style.gridTemplate = '1fr / 1fr';
+        childEl.style.justifySelf = 'stretch';
+        childEl.style.alignSelf = 'stretch';
+        childEl.dataset.zstackLayer = '';
+        for (const row of Array.from(childEl.children || [])) {
+          row.style.gridArea = '1 / 1';
+          applyZStackAlignment(row, props.alignment);
+        }
+        applyZStackItemsAlignment(childEl, props.alignment);
+      } else {
+        applyZStackAlignment(childEl, props.alignment);
+      }
       element.appendChild(childEl);
     }
   }
@@ -827,9 +1048,12 @@ registerRenderer('Spacer', (props) => {
   element.style.flexBasis = '0';
   element.style.alignSelf = 'stretch';
 
+  // SwiftUI's minLength applies along the containing stack's axis only
+  // (#50); outside a stack it applies to both.
   if (props.minLength != null) {
-    element.style.minWidth = `${props.minLength}px`;
-    element.style.minHeight = `${props.minLength}px`;
+    const axis = currentStackAxis();
+    if (axis !== 'vertical') element.style.minWidth = `${props.minLength}px`;
+    if (axis !== 'horizontal') element.style.minHeight = `${props.minLength}px`;
   }
 
   return element;
@@ -1107,6 +1331,15 @@ function alignmentToCSS(alignment, direction) {
     default:
       return 'center';
   }
+}
+
+// The same alignment for every item of a grid (rows a ZStack layer adds
+// later).
+function applyZStackItemsAlignment(element, alignment) {
+  const probe = { style: {} };
+  applyZStackAlignment(probe, alignment);
+  element.style.justifyItems = probe.style.justifySelf;
+  element.style.alignItems = probe.style.alignSelf;
 }
 
 function applyZStackAlignment(element, alignment) {

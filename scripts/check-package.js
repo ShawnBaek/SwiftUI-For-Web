@@ -9,7 +9,7 @@
  * 3. Each entry's default namespace and its named exports list the same names.
  * 4. `./core` exports exactly what `.` exports minus the `./charts` exports.
  * 5. Each entry's declarations (`src/index.d.ts`, `src/core.d.ts`, the Charts
- *    declarations) and its runtime agree: every declared value exists at
+ *    declarations, `src/server.d.ts`) and its runtime agree: every declared value exists at
  *    runtime, every declared class member exists on the runtime class, and no
  *    runtime export is undeclared unless it is listed in
  *    `scripts/types-baseline.json` (a list that may only shrink).
@@ -222,7 +222,7 @@ async function main() {
 
   // 5. Declarations agree with the runtime.
   const baseline = JSON.parse(await readFile(path.join(root, 'scripts', 'types-baseline.json'), 'utf8'));
-  const declarationTargets = [['.', full], ['./core', core], ['./charts', charts]];
+  const declarationTargets = [['.', full], ['./core', core], ['./charts', charts], ['./server', loaded.get('./server')], ['./islands', loaded.get('./islands')], ['./performance', loaded.get('./performance')]];
   for (const [subpath, module] of declarationTargets) {
     if (!module) continue;
     const file = path.join(root, pkg.exports[subpath].types);
@@ -258,7 +258,7 @@ async function main() {
 
   // 6. sideEffects covers every module that patches a prototype on import.
   const sideEffects = (pkg.sideEffects || []).map((entry) => entry.replace(/^\.\//, ''));
-  const dead = new Set(['src/Core/Chainable.js', 'src/Core/ViewFactory.js', 'src/Core/index.js']);
+  const dead = new Set();
   for (const file of await walk(path.join(root, 'src'))) {
     if (!file.endsWith('.js')) continue;
     const relative = path.relative(root, file).split(path.sep).join('/');

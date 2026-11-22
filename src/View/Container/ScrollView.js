@@ -20,6 +20,7 @@
  * )
  */
 
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
 import { View } from '../../Core/View.js';
 import { VIEW_DESCRIPTOR } from '../../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../../Core/Renderer.js';
@@ -52,7 +53,7 @@ class ScrollViewView extends View {
     super();
 
     // Handle case where first argument is a View
-    if (options instanceof View || typeof options === 'function') {
+    if (options instanceof View || isDescriptor(options) || typeof options === 'function') {
       content = [options, ...content];
       options = {};
     }

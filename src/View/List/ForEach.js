@@ -9,6 +9,10 @@
  * ForEach(items, { id: 'id' }, item => Text(item.name))
  */
 
+import { chainable as sharedChainable } from '../../Core/Chainable.js';
+import { For } from '../ControlFlow/For.js';
+import { State } from '../../Data/State.js';
+import { Binding } from '../../Data/Binding.js';
 import {
   createDescriptor,
   addModifier,
@@ -17,36 +21,26 @@ import {
   ModifierType
 } from '../../Core/ViewDescriptor.js';
 
-/**
- * Create a chainable descriptor with modifier methods
- */
 function chainable(descriptor) {
-  const chain = Object.create(null);
-  Object.assign(chain, descriptor);
-
-  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
-  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
-  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
-  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
-  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
-  chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
-  chain.task = (optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.TASK, { optionsOrAction, action })));
-  chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
-  chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
-  chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
-  chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
-  chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
-  chain.accessibilityIdentifier = (identifier) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier)));
-  chain.id = (key) => chainable(setKey(descriptor, key));
-  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
-
-  return Object.freeze(chain);
+  return sharedChainable(descriptor);
 }
 
 /**
  * Range helper for SwiftUI-like range syntax
  * Usage: Range(0, 5) creates [0, 1, 2, 3, 4]
  */
+function isReactiveData(data) {
+  return typeof data === 'function' || data instanceof State || data instanceof Binding;
+}
+
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && 'start' in value && 'end' in value) {
+    return Array.from({ length: value.end - value.start }, (_, i) => value.start + i);
+  }
+  return [];
+}
+
 export class Range {
   constructor(start, end) {
     this.start = start;
@@ -87,6 +81,19 @@ export function ForEach(data, optionsOrContent, contentFn) {
 
   if (!builderFn) {
     throw new Error('ForEach requires a content function');
+  }
+
+  // #52: reactive, keyed ForEach. Given a State, a Binding or a function
+  // returning the array, ForEach renders through the keyed For renderer:
+  // when the data changes, rows with a stable id keep their DOM and state.
+  if (isReactiveData(data)) {
+    const each = typeof data === 'function' ? () => toArray(data()) : () => toArray(data.value);
+    const keyFn = typeof idKey === 'function'
+      ? (item) => idKey(item)
+      : idKey
+        ? (item) => item[idKey]
+        : undefined;
+    return chainable(For(each, (item, index) => builderFn(item, index), keyFn));
   }
 
   // Handle range syntax

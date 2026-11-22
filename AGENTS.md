@@ -93,8 +93,9 @@ Fine-grained updates (signals → textContent / attributes / styles)
 - Reactive wiring happens in `Renderer.render`, while each element is built
   (`bindReactive` in `src/Core/Renderer.js`, #44). Never bind by walking the
   mounted DOM afterwards.
-- `src/Core/Chainable.js`, `src/Core/ViewFactory.js`, and `src/Core/index.js`
-  are dead code. Don't edit or import them.
+- `src/Core/Chainable.js` is the one modifier table for descriptors (#48).
+  Add a common modifier there; a view type adds only its own methods through
+  `chainable(descriptor, extras)`. Never copy the table into a view file.
 
 ---
 
@@ -217,7 +218,9 @@ those with the real signature by hand. Don't add names to
 - Animate `transform` and `opacity`. Hide animated elements with
   `visibility: hidden` and `pointer-events: none`, not `display: none`.
 - Benchmarks must measure in-place updates, not full remounts. Report size from
-  `node scripts/size.js` after a release build.
+  `node scripts/size.js` after a release build. `npm run size` and CI fail when
+  the gzipped `dist/` total passes the budget (`--budget-gzip-kb`, 120 KB);
+  raise it deliberately in the PR that needs it.
 
 ---
 
@@ -238,7 +241,7 @@ those with the real signature by hand. Don't add names to
 
 ## 8. Common mistakes
 
-- ❌ Adding a `View` subclass, or editing `Chainable.js` or `ViewFactory.js`.
+- ❌ Adding a `View` subclass, or a private copy of the modifier chain.
 - ❌ Binding reactivity by walking the DOM after mount. Content that `Show` and
   `For` render later is missed; bind in the renderer instead.
 - ❌ Tests that assert `.type`, `Object.isFrozen`, or "returns this", or that

@@ -16,6 +16,7 @@
  *   .cornerRadius(8)
  */
 
+import { chainable as sharedChainable } from '../../Core/Chainable.js';
 import {
   createDescriptor,
   addModifier,
@@ -24,52 +25,14 @@ import {
   ModifierType
 } from '../../Core/ViewDescriptor.js';
 
-/**
- * Create a chainable descriptor with Button-specific modifier methods
- */
+// Button-only modifiers (#48: everything else comes from the shared table).
+const buttonModifiers = ({ withProps }) => ({
+  disabled: (isDisabled = true) => withProps({ isDisabled }),
+  buttonStyle: (style) => withProps({ buttonStyle: style }),
+});
+
 function chainable(descriptor) {
-  const chain = Object.create(null);
-  Object.assign(chain, descriptor);
-
-  // Standard modifiers
-  chain.environment = (key, value) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] })));
-  chain.environmentObject = (object) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [], objects: [object] })));
-  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
-  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
-  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
-  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
-  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
-  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
-  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
-  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
-  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
-  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
-  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
-  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
-  chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
-  chain.task = (optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.TASK, { optionsOrAction, action })));
-  chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
-  chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
-  chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
-  chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
-  chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
-  chain.accessibilityIdentifier = (identifier) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier)));
-  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
-  chain.id = (key) => chainable(setKey(descriptor, key));
-  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
-
-  // Button-specific modifiers
-  chain.disabled = (isDisabled = true) => {
-    const newProps = { ...descriptor.props, isDisabled };
-    return chainable(createDescriptor('Button', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.buttonStyle = (style) => {
-    const newProps = { ...descriptor.props, buttonStyle: style };
-    return chainable(createDescriptor('Button', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  return Object.freeze(chain);
+  return sharedChainable(descriptor, buttonModifiers);
 }
 
 /**
@@ -89,13 +52,20 @@ function chainable(descriptor) {
  *   .buttonStyle('borderedProminent')
  *   .disabled(isLoading)
  */
-export function Button(labelOrAction, actionOrLabel) {
+export function Button(labelOrAction, actionOrLabel, roleAction) {
   let label = null;
+  let role = null;
   let action = () => {};
   let children = [];
 
   // Parse arguments to support multiple signatures
-  if (typeof labelOrAction === 'string') {
+  if (typeof labelOrAction === 'string' && actionOrLabel && typeof actionOrLabel === 'object' && !actionOrLabel.type) {
+    // Button('Delete', { role: 'destructive' }, action), SwiftUI's
+    // Button(_:role:action:) (#38)
+    label = labelOrAction;
+    role = actionOrLabel.role ?? null;
+    action = roleAction || (() => {});
+  } else if (typeof labelOrAction === 'string') {
     // Button('Label', action)
     label = labelOrAction;
     action = actionOrLabel || (() => {});
@@ -121,6 +91,7 @@ export function Button(labelOrAction, actionOrLabel) {
   return chainable(createDescriptor('Button', {
     label,
     action,
+    role,
     isDisabled: false,
     buttonStyle: 'default'
   }, children));

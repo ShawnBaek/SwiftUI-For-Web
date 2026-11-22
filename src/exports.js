@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web
- * @version 2.0.0-alpha.1
+ * @version 3.0.0-alpha.1
  *
  * @example
  * // Simple import (recommended)
@@ -165,43 +165,13 @@ import {
   currentAnimation,
   extendViewWithAnimation,
   isViewTransitionSupported,
-  prefersReducedMotion,
-  promoteToGPULayer,
-  demoteFromGPULayer
+  prefersReducedMotion
 } from './Animation/Animation.js';
 
 // =============================================================================
 // Performance Infrastructure
 // =============================================================================
-import {
-  scheduleWork,
-  schedulePostFlush,
-  batchUpdates,
-  endBatch,
-  batch,
-  flushSync,
-  enqueueDOMWrite,
-  getSchedulerStats,
-  resetSchedulerStats,
-  SyncLane,
-  DiscreteLane,
-  DefaultLane,
-  TransitionLane,
-  IdleLane
-} from './Core/Scheduler.js';
-import {
-  acquireElement,
-  releaseElement,
-  releaseTree,
-  getPoolStats,
-  clearPools
-} from './Core/ElementPool.js';
-import {
-  delegateEvent,
-  undelegateEvent,
-  initDelegation,
-  teardownDelegation
-} from './Core/EventDelegate.js';
+import { batch, flushSync } from './Core/Scheduler.js';
 import {
   onAppear as lifecycleOnAppear,
   onDisappear as lifecycleOnDisappear,
@@ -255,7 +225,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '2.0.0-alpha.1';
+const VERSION = '3.0.0-alpha.1';
 
 
 
@@ -401,14 +371,7 @@ export {
   MarkDimension,
   Charts,
 
-  // Performance Infrastructure
-  scheduleWork, schedulePostFlush,
-  batchUpdates, endBatch, batch, flushSync,
-  enqueueDOMWrite,
-  getSchedulerStats, resetSchedulerStats,
-  SyncLane, DiscreteLane, DefaultLane, TransitionLane, IdleLane,
-  acquireElement, releaseElement, releaseTree,
-  getPoolStats, clearPools,
-  delegateEvent, undelegateEvent, initDelegation, teardownDelegation,
-  promoteToGPULayer, demoteFromGPULayer
+  // Batching (the scheduler, element pool, event delegation and GPU-layer
+  // helpers moved to 'swiftui-for-web/performance' in 3.0)
+  batch, flushSync
 };

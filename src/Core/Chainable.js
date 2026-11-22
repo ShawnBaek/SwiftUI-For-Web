@@ -1,11 +1,15 @@
 /**
- * Chainable - Utility for creating chainable view descriptors
+ * Chainable - the one modifier table for view descriptors (#48).
  *
- * Provides SwiftUI-style modifier chaining for immutable descriptors.
- * Each modifier call returns a new frozen descriptor.
+ * Every descriptor view (Text, Button, stacks, controls, …) gets the same
+ * SwiftUI modifiers from here. Each call returns a new frozen descriptor;
+ * nothing is mutated. A view type adds only its own methods (Text's
+ * `.bold()`, Button's `.buttonStyle()`) through `extras`, and they stay
+ * available after any common modifier: `Text('a').padding().bold()`.
  */
 
 import {
+  createDescriptor,
   addModifier,
   setKey,
   createModifier,
@@ -13,61 +17,84 @@ import {
 } from './ViewDescriptor.js';
 
 /**
- * Create a chainable descriptor with modifier methods
- * Each modifier returns a new chainable with the modifier added.
- *
  * @param {Object} descriptor - Base descriptor
+ * @param {(tools: {
+ *   descriptor: Object,
+ *   wrap: (next: Object) => Object,
+ *   add: (type: string, value: any) => Object,
+ *   withProps: (changes: Object) => Object,
+ * }) => Object} [extras] - Type-specific methods
  * @returns {Object} Frozen descriptor with modifier methods
  */
-export function chainable(descriptor) {
-  const chain = Object.create(null);
+export function chainable(descriptor, extras = null) {
+  const wrap = (next) => chainable(next, extras);
+  const add = (type, value) => wrap(addModifier(descriptor, createModifier(type, value)));
+  const withProps = (changes) => wrap(createDescriptor(
+    descriptor.type,
+    { ...descriptor.props, ...changes },
+    descriptor.children,
+    descriptor.key,
+    descriptor.modifiers
+  ));
 
-  // Copy all descriptor properties
+  const chain = Object.create(null);
   Object.assign(chain, descriptor);
 
-  // Layout modifiers
-  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
-  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
+  // Environment (#49)
+  chain.environment = (key, value) => add(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] });
+  chain.environmentObject = (object) => add(ModifierType.ENVIRONMENT, { values: [], objects: [object] });
 
-  // Style modifiers
-  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
-  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
-  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
-  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
-  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
-  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
-  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
-  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
+  // Layout and style
+  chain.padding = (value) => add(ModifierType.PADDING, value);
+  chain.frame = (options) => add(ModifierType.FRAME, options);
+  chain.foregroundColor = (color) => add(ModifierType.FOREGROUND_COLOR, color);
+  chain.background = (color) => add(ModifierType.BACKGROUND, color);
+  chain.font = (font) => add(ModifierType.FONT, font);
+  chain.opacity = (value) => add(ModifierType.OPACITY, value);
+  chain.cornerRadius = (radius) => add(ModifierType.CORNER_RADIUS, radius);
+  chain.border = (color, width = 1) => add(ModifierType.BORDER, { color, width });
+  chain.shadow = (options) => add(ModifierType.SHADOW, options);
+  chain.clipShape = (shape) => add(ModifierType.CLIP_SHAPE, shape);
 
-  // Event modifiers
-  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
-  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
-  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
-  chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
-  chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
-  chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
+  // Effects
+  chain.colorEffect = (shader, opts) => add(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) });
+  chain.distortionEffect = (shader, opts) => add(ModifierType.DISTORTION_EFFECT, { shader, ...(opts || {}) });
+  chain.layerEffect = (shader, opts) => add(ModifierType.LAYER_EFFECT, { shader, ...(opts || {}) });
 
-  // Accessibility modifiers
-  chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
-  chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
-  chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
-  chain.accessibilityIdentifier = (identifier) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier)));
+  // Events and lifecycle
+  chain.onTapGesture = (handler) => add(ModifierType.ON_TAP, handler);
+  chain.onAppear = (handler) => add(ModifierType.ON_APPEAR, handler);
+  chain.onDisappear = (handler) => add(ModifierType.ON_DISAPPEAR, handler);
+  chain.onChange = (of, optionsOrAction, action) => add(ModifierType.ON_CHANGE, { of, optionsOrAction, action });
+  chain.task = (optionsOrAction, action) => add(ModifierType.TASK, { optionsOrAction, action });
 
-  // Shader effect modifiers (Apple's `.colorEffect` / `.distortionEffect` / `.layerEffect`).
-  // Backed by SVG filter graphs; the second arg accepts the same options
-  // SwiftUI carries (`isEnabled`, `maxSampleOffset`) for forward-compat.
-  chain.colorEffect = (shader, opts) =>
-    chainable(addModifier(descriptor, createModifier(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) })));
-  chain.distortionEffect = (shader, opts) =>
-    chainable(addModifier(descriptor, createModifier(ModifierType.DISTORTION_EFFECT, { shader, ...(opts || {}) })));
-  chain.layerEffect = (shader, opts) =>
-    chainable(addModifier(descriptor, createModifier(ModifierType.LAYER_EFFECT, { shader, ...(opts || {}) })));
+  // Search and presentation
+  chain.searchable = (text, options = {}) => add(ModifierType.SEARCHABLE, { text, options });
+  chain.sheet = (isPresented, optionsOrContent, content) => add(ModifierType.SHEET, { isPresented, optionsOrContent, content });
+  chain.fullScreenCover = (isPresented, optionsOrContent, content) => add(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content });
+  chain.alert = (title, isPresented, options) => add(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options });
+  chain.confirmationDialog = (title, isPresented, options) => add(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options });
+
+  // Accessibility
+  chain.accessibilityLabel = (label) => add(ModifierType.ACCESSIBILITY_LABEL, label);
+  chain.accessibilityValue = (value) => add(ModifierType.ACCESSIBILITY_VALUE, value);
+  chain.accessibilityHint = (hint) => add(ModifierType.ACCESSIBILITY_HINT, hint);
+  chain.accessibilityIdentifier = (identifier) => add(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier);
 
   // Identity
-  chain.id = (key) => chainable(setKey(descriptor, key));
+  chain.id = (key) => wrap(setKey(descriptor, key));
+  // The last .tag(_:) wins (read by Picker, TabView and List).
+  chain.tag = (value) => add(ModifierType.TAG, value);
+  // TabView reads the builder from props._tabItem.
+  chain.tabItem = (builder) => withProps({ _tabItem: builder });
 
-  // Custom modifier support (for backward compatibility)
-  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
+  // The document title while this view is shown (#40); a State or Binding
+  // keeps it in sync.
+  chain.navigationTitle = (title) => add(ModifierType.NAVIGATION_TITLE, title);
+
+  chain.modifier = (mod) => add(ModifierType.CUSTOM, mod);
+
+  if (extras) Object.assign(chain, extras({ descriptor, wrap, add, withProps }));
 
   return Object.freeze(chain);
 }

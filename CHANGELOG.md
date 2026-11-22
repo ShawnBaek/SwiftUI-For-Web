@@ -2,6 +2,198 @@
 
 ## Unreleased
 
+- **BREAKING (3.0.0-alpha.1): performance internals left the main entry**
+  (#47). The scheduler (`scheduleWork`, `schedulePostFlush`,
+  `batchUpdates`, `endBatch`, `enqueueDOMWrite`, `getSchedulerStats`,
+  `resetSchedulerStats`, the `SyncLane`…`IdleLane` constants), the element
+  pool (`acquireElement`, `releaseElement`, `releaseTree`, `getPoolStats`,
+  `clearPools`), event delegation (`delegateEvent`, `undelegateEvent`,
+  `initDelegation`, `teardownDelegation`) and `promoteToGPULayer` /
+  `demoteFromGPULayer` are no longer exported from `swiftui-for-web` or
+  `swiftui-for-web/core`, nor on the default `SwiftUI` namespace. `batch`
+  and `flushSync` stay. Migration: import them from the new entry,
+
+  ```js
+  // before
+  import { scheduleWork, SyncLane, acquireElement } from 'swiftui-for-web';
+  // after
+  import { scheduleWork, SyncLane, acquireElement } from 'swiftui-for-web/performance';
+  ```
+
+  The package version is now `3.0.0-alpha.1`.
+- `mount(host, { mode: 'adopt' })` (#39) takes over server markup from
+  `renderDocument`: it swaps in the client tree in one step with the host's
+  size held, moves focus to the matching element, and in development warns
+  at the first difference between the server markup and the client tree
+  (tags, text and attributes, ignoring style and generated ids). It doesn't
+  reuse the server's nodes yet.
+- `.navigationTitle(_:)` (#40) sets the document title while its view is
+  shown and restores the previous one when the view goes away (a popped
+  screen, a closed branch); a `State` or `Binding` title stays in sync.
+  `renderDocument` uses it for a missing metadata title, before the
+  `WindowGroup` title.
+- In-place update benchmark (#53): `Tests/Benchmark/updates.html` measures
+  the js-framework-benchmark scenarios as `State` writes on one mounted app
+  (no remounts); `npm run bench` runs it in headless Chrome in real time and
+  prints the medians. `Tests/Benchmark/RESULTS.md` leads with these numbers
+  and marks the reconciler-era table as historical.
+- `accessibilityValue` and `accessibilityHint` follow the #51 decision.
+  The value is `aria-valuetext` only on range roles (slider, spinbutton,
+  progressbar, meter, scrollbar); elsewhere it joins the accessible name,
+  appended to an `aria-label` ("Silence, off") or as visually hidden text
+  (`.swiftui-visually-hidden`). The hint is a hidden node referenced by
+  `aria-describedby`, since `aria-description` isn't reliably announced;
+  void elements (`input`, `img`, …), which can't hold that node, use
+  `aria-description`.
+- Rows of a reactive `ForEach` inside a `List` are list rows (#52): they get
+  the row styling, the `listitem`/`option` role, and take part in selection
+  and keyboard navigation, including rows added later (the first row of an
+  empty list takes the Tab stop). A selectable `List` follows selection
+  writes made elsewhere.
+- Layout (#50): `ZStack` overlays the rows of a `ForEach`, `For` or `Show`
+  (the wrapper becomes an overlay cell; rows added later follow a
+  `[data-zstack-layer]` rule in `base.css`). `frame(alignment:)` positions
+  content inside the frame (`.frame({ width, height, alignment:
+  'bottomTrailing' })`). `LazyVStack` and `LazyHStack` are lazy: a row's
+  view is built when it nears the viewport and kept, as in SwiftUI; without
+  `IntersectionObserver` (and in static rendering) every row renders.
+- One view model (#48). `Toggle`, `Slider`, `Stepper`, `TextField`,
+  `SecureField`, `Picker`, `DatePicker` and `ColorPicker` return view
+  descriptors with the full modifier table plus their own methods
+  (`toggleStyle`, `pickerStyle`, `textFieldStyle`, …, usable after any
+  modifier). They render through `Renderer.render`, so ordered modifier
+  layers, owned reactive modifiers and static rendering apply to them. The
+  `*View` classes stay exported for one minor release; code that read a
+  factory result's internals (`Toggle(...)._label`) should construct the
+  class instead. Every descriptor view shares one modifier table
+  (`src/Core/Chainable.js`) instead of eight drifting copies, and the dead
+  `Core/ViewFactory.js` and `Core/index.js` are removed.
+  `NavigationSplitView`, `Label`, `WindowGroup` scenes and `ViewBuilder`
+  render descriptor content too.
+- Security: `NavigationLink`'s `url` accepts only relative URLs and
+  `http:`, `https:`, `mailto:` and `tel:`. A `javascript:`, `data:` or other
+  scheme (including ones disguised with whitespace or case) is dropped with
+  a warning and the link renders as a button, so a URL built from user data
+  can't run script.
+- `ScrollView`, `LazyVStack`, `LazyHStack`, `Grid`, `Form`, `ViewThatFits`,
+  `WindowGroup` and `DisclosureGroup` keep a view descriptor passed as their
+  first argument (`ScrollView(VStack(…))`); they used to read it as options
+  and render nothing. `LazyVStack`, `LazyHStack` and `ViewThatFits` also
+  render descriptor children.
+- Release build (#41): application builds add `<link rel="modulepreload">`
+  for every module the page's scripts import statically. `--hash` renames
+  each emitted file to `name.<hash>.ext` (the hash covers the file and
+  everything it reaches, so a change anywhere below renames it), rewrites
+  the import, `new URL(…, import.meta.url)`, CSS and HTML references, and
+  writes `manifest.json`. Names are deterministic.
+- Release build (#41): a token-aware JavaScript minifier
+  (`scripts/minify.js`) copies strings, template literals with nested
+  `${…}` and regular-expression literals verbatim, removes comments, and
+  keeps a line break wherever whitespace contained one, so automatic
+  semicolon insertion is unchanged. The old minifier mistook a quote or
+  `//` inside a regex for a string or comment. `--no-minify` keeps files
+  readable (still tree-shaken). `scripts/build-tests.js` now runs the unit
+  suite against the optimized library as a gate.
+- Progressive activation (#39): `App(view).mount(host, { mode: 'replace' })`
+  keeps the host's static fallback until the view is rendered off-document,
+  swaps them in one step (`replaceChildren`) and holds the host's height
+  until the next frame, so there is no layout shift. A new
+  `swiftui-for-web/islands` entry exports `whenVisible(host, load)`, which
+  loads an island once its host nears the viewport and imports no framework
+  code itself. The README documents the static-trigger pattern (the island
+  exports a `State` that page buttons write).
+- Presentations share one controller (#38): `.fullScreenCover(isPresented,
+  content)`, `.alert(title, isPresented, { actions, message })` and
+  `.confirmationDialog(title, isPresented, { titleVisibility, actions,
+  message })` join `.sheet`, all on `<dialog>.showModal()` (inert page,
+  focus trap). The controller locks page scroll while anything is
+  presented, returns focus to the presenter, stacks nested presentations,
+  and puts `dismiss` in the presented content's environment
+  (`Environment.get(EnvironmentValues.dismiss)`). The binding is the single
+  source of truth: Escape, a backdrop click (not for an alert) and actions
+  write `false`, and `onDismiss` runs once. An alert is
+  `role="alertdialog"` labelled by its title and described by its message;
+  actions follow SwiftUI roles (`Button('Delete', { role: 'destructive' },
+  action)` or `{ title, role, action }`), and Escape runs the `cancel`
+  action. With no actions, one "OK" button is shown.
+- Every runtime export now has a declaration (#47): the 76 names that were
+  allowed untyped in `scripts/types-baseline.json` (legacy `*View` classes,
+  gesture recognizers, `AppInstance`, `ColorValue`, `FontValue`, scheduler
+  lanes and functions, the element pool, event delegation and the `extend*`
+  installers) are declared in `src/core.d.ts`, and the baseline list is
+  empty, so `check-package` fails on any new untyped export.
+- Size budget (#53): `npm run size` and CI fail when the gzipped `dist/`
+  total passes 120 KB (`node scripts/size.js dist --budget-gzip-kb 120`).
+- GitHub Pages publishes only the site (#53): `index.html`, `README.md`,
+  `AGENTS.md`, `docs/`, `Examples/` and the `src/` the examples import, not
+  the whole repository.
+- Render errors name the view (#42): an error thrown while rendering a view
+  or applying one of its modifiers is rethrown as
+  `SwiftUI-For-Web: Text.padding() failed to render: …`, with the original
+  error as `cause`. In development builds the message also gives where the
+  view was created (the first stack frame outside the framework), captured
+  when the descriptor is built; the optimized build skips the capture.
+- More HTML snapshots through `renderToString` (#42): accessibility
+  modifiers, `searchable` with `sheet`, and order-dependent modifier chains.
+- `Menu` renders view-descriptor items (#48): `Button(...)` items run their
+  action and close the menu (a disabled one is `aria-disabled`), and
+  `Divider()` is a separator. They were silently dropped, because the
+  item code only handled `ButtonView`/`DividerView` classes that no longer
+  exist; that dead code is gone.
+- `DisclosureGroup` follows writes to its `isExpanded` binding made elsewhere
+  (an "Expand all" button, for example), renders view-descriptor content and
+  labels, and accepts a plain string or a view as `label` (#48).
+- Modifier order has SwiftUI meaning for descriptor views (#50). Modifiers
+  apply in declaration order, and a modifier whose meaning depends on an
+  earlier one gets its own wrapper layer: `.background(c).padding(8)` pads
+  outside the background, `.padding(8).padding({ top: 4 })` adds up, a second
+  `frame` wraps the first, and a repeated `opacity` multiplies. Chains where
+  order can't change the result stay on one element. A layer takes over the
+  view's placement in its stack (flex growth, alignment, grid area).
+- `Button(…).onTapGesture(f)` runs both the action and `f`: handlers for the
+  same event compose in modifier order (#50).
+- `frame(maxWidth: Infinity)` and `frame(maxHeight: Infinity)` fill along a
+  stack's axis with flex growth (sharing space with `Spacer`s) and stretch
+  across it; outside a stack they take 100%. `frame` uses
+  `box-sizing: border-box`, so padding followed by a frame no longer
+  overflows (#50).
+- `Spacer(minLength:)` sets the minimum length on its stack's axis only (#50).
+- `ForEach` is reactive and keyed (#52): given a `State`, a `Binding` or a
+  function returning the array, it renders through the keyed `For` renderer,
+  so rows with a stable id keep their DOM when the data changes. A plain
+  array stays static. `For` is deprecated in favour of `ForEach` (it stays
+  for one minor release).
+- Development warning (#52): reading `State.value` while building a view,
+  outside any reactive scope (the `Text(count.value)` mistake), logs a warning
+  once per call site. It is on in the source tree and compiled out of the
+  optimized build (`DEV_BUILD` in `src/Core/Dev.js`).
+- Static rendering (#40). A new `swiftui-for-web/server` entry renders views
+  to HTML in Node with no browser: `renderToString(view)` returns the markup
+  of the view's first render, and `renderDocument(view, options)` a full
+  document. The framework's own renderers run against a small DOM-like shim
+  (`src/Server/DOMShim.js`), so there is no second HTML implementation to
+  drift. Output is deterministic: attributes and styles keep their order,
+  ARIA ids restart per render (`src/Core/ElementID.js`), animation frames
+  and timers never run, and element pooling is off during the render.
+  Scene-level `DocumentMetadata` (title, description, canonical, robots,
+  Open Graph, Twitter card, JSON-LD), passed to `WindowGroup({ metadata })`
+  or `renderDocument`, escapes every value, rejects non-http(s) URLs and bad
+  robots directives, and serializes JSON-LD so it can't close its
+  `<script>`. `sitemap(routes, { baseURL })` writes sitemaps.org XML.
+  Snapshot tests live in `Tests/Server`.
+- `List` selection works and is accessible (#51). A selectable list is a
+  WAI-ARIA `listbox` whose rows are `option`s with `aria-selected` and a
+  roving `tabindex`; ↑/↓, Home and End move focus and Space (or a click)
+  selects. A `Set` selection toggles rows and sets `aria-multiselectable`.
+  Selection used to do nothing: `List(data, { selection }, row)` ignored the
+  binding, and `List({ selection }, …children)` had no row ids. Rows now take
+  their id from the data's id key path, or from a child's `.tag(_:)`.
+- `TabView` follow-ups (#51): when the selection matches no tab, the first
+  tab keeps the Tab stop. The page-style `TabView` follows the tabs pattern
+  too: its page dots are `<button role="tab">`s ("Page 2 of 3") with
+  `aria-selected`, `aria-controls` and a roving `tabindex` in a `tablist`
+  (←/→ wrapping, Home, End), each page is a `tabpanel`, and off-screen pages
+  are `inert` and `aria-hidden`. It also renders view-descriptor pages now.
 - `NavigationLink` is a native element (#51): a `<button type="button">`, or
   an `<a href>` when it is given `{ url }`, so it is focusable and Enter
   activates it. A plain click on a URL link navigates in place; a modified
@@ -10,6 +202,13 @@
   click time, after the render-time context was gone, so it did nothing.
   The label now sits inside a button or link, so it should not contain other
   interactive views (a `Button`, `Toggle` or another link).
+- The segmented `Picker` is a WAI-ARIA radio group (#51): the container has
+  `role="radiogroup"` and is labelled by the picker's title; each segment is a
+  `<button type="button" role="radio">` with `aria-checked` and a roving
+  `tabindex`, so it takes one Tab stop. ←/→ and ↑/↓ (both wrapping), Home and
+  End move to a segment and select it. Its colors come from theme tokens
+  (`--color-fill-tertiary`, `--color-segmented-selected`, `--color-primary`,
+  new in `base.css` with dark-mode values) instead of hard-coded light colors.
 - The tab-bar `TabView` follows the WAI-ARIA tabs pattern (#51): the bar is a
   `tablist`, each button a `tab` with `aria-selected`, `aria-controls` and a
   roving `tabindex`, and the content area a `tabpanel` labelled by the

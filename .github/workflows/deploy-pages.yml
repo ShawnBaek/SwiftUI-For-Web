@@ -31,10 +31,18 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Publish only the site (#53): the demo page, docs, examples and the
+      # framework source the examples import. Not tests, scripts or config.
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp index.html README.md AGENTS.md _site/
+          cp -R docs Examples src _site/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment

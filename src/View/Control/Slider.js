@@ -14,6 +14,7 @@
  * })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
@@ -170,8 +171,11 @@ export class SliderView extends View {
 /**
  * Factory function for Slider
  */
+// A view descriptor rendered by SliderView (#48).
+const makeSlider = defineControl('Slider', SliderView, ['tint']);
+
 export function Slider(valueBinding, options = {}, labels = {}) {
-  return new SliderView(valueBinding, options, labels);
+  return makeSlider(valueBinding, options, labels);
 }
 
 export default Slider;

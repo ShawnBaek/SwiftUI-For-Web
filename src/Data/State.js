@@ -30,7 +30,8 @@
 
 import { Binding } from './Binding.js';
 import { scheduleWork, DefaultLane, batch as schedulerBatch } from '../Core/Scheduler.js';
-import { trackObservers, notifyObserversSet } from './Signal.js';
+import { trackObservers, notifyObserversSet, isTracking, isUntracked } from './Signal.js';
+import { DEV_BUILD, isBuildingView, warnUntrackedRead } from '../Core/Dev.js';
 
 /**
  * State class for reactive state management.
@@ -61,6 +62,7 @@ export class State {
     // observer so writes auto-trigger re-execution. No-op outside a tracking
     // scope.
     trackObservers(this._observers);
+    if (DEV_BUILD && isBuildingView() && !isTracking() && !isUntracked()) warnUntrackedRead();
     return this._value;
   }
 

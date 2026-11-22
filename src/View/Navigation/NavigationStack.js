@@ -295,6 +295,26 @@ class NavigationStackView extends View {
   }
 }
 
+// Schemes a link may navigate to. Anything else with a scheme (javascript:,
+// data:, vbscript:, …) is dropped, so a URL built from user data can't run
+// script when the link is opened in a new tab or without JavaScript.
+const SAFE_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+function safeLinkURL(url) {
+  if (url === null || url === undefined || url === '') return null;
+  const value = String(url).trim();
+  // Browsers ignore ASCII whitespace and control characters inside a scheme
+  // ("java\tscript:"), so strip them before reading it.
+  const compact = value.replace(/[\u0000-\u0020\u007f]/g, '');
+  const scheme = compact.match(/^([a-z][a-z0-9+.-]*):/i)?.[1];
+  if (!scheme) return value; // relative URL, path, query or fragment
+  if (SAFE_LINK_SCHEMES.has(`${scheme.toLowerCase()}:`)) return value;
+  if (typeof console !== 'undefined') {
+    console.warn(`SwiftUI-For-Web: NavigationLink ignored a "${scheme}:" URL; it renders as a button.`);
+  }
+  return null;
+}
+
 /**
  * NavigationLink - A view that controls navigation
  * @extends View
@@ -316,7 +336,7 @@ class NavigationLinkView extends View {
     this._label = label;
     this._destination = destination;
     this._title = options.title ?? '';
-    this._url = options.url ?? null;
+    this._url = safeLinkURL(options.url);
     this._isActive = false;
   }
 

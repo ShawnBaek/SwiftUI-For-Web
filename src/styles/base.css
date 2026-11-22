@@ -30,6 +30,8 @@
   --color-secondary-background: #F2F2F7;
   --color-tertiary-background: #FFFFFF;
   --color-separator: rgba(60, 60, 67, 0.29);
+  --color-fill-tertiary: rgba(118, 118, 128, 0.12);
+  --color-segmented-selected: #FFFFFF;
 
   /* Typography Scale - matching SwiftUI */
   --font-large-title: 34px;
@@ -84,6 +86,8 @@
     --color-secondary-background: #1C1C1E;
     --color-tertiary-background: #2C2C2E;
     --color-separator: rgba(84, 84, 88, 0.65);
+    --color-fill-tertiary: rgba(118, 118, 128, 0.24);
+    --color-segmented-selected: #636366;
   }
 }
 
@@ -139,8 +143,88 @@ body {
   background: rgb(0 0 0 / 48%);
 }
 
+.swiftui-full-screen-cover {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+}
+
+.swiftui-full-screen-cover .swiftui-sheet-content {
+  max-height: 100vh;
+  height: 100%;
+}
+
+.swiftui-alert {
+  width: min(20rem, calc(100vw - 32px));
+  border-radius: 14px;
+  text-align: center;
+}
+
+.swiftui-alert-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 16px 12px;
+}
+
+.swiftui-alert-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.swiftui-alert-message {
+  font-size: 13px;
+}
+
+.swiftui-alert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.swiftui-alert-action {
+  padding: 10px;
+  font: inherit;
+  color: var(--color-blue, #007AFF);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.swiftui-alert-action[data-role="cancel"] {
+  font-weight: 600;
+}
+
+.swiftui-alert-action[data-role="destructive"] {
+  color: var(--color-red, #FF3B30);
+}
+
 .swiftui-sheet-content {
   box-sizing: border-box;
   max-height: calc(100vh - 34px);
   overflow: auto;
+}
+
+/* ZStack layers made from ForEach/Show wrappers overlay their rows (#50). */
+[data-zstack-layer] > * {
+  grid-area: 1 / 1;
+}
+
+/* Text read by assistive technology but not shown (#51). */
+.swiftui-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

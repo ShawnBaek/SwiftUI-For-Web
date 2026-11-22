@@ -29,6 +29,7 @@
  * )
  */
 
+import { render as renderAnyView } from '../Core/Renderer.js';
 import { View } from '../Core/View.js';
 import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { render as renderDescriptor } from '../Core/Renderer.js';
@@ -39,7 +40,7 @@ function renderSceneContent(content) {
   const view = typeof content === 'function' && !(content instanceof View) && !isDescriptor(content)
     ? content()
     : content;
-  if (view instanceof View) return view._render();
+  if (view instanceof View || isDescriptor(view)) return renderAnyView(view);
   if (isDescriptor(view)) return renderDescriptor(view);
   return null;
 }
@@ -55,18 +56,21 @@ export class WindowGroupView extends View {
     this._id = null;
     this._content = null;
     this._defaultValue = null;
+    this._metadata = null;
 
     // Parse arguments
     if (typeof args[0] === 'string') {
       // WindowGroup('Title', content)
       this._title = args[0];
       this._content = args[1];
-    } else if (typeof args[0] === 'object' && !(args[0] instanceof View)) {
+    } else if (typeof args[0] === 'object' && !(args[0] instanceof View) && !isDescriptor(args[0])) {
       // WindowGroup({ id, title }, content)
       const options = args[0];
       this._id = options.id ?? null;
       this._title = options.title ?? null;
       this._defaultValue = options.defaultValue ?? null;
+      // Scene-level document metadata (#40), read by renderDocument.
+      this._metadata = options.metadata ?? null;
       this._content = args[1];
     } else {
       // WindowGroup(content)
@@ -237,8 +241,8 @@ export class DocumentGroupView extends View {
     if (typeof this._content === 'function') {
       // Content receives document binding
       const view = this._content({ document: null });
-      if (view instanceof View) {
-        container.appendChild(view._render());
+      if (view instanceof View || isDescriptor(view)) {
+        container.appendChild(renderAnyView(view));
       }
     }
 

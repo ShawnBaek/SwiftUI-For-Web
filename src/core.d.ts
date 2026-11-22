@@ -8,7 +8,7 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 2.0.0-alpha.1
+ * @version 3.0.0-alpha.1
  */
 
 // =============================================================================
@@ -100,6 +100,15 @@ export class View {
   sheet(isPresented: Binding<boolean>, content: () => View): this;
   /** Present content while a Boolean binding is true and handle dismissal */
   sheet(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+  /** The document title while this view is shown (#40); a State or Binding keeps it in sync. */
+  navigationTitle(title: string | State<string> | Binding<string>): this;
+  /** Present content over the whole window while `isPresented` is true (#38). */
+  fullScreenCover(isPresented: Binding<boolean>, content: () => View): this;
+  fullScreenCover(isPresented: Binding<boolean>, options: SheetOptions, content?: () => View): this;
+  /** An alert (`role="alertdialog"`). Escape runs the `cancel` action. */
+  alert(title: string, isPresented: Binding<boolean>, options?: PresentationMessageOptions): this;
+  /** A confirmation dialog. Escape and a backdrop click run the `cancel` action. */
+  confirmationDialog(title: string, isPresented: Binding<boolean>, options?: PresentationMessageOptions & { titleVisibility?: 'automatic' | 'visible' | 'hidden' }): this;
 
   // Accessibility Modifiers
   accessibilityLabel(label: string | number | View | Signal<string | number>): this;
@@ -478,6 +487,11 @@ export function Label(title: string, options: { systemImage?: string; image?: st
 // Controls
 // =============================================================================
 
+/** A button with a role, SwiftUI's `Button(_:role:action:)` (#38). */
+export function Button(label: string, options: { role?: 'cancel' | 'destructive' }, action: () => void): View & {
+  buttonStyle(style: ButtonStyle): View;
+  disabled(isDisabled: boolean): View;
+};
 /** Interactive button */
 export function Button(label: string | View, action: () => void): View & {
   /** Set button style */
@@ -682,12 +696,17 @@ export type VerticalAlignment = (typeof VerticalAlignment)[keyof typeof Vertical
 // =============================================================================
 
 /** Scrollable list of items */
+export function List<T>(data: T[], options: ListOptions & { id?: string }, rowContent: (item: T) => View): View & {
+  /** Set list style */
+  listStyle(style: ListStyle): View;
+};
 export function List(options: ListOptions | View, ...children: View[]): View & {
   /** Set list style */
   listStyle(style: ListStyle): View;
 };
 
 export interface ListOptions {
+  /** Selected row id, or a Set of ids for multiple selection. Rows are ids from the data, or `.tag(_:)` values of children. */
   selection?: Binding<any>;
 }
 
@@ -835,6 +854,21 @@ export function NavigationLink(
     url?: string;
   }
 ): View;
+
+/** An alert or confirmation-dialog action. A `Button` made with `{ role }` works too. */
+export interface PresentationAction {
+  title: string;
+  role?: 'cancel' | 'destructive';
+  action?: () => void;
+}
+
+export interface PresentationMessageOptions {
+  /** Actions, or a function returning them. Default: one "OK" cancel action. */
+  actions?: Array<PresentationAction | View> | (() => Array<PresentationAction | View>);
+  /** Message text or view. */
+  message?: string | View | (() => string | View);
+  onDismiss?: () => void;
+}
 
 /** Button that pops the enclosing NavigationStack */
 export function BackButton(label?: string): View;
@@ -1332,8 +1366,14 @@ export function RotationGesture(): Gesture & {
 
 /** Create and mount an app */
 export function App(content: () => View): {
-  /** Mount to a DOM element */
-  mount(selector: string | HTMLElement): void;
+  /**
+   * Mount to a DOM element. `mode: 'replace'` keeps the host's static
+   * fallback until the view is ready, swaps them in one step and holds the
+   * host's size meanwhile (no layout shift). `mode: 'adopt'` does the same
+   * for markup from renderDocument, warns in development when the client
+   * tree differs from it, and keeps focus inside the host.
+   */
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
   /** Refresh the UI */
   refresh(): void;
 };
@@ -1499,3 +1539,89 @@ import * as SwiftUICore from './core.js';
 declare const SwiftUI: Omit<typeof SwiftUICore, 'default'>;
 
 export default SwiftUI;
+
+// ---------------------------------------------------------------------------
+// Classes and functions behind the public API (#47). They are exported for
+// advanced use and tests; prefer the factory functions (Toggle(...), not
+// new ToggleView(...)). Legacy *View classes are replaced by descriptors in
+// #48 and keep minimal declarations until then.
+// ---------------------------------------------------------------------------
+
+/** Legacy view classes behind the factory functions. */
+export class ColorPickerView extends View {}
+export class DatePickerView extends View {}
+export class DisclosureGroupView extends View {}
+export class DocumentGroupView extends View {}
+export class FormView extends View {}
+export class GeometryReaderView extends View {}
+export class GridRowView extends View {}
+export class GridView extends View {}
+export class GroupView extends View {}
+export class ImageView extends View {}
+export class LabelView extends View {}
+export class LazyHGridView extends View {}
+export class LazyHStackView extends View {}
+export class LazyVGridView extends View {}
+export class LazyVStackView extends View {}
+export class ListView extends View {}
+export class MenuView extends View {}
+export class PickerView extends View {}
+export class ScrollViewView extends View {}
+export class SectionView extends View {}
+export class SettingsView extends View {}
+export class SliderView extends View {}
+export class StepperView extends View {}
+export class TabViewView extends View {}
+export class TextFieldView extends View {}
+export class ToggleView extends View {}
+export class WindowGroupView extends View {}
+/** Base class of the legacy shape views. */
+export class ShapeView extends View {}
+export class CapsuleView extends ShapeView {}
+export class CircleView extends ShapeView {}
+export class EllipseView extends ShapeView {}
+export class PathView extends ShapeView {}
+export class RectangleView extends ShapeView {}
+export class RoundedRectangleView extends ShapeView {}
+export class UnevenRoundedRectangleView extends ShapeView {}
+export class SecureFieldView extends TextFieldView {}
+
+/** A mounted app, returned by `App(...).mount(...)`. */
+export class AppInstance {
+  mount(selector: string | HTMLElement, options?: { mode?: 'replace' | 'adopt' }): AppInstance;
+  unmount(): AppInstance;
+}
+
+/** The value behind a `Color` (RGBA components). */
+export class ColorValue {
+  constructor(red: number, green: number, blue: number, alpha?: number);
+  rgba(): string;
+}
+
+/** The value behind a `Font`. */
+export class FontValue {}
+
+/** Base class of the gesture recognizers. */
+export class GestureBase {}
+export class DragGestureRecognizer extends GestureBase {}
+export class LongPressGestureRecognizer extends GestureBase {}
+export class MagnificationGestureRecognizer extends GestureBase {}
+export class RotationGestureRecognizer extends GestureBase {}
+export class TapGestureRecognizer extends GestureBase {}
+
+/** Observation tracking state used by `withObservationTracking`. */
+export class ObservationTracking {}
+/** Run `apply`, calling `onChange` once when an observed value it read changes. */
+export function withObservationTracking<T>(apply: () => T, onChange: () => void): T;
+/** Run `fn` with `context` recording the observable reads it makes. */
+export function withTracking<T>(context: object, fn: () => T): T;
+
+/** Built-in icon names for `Image(systemName:)`. */
+export const SystemIcons: Record<string, string>;
+
+
+/** Install the animation, environment, gesture and navigation-path methods on a class. */
+export function extendViewWithAnimation(ViewClass: Function): void;
+export function extendViewWithEnvironment(ViewClass: Function): void;
+export function extendViewWithGestures(ViewClass: Function): void;
+export function extendNavigationStackWithPath(NavigationStackClass: Function): void;

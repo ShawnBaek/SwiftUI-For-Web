@@ -103,7 +103,7 @@ const query = new State('');
 const samples = new State([]);
 
 VStack(
-  For(() => samples.value, (sample) => Text(sample.title), (sample) => sample.id)
+  ForEach(samples, { id: 'id' }, (sample) => Text(sample.title))
 )
   .searchable(query.binding, { prompt: 'Search samples' })
   .task({ id: () => query.value }, async (signal) => {
@@ -170,6 +170,12 @@ and local resources, minifies emitted JavaScript/CSS, and writes
 and raw/gzip totals. Default namespace imports stay compatible and conservatively
 retain the full framework.
 
+It also adds `<link rel="modulepreload">` for the page's static module graph,
+so modules download in parallel. Add `--hash` to give every emitted file a
+content-hashed name (`main.3fa2b1c4d5.js`, references rewritten) and write
+`manifest.json` mapping source paths to hashed ones, for long-lived caching.
+`--no-minify` keeps the output readable.
+
 ---
 
 ## How reactivity works (the one important page)
@@ -202,19 +208,20 @@ Show(
 
 The `when` thunk is tracked. Branch swap mounts/unmounts the children, disposing effects on the way out.
 
-### Lists — `For`
+### Lists — `ForEach`
 
 ```javascript
-import { For } from 'swiftui-for-web';
+import { ForEach } from 'swiftui-for-web';
 
-For(
-  () => vm.todos,
-  (todo) => TodoRow(todo),
-  (todo) => todo.id,    // optional — defaults to item.id or index
-)
+const todos = new State([]);
+ForEach(todos, { id: 'id' }, (todo) => TodoRow(todo))        // a State or Binding
+ForEach(() => vm.todos.filter((todo) => !todo.done), { id: 'id' }, TodoRow) // derived
+ForEach(['a', 'b'], (letter) => Text(letter))               // a plain array: static
 ```
 
-Keyed reconciliation at the data level (compare key arrays only). Stable items keep their DOM and effects; new items mount; removed items dispose. Identity-aware: a new object with the same key (immutable update via `map`/`filter`) remounts the row so its render closure captures the new item.
+Given a `State`, a `Binding` or a function, `ForEach` is reactive and keyed (#52): keyed reconciliation at the data level (compare key arrays only). Stable items keep their DOM and effects; new items mount; removed items dispose. Identity-aware: a new object with the same key (immutable update via `map`/`filter`) remounts the row so its render closure captures the new item. The key is the `id` option (a property name or a function), else the item's `id`, else its index. `For(each, render, key)` is the same thing under its old name, deprecated for one minor release.
+
+In development, reading `count.value` while building a view (outside a function) logs a warning once per call site: that view would never update. Pass the `State` itself or a function instead.
 
 ### State primitives are unchanged
 
@@ -282,6 +289,80 @@ Native browser             Web Animations API, CSS transitions,
 ```
 
 ---
+
+## Static rendering (SEO)
+
+Render the same views to HTML in Node, so crawlers and link previews see the
+page without running JavaScript. The `swiftui-for-web/server` entry runs the
+framework's own renderers against a small DOM shim; there is no separate
+HTML template to keep in sync.
+
+```js
+import { WindowGroup, VStack, Text } from 'swiftui-for-web';
+import { renderDocument, DocumentMetadata, sitemap } from 'swiftui-for-web/server';
+
+const metadata = new DocumentMetadata({
+  title: 'NativeMobile',
+  description: 'Learn native iOS development.',
+  canonical: 'https://nativemobile.org/',
+  openGraph: { type: 'website', image: 'https://nativemobile.org/og.png' },
+  jsonLD: { '@context': 'https://schema.org', '@type': 'WebSite', name: 'NativeMobile' },
+});
+
+const html = renderDocument(
+  WindowGroup({ metadata }, () => VStack(Text('Hello'))),
+  { stylesheets: ['/styles/index.css'], scripts: ['/main.js'] },
+);
+const xml = sitemap(['/', '/lessons'], { baseURL: 'https://nativemobile.org' });
+```
+
+Output is deterministic (byte-identical for the same input), and every
+metadata value is escaped. There is no layout during a static render: sizes are 0,
+and views that wait for an animation frame or a ResizeObserver
+(`GeometryReader`, `ViewThatFits`) render empty until the client mounts. `DocumentMetadata` is a web-only API: SwiftUI has
+no document `<head>`.
+
+## Islands on a static page
+
+Keep the page server-rendered and activate SwiftUI-For-Web only where it is
+interactive:
+
+```js
+// finder-island.js
+import { App, State, VStack, Text } from 'swiftui-for-web';
+export const query = new State('');            // static triggers write this
+App(() => FinderView(query)).mount('#finder', { mode: 'replace' });
+```
+
+```html
+<div id="finder"><p>Static fallback list…</p></div>
+<button data-query="swift">Swift</button>
+<script type="module">
+  import { whenVisible } from 'swiftui-for-web/islands'; // loads no framework code
+  whenVisible('#finder', async () => {
+    const { query } = await import('./finder-island.js');
+    for (const button of document.querySelectorAll('[data-query]')) {
+      button.addEventListener('click', () => { query.value = button.dataset.query; });
+    }
+  });
+</script>
+```
+
+- `mount(host, { mode: 'replace' })` keeps the fallback markup until the view
+  is rendered, swaps them in one step and holds the host's height until the
+  next frame, so activation causes no layout shift.
+- `mount(host, { mode: 'adopt' })` takes over markup from
+  `renderDocument`/`renderToString`: it swaps in the client tree the same
+  way, keeps focus inside the host, and in development warns at the first
+  place where the client tree differs from the server markup. It doesn't
+  reuse the server's nodes (no hydration yet).
+- `unmount()` releases the island's handlers, effects, tasks and lifecycle
+  callbacks.
+- Static controls drive the island by writing a `State` the island module
+  exports: one `App` serves any number of triggers.
+- `whenVisible(host, load)` calls `load` once when the host comes within
+  200px of the viewport, so a page whose islands are off-screen loads no
+  framework JavaScript until they scroll near.
 
 ## Examples
 
@@ -492,7 +573,7 @@ If you used the previous reconciler-based v1 API:
 |---|---|
 | `Text(String(count.value))` | `Text(() => String(count.value))` |
 | `vm.foo === 'x' ? A : B` | `Show(() => vm.foo === 'x', A, B)` |
-| `ForEach(vm.items, ...)` | `For(() => vm.items, ...)` |
+| `ForEach(vm.items, ...)` | `ForEach(() => vm.items, ...)` (or pass the `State`) |
 | `vm.subscribe(() => app.refresh())` | (delete — auto-propagates) |
 | `app.refresh()` calls in handlers | (delete — auto-propagates) |
 
@@ -500,9 +581,9 @@ Eager-read patterns that snapshot to a local then pass it into a binding lose re
 
 ```javascript
 const filtered = vm.todos.filter(...);          // ❌ snapshot
-For(() => filtered, ...)                         // never updates
+ForEach(filtered, ...)                           // never updates
 
-For(() => vm.todos.filter(...), ...)             // ✅ thunked
+ForEach(() => vm.todos.filter(...), ...)         // ✅ thunked
 ```
 
 The `Counter`, `HelloWorld`, `TodoApp`, and `Airbnb/Views/Listing/ListingGrid` examples in this repo are reference migrations.

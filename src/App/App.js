@@ -57,7 +57,7 @@ class AppInstance {
    * @param {string|HTMLElement} selector - CSS selector or DOM element
    * @returns {AppInstance} Returns this for chaining
    */
-  mount(selector) {
+  mount(selector, options = {}) {
     if (typeof selector === 'string') {
       this._rootElement = document.querySelector(selector);
     } else if (selector instanceof HTMLElement) {
@@ -70,7 +70,19 @@ class AppInstance {
     }
 
     initDelegation(this._rootElement);
-    this._rootElement.textContent = '';
+
+    // mode 'replace' (#39): the host keeps its static fallback markup until
+    // the view is rendered (off-document), then the two are swapped in one
+    // step. The host holds its current size until the next frame, so
+    // swapping the fallback for the view causes no layout shift.
+    // mode 'adopt' (#39) takes over markup from renderDocument: like
+    // replace, plus a development check that the client tree matches the
+    // server markup, and focus kept inside the host. It swaps in the
+    // client's nodes; it does not reuse the server's (no hydration yet).
+    const adopt = options.mode === 'adopt';
+    const replace = adopt || options.mode === 'replace';
+    if (replace) this._holdSize(this._rootElement);
+    else this._rootElement.textContent = '';
 
     // Fine-grained mount. The factory runs inside the signal root scope,
     // so any signal reads at the top-level become subscriptions and
@@ -78,6 +90,7 @@ class AppInstance {
     this._signalDispose = signalMount(
       () => (this._mountedView = this._createView()),
       this._rootElement,
+      { replace, adopt },
     );
 
     this._renderCount++;
@@ -85,6 +98,22 @@ class AppInstance {
     this._rootElement.dataset.swiftuiMounted = 'true';
 
     return this;
+  }
+
+  /**
+   * Keep `host` at its current size until the next animation frame.
+   * @private
+   */
+  _holdSize(host) {
+    const rect = host.getBoundingClientRect?.();
+    if (!rect || (!rect.width && !rect.height)) return;
+    const previousMinHeight = host.style.minHeight;
+    host.style.minHeight = `${rect.height}px`;
+    const release = () => {
+      host.style.minHeight = previousMinHeight;
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(release));
+    else release();
   }
 
   /**

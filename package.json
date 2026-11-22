@@ -1,6 +1,6 @@
 {
   "name": "swiftui-for-web",
-  "version": "2.0.0-alpha.1",
+  "version": "3.0.0-alpha.1",
   "type": "module",
   "description": "A zero-dependency declarative UI framework that brings Apple's SwiftUI paradigm to web development.",
   "main": "src/index.js",
@@ -16,6 +16,21 @@
       "types": "./src/core.d.ts",
       "import": "./src/core.js",
       "default": "./src/core.js"
+    },
+    "./performance": {
+      "types": "./src/performance.d.ts",
+      "import": "./src/performance.js",
+      "default": "./src/performance.js"
+    },
+    "./islands": {
+      "types": "./src/islands.d.ts",
+      "import": "./src/islands.js",
+      "default": "./src/islands.js"
+    },
+    "./server": {
+      "types": "./src/server.d.ts",
+      "import": "./src/server.js",
+      "default": "./src/server.js"
     },
     "./charts": {
       "types": "./src/Charts/index.d.ts",
@@ -36,10 +51,11 @@
     "test": "node run-tests.js && node scripts/run-node-suites.js && node scripts/check-package.js && node scripts/build-tests.js",
     "validate": "npm test && npm run test:browser && npm run build && npm run size",
     "test:browser": "node scripts/run-browser-tests.js",
+    "bench": "node scripts/run-browser-tests.js --bench",
     "test:package": "node scripts/check-package.js",
     "test:build": "node scripts/build-tests.js",
     "build": "node scripts/build.js",
-    "size": "node scripts/size.js dist",
+    "size": "node scripts/size.js dist --budget-gzip-kb 120",
     "serve": "python3 -m http.server 8000 || python -m http.server 8000",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",

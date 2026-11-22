@@ -140,12 +140,21 @@ class MockElement {
       }
       return child;
     }
+    // Like the DOM, moving a node detaches it from its current parent.
+    if (child.parentNode?.children) {
+      const at = child.parentNode.children.indexOf(child);
+      if (at >= 0) child.parentNode.children.splice(at, 1);
+    }
     child.parentNode = this;
     this.children.push(child);
     return child;
   }
 
   insertBefore(child, reference) {
+    if (child.parentNode?.children) {
+      const at = child.parentNode.children.indexOf(child);
+      if (at >= 0) child.parentNode.children.splice(at, 1);
+    }
     child.parentNode = this;
     const index = reference ? this.children.indexOf(reference) : -1;
     if (index < 0) this.children.push(child);
@@ -374,17 +383,21 @@ async function runTests() {
     const { Font: SignalFont } = await import('./src/Graphic/Font.js');
     const { Show } = await import('./src/View/ControlFlow/Show.js');
     const { For } = await import('./src/View/ControlFlow/For.js');
-    const { TabView } = await import('./src/View/Navigation/TabView.js');
+    const { TabView, TabViewStyle } = await import('./src/View/Navigation/TabView.js');
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
-    const { Picker } = await import('./src/View/Control/Picker.js');
+    const { Picker, PickerStyle, PickerView } = await import('./src/View/Control/Picker.js');
+    const { List: A11yList } = await import('./src/View/List/List.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
+    const { Button: MenuButton } = await import('./src/View/Control/Button.js');
+    const { Divider: MenuDivider } = await import('./src/Layout/Divider.js');
     const focusRingControls = {
-      Slider: (await import('./src/View/Control/Slider.js')).Slider,
-      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
-      TextField: (await import('./src/View/Control/TextField.js')).TextField,
+      // The control classes (#48: the factories return descriptors).
+      Slider: (await import('./src/View/Control/Slider.js')).SliderView,
+      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePickerView,
+      TextField: (await import('./src/View/Control/TextField.js')).TextFieldView,
     };
     const { Stepper } = await import('./src/View/Control/Stepper.js');
 
@@ -446,7 +459,13 @@ async function runTests() {
       });
     });
 
+    const PresentationEnvironment = await import('./src/Data/Environment.js');
+    const LifecycleModule = await import('./src/Core/LifecycleObserver.js');
+    const IslandsModule = await import('./src/islands.js');
+    const { applyAccessibilityValue: applyAccessibilityValueForTest } = await import('./src/Core/Accessibility.js');
     describe('SwiftUI-style modifiers', () => {
+      // #51 decision: value joins the name except on range roles; the hint is
+      // an aria-describedby description.
       it('maps accessibility modifiers to semantic attributes', () => {
         const element = render(
           ModifierText('Status')
@@ -455,10 +474,24 @@ async function runTests() {
             .accessibilityHint('Opens the build details')
             .accessibilityIdentifier('build-status')
         );
-        expect(element.getAttribute('aria-label')).toBe('Build status');
-        expect(element.getAttribute('aria-valuetext')).toBe('Passing');
-        expect(element.getAttribute('aria-description')).toBe('Opens the build details');
+        expect(element.getAttribute('aria-label')).toBe('Build status, Passing');
+        expect(element.getAttribute('aria-valuetext')).toBe(null);
+        expect(element.getAttribute('aria-description')).toBe(null);
+        const hintId = element.getAttribute('aria-describedby');
+        const hint = element.children.find((child) => child.id === hintId);
+        expect(hint.textContent).toBe('Opens the build details');
+        expect(hint.hidden).toBe(true);
         expect(element.getAttribute('data-accessibility-identifier')).toBe('build-status');
+        // Without a label, the value is visually hidden text in the name.
+        const unlabeled = render(ModifierText('Volume').accessibilityValue('50%'));
+        const valueNode = unlabeled.children.find((child) => child.dataset?.accessibilityValue === '');
+        expect(valueNode.textContent).toBe(', 50%');
+        expect(valueNode.className).toBe('swiftui-visually-hidden');
+        // On a range role, it is aria-valuetext.
+        const slider = document.createElement('div');
+        slider.setAttribute('role', 'slider');
+        applyAccessibilityValueForTest(slider, 'Loud');
+        expect(slider.getAttribute('aria-valuetext')).toBe('Loud');
       });
 
       it('runs onChange for actual changes and supports initial', () => {
@@ -533,11 +566,176 @@ async function runTests() {
         app.unmount();
         root.remove();
       });
+
+      // #39: progressive activation.
+      it('mount mode replace swaps the static fallback for the view', () => {
+        const host = document.createElement('div');
+        const fallback = document.createElement('p');
+        fallback.textContent = 'Static fallback';
+        host.appendChild(fallback);
+        document.body.appendChild(host);
+        const app = App(() => ModifierText('Live')).mount(host, { mode: 'replace' });
+        expect(host.children.length).toBe(1);
+        expect(host.children[0].dataset.view).toBe('Text');
+        app.unmount();
+        expect(host.children.length).toBe(0);
+        host.remove();
+      });
+
+      it('unmount leaves no handlers or effects behind', () => {
+        const { getLifecycleStats } = LifecycleModule;
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        let taps = 0;
+        let runs = 0;
+        const count = new State(0);
+        const app = App(() => VStack(
+          Button('Tap', () => { taps++; }),
+          ModifierText(() => { runs++; return String(count.value); })
+        )).mount(host);
+        const button = host.querySelector('[data-view="Button"]');
+        const runsAtMount = runs;
+        app.unmount();
+        button.click();
+        count.value = 1;
+        Scheduler.flushSync();
+        expect(taps).toBe(0);
+        expect(runs).toBe(runsAtMount);
+        expect(getLifecycleStats().observerActive).toBe(false);
+        host.remove();
+      });
+
+      it('whenVisible loads once when the host intersects, and can be cancelled', () => {
+        const { whenVisible } = IslandsModule;
+        const previous = globalThis.IntersectionObserver;
+        const observers = [];
+        globalThis.IntersectionObserver = class {
+          constructor(callback, options) { this.callback = callback; this.options = options; this.disconnected = false; observers.push(this); }
+          observe(element) { this.element = element; }
+          disconnect() { this.disconnected = true; }
+        };
+        try {
+          const host = document.createElement('div');
+          const loads = [];
+          whenVisible(host, (element) => loads.push(element));
+          expect(observers[0].options.rootMargin).toBe('200px');
+          observers[0].callback([{ isIntersecting: false }]);
+          expect(loads.length).toBe(0);
+          observers[0].callback([{ isIntersecting: true }]);
+          observers[0].callback([{ isIntersecting: true }]);
+          expect(loads.length).toBe(1);
+          expect(loads[0]).toBe(host);
+          expect(observers[0].disconnected).toBe(true);
+          const stop = whenVisible(document.createElement('div'), () => loads.push('never'));
+          stop();
+          observers[1].callback([{ isIntersecting: true }]);
+          expect(loads.length).toBe(1);
+        } finally {
+          globalThis.IntersectionObserver = previous;
+        }
+      });
+
+      // #38: alert, confirmation dialog and full-screen cover share the controller.
+      it('presents an alert with roles, runs the chosen action and dismisses through the binding', () => {
+        const shown = new State(false);
+        const calls = [];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => ModifierText('Page').alert('Delete draft?', shown.binding, {
+          message: 'This cannot be undone.',
+          actions: [
+            Button('Delete', { role: 'destructive' }, () => calls.push('delete')),
+            { title: 'Cancel', role: 'cancel', action: () => calls.push('cancel') },
+          ],
+          onDismiss: () => calls.push('dismissed'),
+        })).mount(root);
+        shown.value = true;
+        Scheduler.flushSync();
+        const dialog = document.body.querySelector('[data-view="Alert"]');
+        expect(dialog.getAttribute('role')).toBe('alertdialog');
+        const findIn = (node, test) => test(node) ? node : (node.children || []).map((c) => findIn(c, test)).find(Boolean);
+        const title = findIn(dialog, (node) => node.tagName === 'H2');
+        expect(title.textContent).toBe('Delete draft?');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+        expect(Boolean(dialog.getAttribute('aria-describedby'))).toBe(true);
+        const buttons = findIn(dialog, (node) => node.classList?.contains?.('swiftui-alert-actions')).children;
+        expect(buttons.map((button) => button.dataset.role)).toEqual(['destructive', 'cancel']);
+        buttons[0].click();
+        Scheduler.flushSync();
+        expect(shown.value).toBe(false);
+        expect(calls).toEqual(['delete', 'dismissed']);
+        expect(document.body.querySelector('[data-view="Alert"]')).toBeNull();
+        // Escape (the dialog's cancel event) runs the cancel action.
+        shown.value = true;
+        Scheduler.flushSync();
+        const again = document.body.querySelector('[data-view="Alert"]');
+        again.dispatchEvent(new MockEvent('cancel'));
+        Scheduler.flushSync();
+        expect(shown.value).toBe(false);
+        expect(calls).toEqual(['delete', 'dismissed', 'cancel', 'dismissed']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('full-screen cover gives its content dismiss, locks scroll and nests', () => {
+        const { Environment, EnvironmentValues } = PresentationEnvironment;
+        const previousRoot = document.documentElement;
+        document.documentElement = { style: { overflow: 'auto' } };
+        try {
+          const cover = new State(false);
+          const confirm = new State(false);
+          let dismiss = null;
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => ModifierText('Page')
+            .fullScreenCover(cover.binding, () => {
+              dismiss = Environment.get(EnvironmentValues.dismiss);
+              return ModifierText('Cover').confirmationDialog('Leave?', confirm.binding, { titleVisibility: 'hidden' });
+            })).mount(root);
+          cover.value = true;
+          Scheduler.flushSync();
+          expect(Boolean(document.body.querySelector('[data-view="FullScreenCover"]'))).toBe(true);
+          expect(document.documentElement.style.overflow).toBe('hidden');
+          confirm.value = true;
+          Scheduler.flushSync();
+          const dialog = document.body.querySelector('[data-view="ConfirmationDialog"]');
+          expect(dialog.getAttribute('role')).toBe('dialog');
+          expect(dialog.getAttribute('aria-label')).toBe('Leave?');
+          // The default action is an OK cancel button.
+          const findIn = (node, test) => test(node) ? node : (node.children || []).map((c) => findIn(c, test)).find(Boolean);
+          expect(findIn(dialog, (node) => node.classList?.contains?.('swiftui-alert-actions')).children[0].textContent).toBe('OK');
+          confirm.value = false;
+          Scheduler.flushSync();
+          expect(document.documentElement.style.overflow).toBe('hidden');
+          expect(typeof dismiss).toBe('function');
+          dismiss();
+          Scheduler.flushSync();
+          expect(cover.value).toBe(false);
+          expect(document.body.querySelector('[data-view="FullScreenCover"]')).toBeNull();
+          expect(document.documentElement.style.overflow).toBe('auto');
+          app.unmount();
+          root.remove();
+        } finally {
+          document.documentElement = previousRoot;
+        }
+      });
     });
 
     // Invariant I2 (#44): reactive bindings are created when their element is
     // rendered, under the current owner. Content that Show/For render after
     // mount must be as reactive as content rendered at mount.
+    const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
+    const { registerRenderer } = await import('./src/Core/Renderer.js');
+    // False when these tests run against the optimized build (build-tests).
+    const { DEV_BUILD } = await import('./src/Core/Dev.js');
+    const { untrack } = await import('./src/Data/Signal.js');
+    const { clearPools } = await import('./src/Core/ElementPool.js');
+    const { createDescriptor } = await import('./src/Core/ViewDescriptor.js');
+    const { HStack: LayerHStack } = await import('./src/Layout/Stack/HStack.js');
+    const { ZStack: LayerZStack } = await import('./src/Layout/Stack/ZStack.js');
+    const { Spacer: LayerSpacer } = await import('./src/Layout/Spacer.js');
+    const { LazyVStack: LayerLazyVStack } = await import('./src/Layout/Stack/LazyStack.js');
+    const { Button: LayerButton } = await import('./src/View/Control/Button.js');
     describe('Reactive bindings inside Show and For (#44)', () => {
       const mountInRoot = (viewFactory) => {
         const root = document.createElement('div');
@@ -620,18 +818,337 @@ async function runTests() {
           ModifierText('D').frame({ maxWidth: 200 })
         ));
         const [a, b, c, d] = root.children[0].children;
-        expect(a.style.width).toBe('100%');
+        // In a VStack: stretch across, grow along (#50).
+        expect(a.style.alignSelf).toBe('stretch');
         expect(a.style.maxWidth).toBe('none');
-        expect(b.style.width).toBe('100%');
-        expect(b.style.height).toBe('100%');
+        expect(b.style.alignSelf).toBe('stretch');
+        expect(b.style.flexGrow).toBe('1');
         expect(b.style.maxHeight).toBe('none');
         expect(c.style.width).toBe('80px');
         expect(c.style.minWidth).toBe('4rem');
         expect(d.style.maxWidth).toBe('200px');
         for (const el of [a, b, c, d]) {
           expect(String(el.style.maxWidth).includes('infinity')).toBe(false);
+          expect(el.style.boxSizing).toBe('border-box');
         }
         teardown();
+      });
+
+      // #50: fill along an HStack shares space; outside a stack, 100%.
+      it('frame(maxWidth/maxHeight: Infinity) uses flex growth on the stack axis', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ModifierText('row').frame({ maxWidth: Infinity, maxHeight: Infinity })),
+          LayerZStack(ModifierText('free').frame({ maxWidth: Infinity, maxHeight: Infinity }))
+        ));
+        const [hstack, zstack] = root.children[0].children;
+        const row = hstack.children[0];
+        expect(row.style.flexGrow).toBe('1');
+        expect(row.style.flexBasis).toBe('0');
+        expect(row.style.width || '').toBe('');
+        expect(row.style.alignSelf).toBe('stretch');
+        const free = zstack.children[0];
+        expect(free.style.width).toBe('100%');
+        expect(free.style.height).toBe('100%');
+        teardown();
+      });
+
+      it('frame fill inside a Button or ScrollView ignores the outer stack axis, and a State frame keeps it', () => {
+        // Pooled elements keep styles in this mock DOM (its cssText doesn't clear), so start fresh.
+        clearPools();
+        const frameOptions = new State({ maxWidth: Infinity });
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerButton(() => {}, ModifierText('Go').frame({ maxWidth: Infinity })),
+          LayerHStack(ModifierText('live').frame(frameOptions))
+        ));
+        const [button, hstack] = root.children[0].children;
+        const label = button.children[0];
+        expect(label.style.width).toBe('100%');
+        expect(label.style.alignSelf || '').toBe('');
+        const live = hstack.children[0];
+        expect(live.style.flexGrow).toBe('1');
+        frameOptions.value = { maxWidth: 'infinity' };
+        Scheduler.flushSync();
+        expect(live.style.flexGrow).toBe('1');
+        expect(live.style.width || '').toBe('');
+        teardown();
+      });
+
+      it('ForEach rows share the enclosing stack axis', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ReactiveForEach(['a', 'b'], (item) => ModifierText(item).frame({ maxWidth: Infinity })), LayerSpacer({ minLength: 10 }))
+        ));
+        const hstack = root.children[0].children[0];
+        const rows = hstack.children[0].children;
+        expect(rows.map((row) => row.style.flexGrow)).toEqual(['1', '1']);
+        expect(hstack.children[1].style.minHeight || '').toBe('');
+        teardown();
+      });
+
+      it('ZStack overlays the rows of a ForEach, and frame(alignment:) places content', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerZStack({ alignment: 'topLeading' }, ReactiveForEach(['a', 'b'], (item) => ModifierText(item))),
+          ModifierText('corner').frame({ width: 200, height: 100, alignment: 'bottomTrailing' }),
+          VStack(ModifierText('x')).frame({ maxWidth: Infinity, alignment: 'leading' })
+        ));
+        const [zstack, corner, column] = root.children[0].children;
+        const layer = zstack.children[0];
+        expect(layer.style.display).toBe('grid');
+        expect(layer.dataset.zstackLayer).toBe('');
+        expect(layer.children.map((row) => row.style.gridArea)).toEqual(['1 / 1', '1 / 1']);
+        expect(layer.style.justifyItems).toBe('start');
+        expect(layer.style.alignItems).toBe('start');
+        // Row direction: main axis horizontal.
+        expect(corner.style.display).toBe('flex');
+        expect(corner.style.justifyContent).toBe('flex-end');
+        expect(corner.style.alignItems).toBe('flex-end');
+        // A VStack (column): cross axis horizontal.
+        expect(column.style.alignItems).toBe('flex-start');
+        teardown();
+      });
+
+      it('LazyVStack builds a row when it nears the viewport and keeps it', () => {
+        const previous = globalThis.IntersectionObserver;
+        const observers = [];
+        globalThis.IntersectionObserver = class {
+          constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); }
+          observe(target) { this.targets.push(target); }
+          unobserve(target) { this.targets = this.targets.filter((t) => t !== target); }
+          disconnect() { this.targets = []; }
+        };
+        try {
+          const built = [];
+          const { root, teardown } = mountInRoot(() => VStack(LayerLazyVStack(
+            ...['one', 'two', 'three'].map((item) => ModifierText(() => { built.push(item); return item; }))
+          )));
+          const rows = root.children[0].children[0].children;
+          expect(rows.length).toBe(3);
+          expect(built).toEqual([]);
+          expect(rows[0].style.minHeight).toBe('44px');
+          observers[0].callback([{ target: rows[1], isIntersecting: true }]);
+          expect(built).toEqual(['two']);
+          expect(rows[1].children.length).toBe(1);
+          expect(rows[1].dataset.lazyRendered).toBe('');
+          observers[0].callback([{ target: rows[1], isIntersecting: true }]);
+          expect(built).toEqual(['two']);
+          teardown();
+        } finally {
+          globalThis.IntersectionObserver = previous;
+        }
+      });
+
+      it('Spacer(minLength:) applies on the stack axis only', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(LayerSpacer({ minLength: 20 })),
+          VStack(LayerSpacer({ minLength: 30 }))
+        ));
+        const [hstack, vstack] = root.children[0].children;
+        expect(hstack.children[0].style.minWidth).toBe('20px');
+        expect(hstack.children[0].style.minHeight || '').toBe('');
+        expect(vstack.children[0].style.minHeight).toBe('30px');
+        expect(vstack.children[0].style.minWidth || '').toBe('');
+        teardown();
+      });
+
+      it('modifiers apply in order: a modifier that depends on an earlier one gets a new layer', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          ModifierText('same').padding(8).background('red').cornerRadius(4).opacity(0.5),
+          ModifierText('outside').background('red').padding(8),
+          ModifierText('stacked').padding(8).padding({ top: 4 }),
+          ModifierText('frames').frame({ width: 100 }).frame({ width: 200 })
+        ));
+        const [same, outside, stacked, frames] = root.children[0].children;
+        // Order can't change the result: one element.
+        expect(same.tagName).toBe('SPAN');
+        expect(same.style.padding).toBe('8px');
+        expect(same.style.opacity).toBe('0.5');
+        // Padding after a background pads outside it.
+        expect(outside.dataset.modifierLayer).toBe('');
+        expect(outside.style.paddingTop || outside.style.padding).toBe('8px');
+        expect(outside.children[0].style.background || outside.children[0].style.backgroundColor).toBe('red');
+        expect(outside.children[0].style.padding || '').toBe('');
+        // Repeated padding adds up instead of overwriting.
+        expect(stacked.style.paddingTop).toBe('4px');
+        expect(stacked.children[0].style.padding).toBe('8px');
+        // A second frame wraps the first.
+        expect(frames.style.width).toBe('200px');
+        expect(frames.children[0].style.width).toBe('100px');
+        expect(frames.children[0].dataset.view).toBe('Text');
+        teardown();
+      });
+
+      it('a layer keeps the view placed in its stack', () => {
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerHStack(ModifierText('grow').frame({ maxWidth: Infinity }).background('red').padding(8))
+        ));
+        const layer = root.children[0].children[0].children[0];
+        expect(layer.style.flexGrow).toBe('1');
+        expect(layer.children[0].style.flexGrow).toBe('1');
+        expect(layer.children[0].style.alignSelf || '').toBe('');
+        teardown();
+      });
+
+      it('Button(...).onTapGesture(f) runs both the action and f', () => {
+        const calls = [];
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerButton('Tap', () => calls.push('action')).onTapGesture(() => calls.push('tap'))
+        ));
+        root.querySelector('[data-view="Button"]').click();
+        expect(calls).toEqual(['action', 'tap']);
+        teardown();
+      });
+
+      // #42: render and modifier errors name the view and where it was created.
+      it('render and modifier errors name the view, the modifier and the creation site', () => {
+        registerRenderer('BoomView', () => { throw new Error('renderer exploded'); });
+        let caught = null;
+        try {
+          mountInRoot(() => VStack(createDescriptor('BoomView', {})));
+        } catch (error) {
+          caught = error;
+        }
+        expect(Boolean(caught)).toBe(true);
+        expect(caught.message.includes('BoomView failed to render: renderer exploded')).toBe(true);
+        if (DEV_BUILD) {
+          expect(caught.message.includes('created at')).toBe(true);
+          expect(caught.message.includes('run-tests.js')).toBe(true);
+        }
+        expect(caught.cause.message).toBe('renderer exploded');
+        let modifierError = null;
+        try {
+          mountInRoot(() => VStack(ModifierText('x').padding(4).modifier(() => { throw new Error('bad modifier'); })));
+        } catch (error) {
+          modifierError = error;
+        }
+        expect(modifierError.message.includes('Text.custom() failed to render: bad modifier')).toBe(true);
+      });
+
+      // #52: in development, an untracked State read while building a view warns.
+      it('warns once per call site when State.value is read untracked while building a view', () => {
+        if (!DEV_BUILD) return; // compiled out of the optimized build
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const count = new State(1);
+          const build = () => VStack(ModifierText(count.value));
+          for (let i = 0; i < 2; i++) mountInRoot(build).teardown();
+          const tracked = mountInRoot(() => VStack(ModifierText(() => String(count.value)), ModifierText(count)));
+          tracked.teardown();
+          // Reads outside view building (an event handler, a test) stay quiet.
+          void count.value;
+          const relevant = warnings.filter((message) => message.includes('a State value was read while building a view'));
+          expect(relevant.length).toBe(1);
+          expect(relevant[0].includes('run-tests.js')).toBe(true);
+        } finally {
+          console.warn = originalWarn;
+        }
+      });
+
+      // #52: ForEach is reactive and keyed when its data is a State or function.
+      it('ForEach over a State or a function updates in place and keeps keyed rows', () => {
+        const todos = new State([{ id: 1, title: 'One' }, { id: 2, title: 'Two' }]);
+        const { root, teardown } = mountInRoot(() => VStack(
+          ReactiveForEach(todos, { id: 'id' }, (todo) => ModifierText(todo.title)),
+          ReactiveForEach(() => todos.value.filter((todo) => todo.id !== 1), (todo) => ModifierText(todo.title))
+        ));
+        const lists = () => root.children[0].children;
+        const texts = () => lists().map((list) => list.children.map((row) => row.textContent));
+        expect(texts()).toEqual([['One', 'Two'], ['Two']]);
+        const firstTwo = lists()[0].children[1];
+        todos.value = [...todos.value, { id: 3, title: 'Three' }];
+        Scheduler.flushSync();
+        expect(texts()).toEqual([['One', 'Two', 'Three'], ['Two', 'Three']]);
+        // The keyed row for id 2 kept its element.
+        expect(lists()[0].children[1]).toBe(firstTwo);
+        todos.value = todos.value.filter((todo) => todo.id !== 2);
+        Scheduler.flushSync();
+        expect(texts()).toEqual([['One', 'Three'], ['Three']]);
+        teardown();
+      });
+
+      it('a reactive ForEach inside a List keeps updating, and reactive ForEach chains', () => {
+        const items = new State([{ id: 'a' }, { id: 'b' }]);
+        const { root, teardown } = mountInRoot(() => VStack(
+          A11yList(ReactiveForEach(items, { id: 'id' }, (item) => ModifierText(item.id)).id('rows'))
+        ));
+        const text = () => {
+          const parts = [];
+          const walk = (node) => { if (node._textContent) parts.push(node._textContent); (node.children || []).forEach(walk); };
+          walk(root.children[0]);
+          return parts.join('');
+        };
+        expect(text()).toBe('ab');
+        items.value = [...items.value, { id: 'c' }];
+        Scheduler.flushSync();
+        expect(text()).toBe('abc');
+        teardown();
+      });
+
+      it('reactive ForEach rows in a selectable List are options that select and update', () => {
+        const items = new State([{ id: 'a', name: 'A' }]);
+        const picked = new State('a');
+        const { root, teardown } = mountInRoot(() => VStack(
+          A11yList({ selection: picked.binding }, ReactiveForEach(items, { id: 'id' }, (item) => ModifierText(item.name)))
+        ));
+        const list = root.children[0].children[0];
+        const rows = () => {
+          const found = [];
+          const walk = (node) => { if (node.dataset?.listRow === 'true') found.push(node); else (node.children || []).forEach(walk); };
+          walk(list);
+          return found;
+        };
+        expect(list.getAttribute('role')).toBe('listbox');
+        expect(rows().map((row) => [row.getAttribute('role'), row.getAttribute('aria-selected'), row.tabIndex])).toEqual([['option', 'true', 0]]);
+        items.value = [...items.value, { id: 'b', name: 'B' }];
+        Scheduler.flushSync();
+        expect(rows().map((row) => [row.getAttribute('role'), row.getAttribute('aria-selected'), row.tabIndex])).toEqual([['option', 'true', 0], ['option', 'false', -1]]);
+        // Keyboard: ArrowDown moves to the new row, Space selects it.
+        const key = (row, name) => { const event = new MockEvent('keydown'); event.key = name; row.dispatchEvent(event); };
+        key(rows()[0], 'ArrowDown');
+        expect(rows().map((row) => row.tabIndex)).toEqual([-1, 0]);
+        key(rows()[1], ' ');
+        expect(picked.value).toBe('b');
+        expect(rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+        // A write made elsewhere is reflected.
+        picked.value = 'a';
+        Scheduler.flushSync();
+        expect(rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+        teardown();
+      });
+
+      it('.navigationTitle sets the document title, follows a State and restores on unmount', () => {
+        const previous = document.title;
+        document.title = 'Before';
+        try {
+          const title = new State('Inbox');
+          const { teardown } = mountInRoot(() => VStack(ModifierText('x')).navigationTitle(title));
+          expect(document.title).toBe('Inbox');
+          title.value = 'Inbox (3)';
+          Scheduler.flushSync();
+          expect(document.title).toBe('Inbox (3)');
+          teardown();
+          expect(document.title).toBe('Before');
+          // Nested titles in one owner restore the page title, not an inner one.
+          const nested = mountInRoot(() => VStack(ModifierText('x').navigationTitle('B')).navigationTitle('A'));
+          expect(document.title).toBe('A');
+          nested.teardown();
+          expect(document.title).toBe('Before');
+        } finally {
+          document.title = previous;
+        }
+      });
+
+      it('does not warn for reads inside untrack()', () => {
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const count = new State(3);
+          mountInRoot(() => VStack(ModifierText(untrack(() => String(count.value))))).teardown();
+          expect(warnings.filter((m) => m.includes('a State value was read')).length).toBe(0);
+        } finally {
+          console.warn = originalWarn;
+        }
       });
 
       it('Text(state.value) stays a static snapshot', () => {
@@ -764,6 +1281,78 @@ async function runTests() {
         expect(second.tabIndex).toBe(0);
         expect(first.tabIndex).toBe(-1);
         expect(panel.getAttribute('aria-labelledby')).toBe(second.id);
+        app.unmount();
+        root.remove();
+      });
+
+      it('TabView keeps the first tab as the Tab stop when the selection matches no tab', () => {
+        const selection = new State('missing');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(selection, ModifierText('One'), ModifierText('Two'))).mount(root);
+        const tabBar = root.children[0].children.find((child) => child.dataset.tabviewPart === 'tabbar');
+        expect(tabBar.children.map((tab) => tab.tabIndex)).toEqual([0, -1]);
+        expect(tabBar.children.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('page-style TabView exposes its page dots as tabs controlling inert-when-hidden panels', () => {
+        const selection = new State(1);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => TabView(selection, ModifierText('One'), ModifierText('Two'), ModifierText('Three'))
+          .tabViewStyle(TabViewStyle.page)).mount(root);
+        const container = root.children[0];
+        const pages = container.children[0].children;
+        const indicator = container.children.find((child) => child.dataset.tabviewPart === 'pageindicator');
+        const dots = indicator.children;
+        expect(indicator.getAttribute('role')).toBe('tablist');
+        expect(dots.map((dot) => dot.getAttribute('role'))).toEqual(['tab', 'tab', 'tab']);
+        expect(dots[0].tagName).toBe('BUTTON');
+        expect(dots[0].getAttribute('aria-label')).toBe('Page 1 of 3');
+        expect(pages.map((page) => page.getAttribute('role'))).toEqual(['tabpanel', 'tabpanel', 'tabpanel']);
+        expect(dots[1].getAttribute('aria-controls')).toBe(pages[1].id);
+        expect(pages[1].getAttribute('aria-labelledby')).toBe(dots[1].id);
+        expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false']);
+        expect(dots.map((dot) => dot.tabIndex)).toEqual([-1, 0, -1]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([true, false, true]);
+        expect(pages[0].getAttribute('aria-hidden')).toBe('true');
+        const key = (name) => { const event = new MockEvent('keydown'); event.key = name; indicator.dispatchEvent(event); return event; };
+        expect(key('ArrowRight').defaultPrevented).toBe(true);
+        expect(selection.value).toBe(2);
+        expect(dots.map((dot) => dot.tabIndex)).toEqual([-1, -1, 0]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([true, true, false]);
+        dots[0].click();
+        expect(selection.value).toBe(0);
+        expect(dots.map((dot) => dot.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('a selectable List makes untagged rows disabled options, and a page TabView without dots has no tab roles', () => {
+        const hiddenDots = TabView(new State(0), ModifierText('One'), ModifierText('Two')).tabViewStyle(TabViewStyle.page);
+        hiddenDots._pageIndicatorVisibility = 'never';
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          A11yList({ selection: new State('a').binding }, ModifierText('A').tag('a'), ModifierText('Header')),
+          hiddenDots
+        )).mount(root);
+        const lists = [];
+        const find = (node) => { if (node.dataset?.view === 'list') lists.push(node); (node.children || []).forEach(find); };
+        find(root);
+        const rows = lists[0].children;
+        expect(rows.map((row) => row.getAttribute('role'))).toEqual(['option', 'option']);
+        expect(rows[1].getAttribute('aria-disabled')).toBe('true');
+        let pager = null;
+        const findPager = (node) => { if (!pager && node.dataset?.style === 'page') pager = node; (node.children || []).forEach(findPager); };
+        findPager(root);
+        expect(pager.children.length).toBe(1);
+        const pages = pager.children[0].children;
+        expect(pages.map((page) => page.getAttribute('role'))).toEqual([null, null]);
+        expect(pages.map((page) => page.getAttribute('aria-labelledby'))).toEqual([null, null]);
+        expect(pages.map((page) => Boolean(page.inert))).toEqual([false, true]);
         app.unmount();
         root.remove();
       });
@@ -929,6 +1518,166 @@ async function runTests() {
         expect(stack.depth).toBe(1);
         app.unmount();
         root.remove();
+      });
+
+      // #51: the segmented Picker is a WAI-ARIA radio group.
+      it('segmented Picker is a radiogroup with aria-checked, roving tabindex and arrow keys', () => {
+        const flavor = new State('vanilla');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker('Flavor', flavor.binding,
+          ModifierText('Chocolate').tag('chocolate'),
+          ModifierText('Vanilla').tag('vanilla'),
+          ModifierText('Mint').tag('mint')).pickerStyle(PickerStyle.segmented)).mount(root);
+        let group = null;
+        const find = (node) => { if (!group && node.dataset?.style === 'segmented') group = node; (node.children || []).forEach(find); };
+        find(root);
+        const radios = group.children;
+        const checked = () => radios.map((radio) => radio.getAttribute('aria-checked'));
+        const tabStops = () => radios.map((radio) => radio.tabIndex);
+        const key = (radio, name) => { const event = new MockEvent('keydown'); event.key = name; radio.dispatchEvent(event); return event; };
+        expect(group.getAttribute('role')).toBe('radiogroup');
+        expect(group.getAttribute('aria-label')).toBe('Flavor');
+        expect(radios.map((radio) => radio.getAttribute('role'))).toEqual(['radio', 'radio', 'radio']);
+        expect(radios[0].getAttribute('type')).toBe('button');
+        expect(checked()).toEqual(['false', 'true', 'false']);
+        expect(tabStops()).toEqual([-1, 0, -1]);
+        expect(key(radios[1], 'ArrowRight').defaultPrevented).toBe(true);
+        expect(flavor.value).toBe('mint');
+        expect(checked()).toEqual(['false', 'false', 'true']);
+        expect(tabStops()).toEqual([-1, -1, 0]);
+        key(radios[2], 'ArrowRight');
+        expect(flavor.value).toBe('chocolate');
+        key(radios[0], 'ArrowLeft');
+        expect(flavor.value).toBe('mint');
+        key(radios[2], 'Home');
+        expect(flavor.value).toBe('chocolate');
+        key(radios[0], 'End');
+        expect(flavor.value).toBe('mint');
+        radios[1].click();
+        expect(flavor.value).toBe('vanilla');
+        expect(checked()).toEqual(['false', 'true', 'false']);
+        // Colors come from theme tokens, not hard-coded light values.
+        expect(group.style.backgroundColor.includes('var(--color-fill-tertiary')).toBe(true);
+        expect(radios[1].style.backgroundColor.includes('var(--color-segmented-selected')).toBe(true);
+        expect(radios[0].style.color.includes('var(--color-primary')).toBe(true);
+        app.unmount();
+        root.remove();
+      });
+
+      it('segmented Picker keeps one tab stop when the selection matches no segment', () => {
+        const flavor = new State('none');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => Picker(flavor.binding,
+          ModifierText('A').tag('a'),
+          ModifierText('B').tag('b')).pickerStyle(PickerStyle.segmented)).mount(root);
+        let group = null;
+        const find = (node) => { if (!group && node.dataset?.style === 'segmented') group = node; (node.children || []).forEach(find); };
+        find(root);
+        expect(group.children.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+        expect(group.children.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      // #51: a selectable List is a listbox with aria-selected, arrows and Space.
+      it('selectable List is a listbox: aria-selected, roving tabindex, arrow keys and Space', () => {
+        const selected = new State(2);
+        const items = [{ id: 1, name: 'One' }, { id: 2, name: 'Two' }, { id: 3, name: 'Three' }];
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => A11yList(items, { selection: selected.binding }, (item) => ModifierText(item.name))).mount(root);
+        let list = null;
+        const find = (node) => { if (!list && node.dataset?.view === 'list') list = node; (node.children || []).forEach(find); };
+        find(root);
+        const rows = list.children;
+        const key = (row, name) => { const event = new MockEvent('keydown'); event.key = name; row.dispatchEvent(event); return event; };
+        const ariaSelected = () => rows.map((row) => row.getAttribute('aria-selected'));
+        expect(list.getAttribute('role')).toBe('listbox');
+        expect(rows.map((row) => row.getAttribute('role'))).toEqual(['option', 'option', 'option']);
+        expect(ariaSelected()).toEqual(['false', 'true', 'false']);
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, 0, -1]);
+        // Arrows move focus only; Space selects the focused row.
+        expect(key(rows[1], 'ArrowDown').defaultPrevented).toBe(true);
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, -1, 0]);
+        expect(selected.value).toBe(2);
+        expect(key(rows[2], ' ').defaultPrevented).toBe(true);
+        expect(selected.value).toBe(3);
+        expect(ariaSelected()).toEqual(['false', 'false', 'true']);
+        key(rows[2], 'Home');
+        expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+        key(rows[0], 'ArrowUp');
+        expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+        key(rows[0], 'End');
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, -1, 0]);
+        rows[0].click();
+        expect(selected.value).toBe(1);
+        expect(ariaSelected()).toEqual(['true', 'false', 'false']);
+        app.unmount();
+        root.remove();
+      });
+
+      it('List selects tagged children, toggles a Set selection and stays a list without selection', () => {
+        const picked = new State(new Set(['b']));
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          A11yList({ selection: picked.binding }, ModifierText('A').tag('a'), ModifierText('B').tag('b')),
+          A11yList(ModifierText('Plain'))
+        )).mount(root);
+        const lists = [];
+        const find = (node) => { if (node.dataset?.view === 'list') lists.push(node); (node.children || []).forEach(find); };
+        find(root);
+        const [multi, plain] = lists;
+        expect(multi.getAttribute('role')).toBe('listbox');
+        expect(multi.getAttribute('aria-multiselectable')).toBe('true');
+        expect(multi.children.map((row) => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+        multi.children[0].click();
+        expect([...picked.value].sort()).toEqual(['a', 'b']);
+        const event = new MockEvent('keydown'); event.key = ' ';
+        multi.children[1].dispatchEvent(event);
+        expect([...picked.value]).toEqual(['a']);
+        expect(multi.children.map((row) => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+        // Keys typed in a control inside a row are left to that control.
+        const inner = new MockEvent('keydown', { target: { tagName: 'INPUT' } }); inner.key = ' ';
+        multi.children[0].dispatchEvent(inner);
+        expect(inner.defaultPrevented).toBe(false);
+        expect([...picked.value]).toEqual(['a']);
+        expect(plain.getAttribute('role')).toBe('list');
+        expect(plain.children[0].getAttribute('role')).toBe('listitem');
+        expect(plain.children[0].getAttribute('aria-selected')).toBe(null);
+        app.unmount();
+        root.remove();
+      });
+
+      it('NavigationLink drops javascript:, data: and other unsafe URLs', () => {
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const root = document.createElement('div');
+          document.body.appendChild(root);
+          const app = App(() => NavigationStack(VStack(
+            NavigationLink('A', () => ModifierText('a'), { url: 'javascript:alert(1)' }),
+            NavigationLink('B', () => ModifierText('b'), { url: ' JaVa\tScRiPt:alert(1)' }),
+            NavigationLink('C', () => ModifierText('c'), { url: 'data:text/html,<script>x</script>' }),
+            NavigationLink('D', () => ModifierText('d'), { url: '/profile?id=1#top' }),
+            NavigationLink('E', () => ModifierText('e'), { url: 'https://example.org/' }),
+            NavigationLink('F', () => ModifierText('f'), { url: 'mailto:a@example.org' })
+          ), { transitionStyle: 'none' })).mount(root);
+          const links = [];
+          const walk = (node) => { if (node.dataset?.view === 'NavigationLink') links.push(node); (node.children || []).forEach(walk); };
+          walk(root);
+          expect(links.map((link) => link.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'A', 'A', 'A']);
+          expect(links.slice(0, 3).map((link) => link.getAttribute('href'))).toEqual([null, null, null]);
+          expect(links[3].getAttribute('href')).toBe('/profile?id=1#top');
+          expect(warnings.filter((m) => m.includes('NavigationLink ignored')).length).toBe(3);
+          app.unmount();
+          root.remove();
+        } finally {
+          console.warn = originalWarn;
+        }
       });
 
       it('Picker keeps Text options tagged with .tag(_:)', () => {
@@ -2861,37 +3610,39 @@ async function runTests() {
     // Test TextField
     const { TextField, TextFieldView, SecureField, SecureFieldView } = await import('./src/View/Control/TextField.js');
     describe('TextField', () => {
-      it('should create a TextFieldView instance', () => {
-        const field = TextField('Placeholder');
-        expect(field).toBeInstanceOf(TextFieldView);
+      it('TextField returns a descriptor that TextFieldView renders (#48)', () => {
+        const field = TextField('Placeholder').textFieldStyle('plain');
+        expect(field.type).toBe('TextField');
+        expect(field.props.calls).toEqual([['textFieldStyle', ['plain']]]);
+        expect(new TextFieldView('Placeholder')).toBeInstanceOf(TextFieldView);
       });
 
       it('should set placeholder', () => {
-        const field = TextField('Enter name');
+        const field = new TextFieldView('Enter name');
         expect(field._placeholder).toBe('Enter name');
       });
 
       it('should render an input element', () => {
-        const field = TextField('Placeholder');
+        const field = new TextFieldView('Placeholder');
         const element = field._render();
         expect(element.tagName).toBe('INPUT');
       });
 
       it('should set data-view to TextField', () => {
-        const field = TextField('Placeholder');
+        const field = new TextFieldView('Placeholder');
         const element = field._render();
         expect(element.dataset.view).toBe('TextField');
       });
 
       it('should set placeholder attribute', () => {
-        const field = TextField('Enter name');
+        const field = new TextFieldView('Enter name');
         const element = field._render();
         expect(element.placeholder).toBe('Enter name');
       });
 
       it('should update binding when input changes', () => {
         const state = new State('');
-        const field = TextField('Placeholder', state.binding);
+        const field = new TextFieldView('Placeholder', state.binding);
         const element = field._render();
 
         element.value = 'New Value';
@@ -2901,19 +3652,19 @@ async function runTests() {
       });
 
       it('should disable the input', () => {
-        const field = TextField('Placeholder').disabled();
+        const field = new TextFieldView('Placeholder').disabled();
         const element = field._render();
         expect(element.disabled).toBe(true);
       });
 
       it('should apply roundedBorder style', () => {
-        const field = TextField('Placeholder').textFieldStyle('roundedBorder');
+        const field = new TextFieldView('Placeholder').textFieldStyle('roundedBorder');
         const element = field._render();
         expect(element.style.borderRadius).toBe('6px');
       });
 
       it('should set input type for email keyboard', () => {
-        const field = TextField('Email').keyboardType('email');
+        const field = new TextFieldView('Email').keyboardType('email');
         const element = field._render();
         expect(element.type).toBe('email');
       });
@@ -2921,12 +3672,12 @@ async function runTests() {
 
     describe('SecureField', () => {
       it('should create a SecureFieldView instance', () => {
-        const field = SecureField('Password');
+        const field = new SecureFieldView('Password');
         expect(field).toBeInstanceOf(SecureFieldView);
       });
 
       it('should render input with type password', () => {
-        const field = SecureField('Password');
+        const field = new SecureFieldView('Password');
         const element = field._render();
         expect(element.type).toBe('password');
       });
@@ -2937,19 +3688,19 @@ async function runTests() {
     describe('Toggle', () => {
       it('should create a ToggleView instance', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding);
-        expect(toggle).toBeInstanceOf(ToggleView);
+        expect(Toggle(state.binding).type).toBe('Toggle');
+        expect(new ToggleView(state.binding)).toBeInstanceOf(ToggleView);
       });
 
       it('should accept label and binding', () => {
         const state = new State(false);
-        const toggle = Toggle('Enable', state.binding);
+        const toggle = new ToggleView('Enable', state.binding);
         expect(toggle._label).toBe('Enable');
       });
 
       it('should render a div for switch style', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding);
+        const toggle = new ToggleView(state.binding);
         const element = toggle._render();
         expect(element.tagName).toBe('DIV');
       });
@@ -2996,14 +3747,100 @@ async function runTests() {
         expect(menu.getAttribute('aria-hidden')).toBe(null);
       });
 
+      // #48: Menu items given as descriptors (Button, Divider) render and act.
+      it('Menu renders descriptor Button and Divider items and runs the action', () => {
+        const hadListener = typeof document.addEventListener === 'function';
+        if (!hadListener) document.addEventListener = () => {};
+        const calls = [];
+        let element;
+        try {
+          element = A11yMenu('Actions',
+            MenuButton('Copy', () => calls.push('copy')),
+            MenuDivider(),
+            MenuButton('Delete', () => calls.push('delete')).disabled(),
+            MenuButton(() => calls.push('share'), ModifierText('Share')).foregroundColor('red')
+          )._render();
+        } finally {
+          if (!hadListener) delete document.addEventListener;
+        }
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const menu = find(element, (node) => node.dataset?.menuPart === 'dropdown');
+        const roles = menu.children.map((item) => item.getAttribute('role'));
+        expect(roles).toEqual(['menuitem', 'separator', 'menuitem', 'menuitem']);
+        // A label view (SwiftUI's Button(action:label:)) renders, with its tint.
+        expect(find(menu.children[3], (node) => node._textContent === 'Share') ? true : false).toBe(true);
+        expect(menu.children[3].style.color).toBe('red');
+        menu.children[3].click();
+        expect(menu.children[0].textContent).toBe('Copy');
+        expect(menu.children[2].getAttribute('aria-disabled')).toBe('true');
+        // No nested <button> inside a menu item.
+        expect(find(menu.children[0], (node) => node.tagName === 'BUTTON') || null).toBe(null);
+        menu.children[0].click();
+        menu.children[2].click();
+        expect(calls).toEqual(['share', 'copy']);
+      });
+
+      // #48: DisclosureGroup follows outside writes to its binding.
+      it('DisclosureGroup follows writes to isExpanded and renders descriptor content', () => {
+        const expanded = new State(false);
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const previousRAF = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (fn) => fn();
+        try {
+          const app = App(() => A11yDisclosureGroup(expanded.binding, { label: 'More' }, ModifierText('Hidden detail'))).mount(root);
+          const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+          const header = find(root, (node) => node.getAttribute?.('aria-expanded') !== null && node.getAttribute?.('aria-expanded') !== undefined);
+          const detail = find(root, (node) => node._textContent === 'Hidden detail');
+          expect(Boolean(detail)).toBe(true);
+          expect(header.getAttribute('aria-expanded')).toBe('false');
+          expanded.value = true;
+          Scheduler.flushSync();
+          expect(header.getAttribute('aria-expanded')).toBe('true');
+          header.click();
+          Scheduler.flushSync();
+          expect(expanded.value).toBe(false);
+          expect(header.getAttribute('aria-expanded')).toBe('false');
+          app.unmount();
+        } finally {
+          globalThis.requestAnimationFrame = previousRAF;
+          root.remove();
+        }
+      });
+
+      // #48: controls are view descriptors rendered by their classes.
+      it('controls are descriptors with the full modifier table and their own methods', () => {
+        const on = new State(true);
+        const text = new State('hi');
+        const root = document.createElement('div');
+        document.body.appendChild(root);
+        const app = App(() => VStack(
+          Toggle('Wi-Fi', on.binding).padding(4).toggleStyle('checkbox').background('red').padding(2),
+          TextField('Name', text.binding).textFieldStyle('plain').accessibilityIdentifier('name-field')
+        )).mount(root);
+        const [toggleLayer, field] = root.children[0].children;
+        // Ordered layers apply to a control like any view (#50).
+        expect(toggleLayer.dataset.modifierLayer).toBe('');
+        expect(toggleLayer.style.padding).toBe('2px');
+        const toggle = toggleLayer.children[0];
+        expect(toggle.dataset.view).toBe('Toggle');
+        expect(toggle.style.padding).toBe('4px');
+        // toggleStyle after padding still reached the control.
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        expect(Boolean(find(toggle, (node) => node.tagName === 'INPUT' && node.type === 'checkbox'))).toBe(true);
+        expect(field.getAttribute('data-accessibility-identifier')).toBe('name-field');
+        app.unmount();
+        root.remove();
+      });
+
       it('form controls leave the focus ring to :focus-visible', () => {
         const { Slider, DatePicker, TextField } = focusRingControls;
         const all = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => all(c, out)); return out; };
         const rendered = [
-          Slider(new State(0.5).binding)._render(),
-          DatePicker('Date', new State(new Date(0)).binding)._render(),
-          TextField('Name', new State('').binding).textFieldStyle('plain')._render(),
-          Picker('Pick', new State('a').binding, ModifierText('A').tag('a'))._render(),
+          new Slider(new State(0.5).binding)._render(),
+          new DatePicker('Date', new State(new Date(0)).binding)._render(),
+          new TextFieldView('Name', new State('').binding).textFieldStyle('plain')._render(),
+          new PickerView('Pick', new State('a').binding, ModifierText('A').tag('a'))._render(),
         ];
         for (const root of rendered) {
           for (const node of all(root)) expect(node.style?.outline || '').toBe('');
@@ -3012,7 +3849,7 @@ async function runTests() {
 
       it('renders the switch as a labelled button with role switch and aria-checked', () => {
         const state = new State(false);
-        const element = Toggle('Wi-Fi', state.binding)._render();
+        const element = new ToggleView('Wi-Fi', state.binding)._render();
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(Boolean(button)).toBe(true);
@@ -3028,7 +3865,7 @@ async function runTests() {
 
       it('a disabled switch is a disabled button', () => {
         const state = new State(false);
-        const element = Toggle('Off', state.binding).disabled(true)._render();
+        const element = new ToggleView('Off', state.binding).disabled(true)._render();
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(button.disabled).toBe(true);
@@ -3037,14 +3874,14 @@ async function runTests() {
 
       it('should set data-view to Toggle', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding);
+        const toggle = new ToggleView(state.binding);
         const element = toggle._render();
         expect(element.dataset.view).toBe('Toggle');
       });
 
       it('should update binding when clicked', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding);
+        const toggle = new ToggleView(state.binding);
         const element = toggle._render();
 
         element.click();
@@ -3054,7 +3891,7 @@ async function runTests() {
 
       it('should not toggle when disabled', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding).disabled();
+        const toggle = new ToggleView(state.binding).disabled();
         const element = toggle._render();
 
         element.click();
@@ -3064,14 +3901,14 @@ async function runTests() {
 
       it('should render checkbox style', () => {
         const state = new State(false);
-        const toggle = Toggle(state.binding).toggleStyle('checkbox');
+        const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
         const element = toggle._render();
         expect(element.tagName).toBe('LABEL');
       });
 
       it('should render button style', () => {
         const state = new State(false);
-        const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+        const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button');
         const element = toggle._render();
         expect(element.tagName).toBe('BUTTON');
       });

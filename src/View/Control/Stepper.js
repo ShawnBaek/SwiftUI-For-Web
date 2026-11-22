@@ -17,7 +17,10 @@
  * })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
+import { isDescriptor } from '../../Core/ViewDescriptor.js';
+import { render as renderLabelView } from '../../Core/Renderer.js';
 import { Color } from '../../Graphic/Color.js';
 
 /**
@@ -43,6 +46,16 @@ export class StepperView extends View {
       this._onIncrement = options.onIncrement ?? null;
       this._onDecrement = options.onDecrement ?? null;
       this._label = options.label ?? null;
+    } else if (args[0] instanceof View || isDescriptor(args[0])) {
+      // Stepper(labelView, $value, options?)
+      const labelView = args[0];
+      this._label = () => labelView;
+      this._valueBinding = args[1] ?? null;
+      if (args[2]) {
+        this._min = args[2].in?.[0] ?? args[2].min ?? null;
+        this._max = args[2].in?.[1] ?? args[2].max ?? null;
+        this._step = args[2].step ?? 1;
+      }
     } else if (typeof args[0] === 'string') {
       // Stepper('Label', $value, options?)
       this._labelText = args[0];
@@ -105,8 +118,8 @@ export class StepperView extends View {
 
     if (this._label) {
       const labelView = this._label();
-      if (labelView instanceof View) {
-        labelContainer.appendChild(labelView._render());
+      if (labelView instanceof View || isDescriptor(labelView)) {
+        labelContainer.appendChild(renderLabelView(labelView));
       }
     } else if (this._labelText) {
       labelContainer.textContent = this._labelText;
@@ -233,8 +246,11 @@ export class StepperView extends View {
 /**
  * Factory function for Stepper
  */
+// A view descriptor rendered by StepperView (#48).
+const makeStepper = defineControl('Stepper', StepperView, []);
+
 export function Stepper(...args) {
-  return new StepperView(...args);
+  return makeStepper(...args);
 }
 
 export default Stepper;

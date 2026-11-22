@@ -10,6 +10,7 @@
  *   TextField({ placeholder: 'Enter text', text: binding })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
@@ -261,8 +262,11 @@ export class SecureFieldView extends TextFieldView {
  * @param {Function} [onEditingChanged] - Editing changed callback
  * @returns {TextFieldView}
  */
+// A view descriptor rendered by TextFieldView (#48).
+const makeTextField = defineControl('TextField', TextFieldView, ['onCommit', 'disabled', 'textFieldStyle', 'autocapitalization', 'disableAutocorrection', 'keyboardType']);
+
 export function TextField(placeholderOrOptions, textBinding, onEditingChanged) {
-  return new TextFieldView(placeholderOrOptions, textBinding, onEditingChanged);
+  return makeTextField(placeholderOrOptions, textBinding, onEditingChanged);
 }
 
 /**
@@ -272,8 +276,11 @@ export function TextField(placeholderOrOptions, textBinding, onEditingChanged) {
  * @param {Function} [onCommit] - Commit callback
  * @returns {SecureFieldView}
  */
+// A view descriptor rendered by SecureFieldView (#48).
+const makeSecureField = defineControl('SecureField', SecureFieldView, ['onCommit', 'disabled', 'textFieldStyle', 'autocapitalization', 'disableAutocorrection', 'keyboardType']);
+
 export function SecureField(placeholderOrOptions, textBinding, onCommit) {
-  return new SecureFieldView(placeholderOrOptions, textBinding, onCommit);
+  return makeSecureField(placeholderOrOptions, textBinding, onCommit);
 }
 
 export default TextField;

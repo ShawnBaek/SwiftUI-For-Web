@@ -17,6 +17,7 @@
  * })
  */
 
+import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
 import { Color } from '../../Graphic/Color.js';
 
@@ -233,8 +234,11 @@ export class DatePickerView extends View {
 /**
  * Factory function for DatePicker
  */
+// A view descriptor rendered by DatePickerView (#48).
+const makeDatePicker = defineControl('DatePicker', DatePickerView, ['datePickerStyle']);
+
 export function DatePicker(...args) {
-  return new DatePickerView(...args);
+  return makeDatePicker(...args);
 }
 
 export default DatePicker;

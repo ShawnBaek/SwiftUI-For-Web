@@ -21,6 +21,8 @@
  * });
  */
 
+import { nextElementId } from '../Core/ElementID.js';
+
 // =============================================================================
 // Animation Class - Matches SwiftUI's Animation type
 // =============================================================================
@@ -504,7 +506,6 @@ export class AnyTransition {
 // Namespace - For matchedGeometryEffect (ID-based animations)
 // =============================================================================
 
-let _namespaceCounter = 0;
 
 /**
  * Creates a namespace for matchedGeometryEffect
@@ -512,7 +513,7 @@ let _namespaceCounter = 0;
  * @returns {Object} Namespace object
  */
 export function Namespace() {
-  const id = `ns-${++_namespaceCounter}`;
+  const id = nextElementId('ns');
   return {
     id,
     /**
