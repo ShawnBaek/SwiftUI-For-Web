@@ -33,6 +33,7 @@
 | Package checks | `node scripts/check-package.js`: every `exports` entry loads, `./core` matches `.`, and `index.d.ts` matches the runtime | Node ≥ 20.6 |
 | Release-build tests | `node scripts/build-tests.js` | Node ≥ 20 |
 | All four Node commands | `npm test` | Node ≥ 20.6 |
+| Everything (Node commands, browser tests, production build, size report) | `npm run validate` | Node ≥ 20.6 and a Chromium-family browser |
 | Optional e2e/visual | `Tests/e2e`, `Tests/visual` with Playwright | Optional only |
 
 CI runs all of the above except the optional Playwright specs (#53), with no
@@ -49,7 +50,7 @@ use `await itAsync(…)` directly inside `runTests`.
 `Tests/TestRunner.html` runs every `Tests/**/*Tests.js` file, including
 `Tests/Data/SignalTests.js` and the real-document lifecycle tests in
 `Tests/Core/LifecycleTests.js`: **515** tests, all passing in headless Chrome.
-`npm test` runs 149 tests in `run-tests.js` and the 180 tests of the five
+`npm test` runs 161 tests in `run-tests.js` and the 180 tests of the five
 DOM-free suites. CI runs all three.
 
 The quality assessment below is from the October 2026 review of the 490 tests
