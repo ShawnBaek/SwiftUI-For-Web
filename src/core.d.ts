@@ -298,6 +298,15 @@ export function createObservable<T extends object>(target: T): T & ObservableObj
 /** iOS 17+ style Observable macro equivalent: makes an object's properties observable */
 export function Observable<T extends object>(target: T): T;
 
+/**
+ * A value with a two-way binding projection, like SwiftUI's `@Bindable`.
+ * Read or write `value`; pass `$binding` to a control that takes a binding.
+ */
+export function Bindable<T>(initialValue: T): {
+  value: T;
+  readonly $binding: { value: T; wrappedValue: T };
+};
+
 /** StateObject - owned observable that persists across re-renders */
 export class StateObject<T extends ObservableObject> {
   constructor(wrappedValue: () => T);
@@ -614,10 +623,11 @@ export function LazyHGrid(rows: any[], options?: { spacing?: number; pinnedViews
 /** Access parent geometry */
 export function GeometryReader(content: (geometry: GeometryProxy) => View): View;
 
-/** Geometry information */
-export interface GeometryProxy {
-  size: { width: number; height: number };
-  safeAreaInsets: EdgeInsets;
+/** Geometry information, passed to a `GeometryReader` content closure */
+export class GeometryProxy {
+  private constructor();
+  readonly size: { width: number; height: number };
+  readonly safeAreaInsets: EdgeInsets;
   frame(coordinateSpace?: string): { x: number; y: number; width: number; height: number };
 }
 
@@ -815,8 +825,26 @@ export function NavigationLink(
 export function BackButton(label?: string): View;
 
 /** Navigation path for programmatic navigation */
+/** A destination registered for a data type, used by `navigationDestination` */
+export class NavigationDestination<T = any> {
+  constructor(dataType: string | (new (...args: any[]) => T), destination: (value: T) => View);
+  matches(value: unknown): boolean;
+  build(value: T): View;
+}
+
+/** A JSON-serializable form of a `NavigationPath` */
+export class CodableRepresentation {
+  constructor(navigationPath: NavigationPath);
+  readonly path: any[];
+  toJSON(): string;
+  static fromJSON(json: string): CodableRepresentation;
+}
+
 export class NavigationPath {
   constructor(path?: any[]);
+
+  /** JSON-serializable form of this path, for persistence */
+  readonly codable: CodableRepresentation;
 
   /** Number of items in path */
   count: number;
@@ -889,6 +917,14 @@ export function Rectangle(): Shape;
 
 /** Rounded rectangle shape */
 export function RoundedRectangle(options: { cornerRadius: number } | { cornerSize: { width: number; height: number } }): Shape;
+
+/** Rectangle with a different radius on each corner */
+export function UnevenRoundedRectangle(options?: {
+  topLeading?: number;
+  topTrailing?: number;
+  bottomLeading?: number;
+  bottomTrailing?: number;
+}): Shape;
 
 /** Circle shape */
 export function Circle(): Shape;
@@ -1320,6 +1356,31 @@ export function EmptyView(): View;
 
 /** Wrap any view */
 export function AnyView(view: View): View;
+
+/** Empty view (renders nothing); same as `EmptyView()` */
+export function Empty(): View;
+
+/** Type-erased view; same as `AnyView(view)` */
+export function Any(view: View): View;
+
+/** Groups several views into one; what `ViewBuilder.buildBlock` returns */
+export class TupleView extends View {
+  constructor(views: View[]);
+}
+
+/** Shows one of two views depending on a condition */
+export class ConditionalContent extends View {
+  constructor(condition: boolean, trueContent: View | null, falseContent?: View | null);
+}
+
+/** Result-builder helpers, mirroring SwiftUI's `@ViewBuilder` */
+export class ViewBuilder {
+  static buildBlock(...components: (View | View[] | null | undefined)[]): View;
+  static buildIf(condition: boolean, builder: () => View): View;
+  static buildEither(condition: boolean, trueBuilder: () => View, falseBuilder: () => View): View;
+  static buildArray<T>(array: T[], builder: (item: T, index: number) => View): View[];
+  static buildLimitedAvailability(builder: () => View): View;
+}
 
 /** Build view from function or views */
 export function buildView(...views: (View | View[] | null | undefined)[]): View;
