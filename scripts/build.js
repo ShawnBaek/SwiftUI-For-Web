@@ -754,8 +754,11 @@ async function buildApplication(entry, outDir, options = {}) {
 // [start, end) range of each quoted specifier in the source.
 function localReferences(source, extension) {
   const found = [];
+  // Every local reference: ./x, ../x, plain x and root-relative /x. Not
+  // URLs with a scheme, protocol-relative //x, data: or fragment-only #x.
   const add = (value, start) => {
-    if (/^\.{1,2}\//.test(value)) found.push({ value, start, end: start + value.length });
+    if (!value || /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//') || value.startsWith('#')) return;
+    found.push({ value, start, end: start + value.length });
   };
   if (extension === '.js') {
     for (const record of scanStaticModules(source)) {
@@ -798,8 +801,11 @@ async function hashOutputs(outDir, emitted) {
     const text = extension === '.js' || extension === '.css' ? data.toString('utf8') : null;
     const refs = text === null ? [] : localReferences(text, extension).map((ref) => ({
       ...ref,
-      target: toPosix(path.join(path.dirname(file), stripQuery(ref.value))),
-    })).filter((ref) => sources.has(ref.target) || files.includes(ref.target));
+      rootRelative: ref.value.startsWith('/'),
+      target: ref.value.startsWith('/')
+        ? toPosix(path.normalize(stripQuery(ref.value).slice(1)))
+        : toPosix(path.join(path.dirname(file), stripQuery(ref.value))),
+    })).filter((ref) => files.includes(ref.target));
     references.set(file, refs);
   }
   const ownHash = new Map(files.map((file) => [file, createHash('sha256').update(sources.get(file)).digest('hex')]));
@@ -830,7 +836,8 @@ async function hashOutputs(outDir, emitted) {
       for (const ref of [...refs].sort((a, b) => b.start - a.start)) {
         const hashed = nameMap.get(ref.target);
         let relative = toPosix(path.relative(path.dirname(file), hashed));
-        if (!relative.startsWith('.')) relative = `./${relative}`;
+        if (ref.rootRelative) relative = `/${hashed}`;
+        else if (!relative.startsWith('.')) relative = `./${relative}`;
         const suffix = ref.value.slice(stripQuery(ref.value).length);
         text = text.slice(0, ref.start) + relative + suffix + text.slice(ref.end);
       }
@@ -845,9 +852,11 @@ async function hashOutputs(outDir, emitted) {
   const htmlFile = path.join(outDir, 'index.html');
   let html = await readFile(htmlFile, 'utf8');
   for (const record of htmlAssetRecords(html).sort((a, b) => b.start - a.start)) {
-    const target = toPosix(path.normalize(stripQuery(record.value))).replace(/^\.\//, '');
+    const rootRelative = record.value.startsWith('/');
+    const target = toPosix(path.normalize(stripQuery(record.value).replace(/^\//, ''))).replace(/^\.\//, '');
     if (!nameMap.has(target)) continue;
-    html = html.slice(0, record.start) + `./${nameMap.get(target)}` + record.value.slice(stripQuery(record.value).length) + html.slice(record.end);
+    const hashed = rootRelative ? `/${nameMap.get(target)}` : `./${nameMap.get(target)}`;
+    html = html.slice(0, record.start) + hashed + record.value.slice(stripQuery(record.value).length) + html.slice(record.end);
   }
   await writeFile(htmlFile, html);
   return nameMap;
@@ -861,9 +870,16 @@ async function addModulePreloads(outDir, nameMap) {
   const htmlFile = path.join(outDir, 'index.html');
   let html = await readFile(htmlFile, 'utf8');
   const entries = [];
-  const scriptPattern = /<script\b[^>]*type\s*=\s*["']module["'][^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  // <script type="module" src="…">, attributes in any order.
+  const tagPattern = /<script\b[^>]*>/gi;
   let match;
-  while ((match = scriptPattern.exec(html))) entries.push(toPosix(path.normalize(stripQuery(match[1]))).replace(/^\.\//, ''));
+  while ((match = tagPattern.exec(html))) {
+    const tag = match[0];
+    if (!/\btype\s*=\s*["']module["']/i.test(tag)) continue;
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!src || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(src)) continue;
+    entries.push(toPosix(path.normalize(stripQuery(src).replace(/^\//, ''))).replace(/^\.\//, ''));
+  }
   const seen = new Set(entries);
   const preload = [];
   const queue = [...entries];

@@ -102,10 +102,10 @@ class AppInstance {
   _holdSize(host) {
     const rect = host.getBoundingClientRect?.();
     if (!rect || (!rect.width && !rect.height)) return;
-    const previous = { minWidth: host.style.minWidth, minHeight: host.style.minHeight };
+    const previousMinHeight = host.style.minHeight;
     host.style.minHeight = `${rect.height}px`;
     const release = () => {
-      host.style.minHeight = previous.minHeight;
+      host.style.minHeight = previousMinHeight;
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(release));
     else release();

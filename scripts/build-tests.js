@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -117,6 +117,8 @@ function testMinifier() {
     // Tokens that would merge keep a space.
     ['a + +b; c - -d; let q = 1 .toString();', 'a+ +b;c- -d;let q=1 .toString();\n'],
     ['const n = 1.5e-3 + 0x1F;', 'const n=1.5e-3+0x1F;\n'],
+    // A regex right after an if/while condition.
+    ["if (x) / a'b/.test(s); y = (a) / 2;", "if(x)/ a'b/.test(s);y=(a)/2;\n"],
   ];
   for (const [input, expected] of cases) {
     assert.equal(minifyJavaScript(input), expected, `minified ${JSON.stringify(input)}`);
@@ -231,6 +233,31 @@ async function main() {
       'utf8'
     );
     assert.equal(outputCSS, '.parent .child{color:red;}\n', 'CSS minification changed selector semantics');
+
+    // #41: --hash rewrites plain relative (url(img/x)), new URL('x', ...)
+    // and attribute-order-independent module script references.
+    const hashFixture = path.join(fixtureRoot, 'hash-app');
+    await mkdir(path.join(hashFixture, 'img'), { recursive: true });
+    await writeFile(path.join(hashFixture, 'index.html'),
+      '<!doctype html><link rel="stylesheet" href="style.css"><script src="main.js" type="module"></script>\n');
+    await writeFile(path.join(hashFixture, 'style.css'), 'body { background: url(img/bg.png); }\n');
+    await writeFile(path.join(hashFixture, 'main.js'),
+      "import './dep.js';\nexport const data = new URL('data.json', import.meta.url);\n");
+    await writeFile(path.join(hashFixture, 'dep.js'), 'export const dep = 1;\n');
+    await writeFile(path.join(hashFixture, 'data.json'), '{"ok":true}\n');
+    await writeFile(path.join(hashFixture, 'img', 'bg.png'), Buffer.from([137, 80, 78, 71]));
+    const hashFixtureOut = path.join(tempRoot, 'hash-app');
+    run(['--entry', path.relative(root, path.join(hashFixture, 'index.html')), '--out-dir', hashFixtureOut, '--hash'], 'hashed fixture build');
+    const fixtureManifest = JSON.parse(await readFile(path.join(hashFixtureOut, 'manifest.json'), 'utf8'));
+    const prefix = path.relative(root, hashFixture).split(path.sep).join('/');
+    const hashedOf = (name) => fixtureManifest[`${prefix}/${name}`];
+    const hashedCSS = await readFile(path.join(hashFixtureOut, hashedOf('style.css')), 'utf8');
+    assert.ok(hashedCSS.includes(path.basename(hashedOf('img/bg.png'))), 'url(img/bg.png) was not rewritten to the hashed image');
+    const hashedMainJS = await readFile(path.join(hashFixtureOut, hashedOf('main.js')), 'utf8');
+    assert.ok(hashedMainJS.includes(path.basename(hashedOf('data.json'))), "new URL('data.json') was not rewritten");
+    assert.ok(hashedMainJS.includes(path.basename(hashedOf('dep.js'))), 'the import of dep.js was not rewritten');
+    const fixtureHTML = await readFile(path.join(hashFixtureOut, 'index.html'), 'utf8');
+    assert.ok(fixtureHTML.includes(`rel="modulepreload" href="./${hashedOf('dep.js')}"`), 'no modulepreload when src comes before type');
 
     // Library mode must remain usable without reading or deleting repository dist/.
     run(['--out-dir', path.join(tempRoot, 'library')], 'library build');

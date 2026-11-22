@@ -51,6 +51,9 @@ export function minifyJavaScript(source) {
   let braceDepth = 0;
   let pendingSpace = false;
   let pendingNewline = false;
+  // For each open `(`, whether it follows if/while/for/with: after its `)`
+  // a `/` starts a regex (`if (x) /re/.test(s)`), not a division.
+  const parenStack = [];
 
   const emit = (text, tokenForRegex) => {
     if (pendingNewline) {
@@ -207,8 +210,22 @@ export function minifyJavaScript(source) {
       index += 2;
       continue;
     }
-    // `)` and `]` end an expression, so a following `/` divides.
-    emit(character, character === ')' || character === ']' ? 'expression' : character);
+    if (character === '(') {
+      parenStack.push(lastToken === 'if' || lastToken === 'while' || lastToken === 'for' || lastToken === 'with');
+      emit('(', '(');
+      index++;
+      continue;
+    }
+    if (character === ')') {
+      const afterControl = parenStack.pop();
+      // `)` ends an expression, so a following `/` divides, except after
+      // the condition of if/while/for/with.
+      emit(')', afterControl ? ';' : 'expression');
+      index++;
+      continue;
+    }
+    // `]` ends an expression, so a following `/` divides.
+    emit(character, character === ']' ? 'expression' : character);
     index++;
   }
 
