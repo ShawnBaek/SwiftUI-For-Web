@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- In-place update benchmark (#53): `Tests/Benchmark/updates.html` measures
+  the js-framework-benchmark scenarios as `State` writes on one mounted app
+  (no remounts); `npm run bench` runs it in headless Chrome in real time and
+  prints the medians. `Tests/Benchmark/RESULTS.md` leads with these numbers
+  and marks the reconciler-era table as historical.
 - `accessibilityValue` and `accessibilityHint` follow the #51 decision.
   The value is `aria-valuetext` only on range roles (slider, spinbutton,
   progressbar, meter, scrollbar); elsewhere it joins the accessible name,

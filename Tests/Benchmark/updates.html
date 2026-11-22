@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>In-place update benchmark</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; }
+    table { border-collapse: collapse; }
+    td, th { padding: 4px 12px; text-align: right; border-bottom: 1px solid #ddd; }
+    td:first-child, th:first-child { text-align: left; }
+    #host { height: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <h1>In-place update benchmark (#53)</h1>
+  <p>State writes on one mounted app, run to completion. Medians in ms; lower is better.</p>
+  <table id="results"><thead><tr><th>Scenario</th><th>Median</th><th>Min</th><th>Max</th><th>Runs</th></tr></thead><tbody></tbody></table>
+  <pre id="bench-output"></pre>
+  <div id="host"></div>
+  <script type="module">
+    import { runUpdateBenchmarks } from './updates.js';
+    const results = runUpdateBenchmarks(document.getElementById('host'));
+    const body = document.querySelector('#results tbody');
+    for (const r of results) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.name}</td><td>${r.median.toFixed(2)}</td><td>${r.min.toFixed(2)}</td><td>${r.max.toFixed(2)}</td><td>${r.iterations}</td>`;
+      body.appendChild(tr);
+    }
+    document.getElementById('bench-output').textContent = JSON.stringify(results);
+  </script>
+</body>
+</html>

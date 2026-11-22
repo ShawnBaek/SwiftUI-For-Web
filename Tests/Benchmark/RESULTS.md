@@ -1,4 +1,37 @@
-# Benchmark Results — SwiftUI-For-Web vs React 19 vs Solid.js
+# Benchmark Results
+
+## In-place updates on the signal engine (2026-11-22, #53)
+
+`Tests/Benchmark/updates.html` runs the js-framework-benchmark scenarios
+against one mounted app, driven by `State` writes and run to completion
+(`Scheduler.flushSync()` and a forced layout read). Nothing remounts, so
+these are the numbers to cite for update cost. Reproduce with
+`npm run bench` (headless Chrome, real time; no dependencies) or open the
+page in a browser.
+
+Rows: `ForEach(rows, { id: 'id' }, row => HStack(Text(id), Text(row.label),
+Text(() => selected)))`, where each row's label is a `State`.
+
+| Scenario (1,000 rows) | Median ms | Min | Max |
+|---|---:|---:|---:|
+| Create 1,000 rows | 36.80 | 28.10 | 43.50 |
+| Replace all 1,000 rows | 38.80 | 35.70 | 49.40 |
+| Update every 10th row | 1.20 | 1.10 | 1.50 |
+| Select a row | 0.70 | 0.60 | 1.10 |
+| Swap two rows | 10.40 | 8.60 | 13.70 |
+| Remove one row | 5.00 | 4.70 | 6.70 |
+| Append 1,000 rows to 1,000 | 34.20 | 30.60 | 38.10 |
+| Clear 1,000 rows | 4.00 | 3.40 | 4.90 |
+
+Measured on an Apple Silicon Mac, Chrome headless, one run of `npm run
+bench`. React/Solid columns are not repeated here: the comparison harness
+below needs Playwright and CDN scripts, and its update rows predate the
+signal engine.
+
+---
+
+## Historical: reconciler-era comparison
+
 
 > **Note (post signal-engine cutover, 2026-05-04).** The framework's VDOM
 > reconciler has been replaced with a fine-grained signal engine. The
