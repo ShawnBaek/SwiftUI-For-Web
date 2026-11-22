@@ -383,6 +383,11 @@ App(() => FinderView(query)).mount('#finder', { mode: 'replace' });
   differs from the client tree, the differing elements are created fresh
   (the result is always the client's tree), and development builds warn at
   the first difference. Comments and whitespace in the markup don't matter.
+  Text typed (or a box ticked) in a server-rendered field before hydration
+  is kept when its binding still holds the server's value, and passed to
+  the binding; otherwise the binding's value replaces it. Adopting a host
+  that already has a mounted app unmounts that app first (development
+  builds warn) and claims copies of its markup.
 - `unmount()` releases the island's handlers, effects, tasks and lifecycle
   callbacks.
 - Static controls drive the island by writing a `State` the island module

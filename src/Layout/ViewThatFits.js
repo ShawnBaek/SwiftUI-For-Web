@@ -39,6 +39,7 @@
 import { isDescriptor } from '../Core/ViewDescriptor.js';
 import { View } from '../Core/View.js';
 import { render as renderDescriptor } from '../Core/Renderer.js';
+import { withoutHydration } from '../Core/Hydration.js';
 
 // A child that is a legacy View or a view descriptor.
 function renderAny(child) {
@@ -118,6 +119,11 @@ export class ViewThatFitsClass extends View {
    * @private
    */
   _measureIdealSize(view) {
+    // Measurement elements are not part of the view tree: never server nodes.
+    return withoutHydration(() => this._measure(view));
+  }
+
+  _measure(view) {
     // Create or reuse measurement container
     if (!this._measurementContainer) {
       this._measurementContainer = document.createElement('div');

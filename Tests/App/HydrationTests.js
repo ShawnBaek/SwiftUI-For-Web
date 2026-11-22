@@ -9,6 +9,11 @@ import { App } from '../../src/App/App.js';
 import { flushSync } from '../../src/Core/Scheduler.js';
 import { flushLifecycleCallbacks } from '../../src/Core/LifecycleObserver.js';
 import { fixtures } from './HydrationViews.js';
+import { hydrate, withoutHydration } from '../../src/Core/Hydration.js';
+import { applyShaderToElement } from '../../src/Core/Renderer.js';
+import { ShaderLibrary } from '../../src/Graphic/Shader.js';
+import { ViewThatFits } from '../../src/Layout/ViewThatFits.js';
+import { Text, Color, Stepper, State } from '../../src/index.js';
 
 // The browser runner (scripts/run-browser-tests.js) renders the fixture with
 // renderToString in Node, as a server would, at /__server-render/<name>.
@@ -185,6 +190,104 @@ describe('Hydration (adopt mode, #39)', () => {
     flushSync();
     expect(fixture.count.value).toBe(1);
     expect(total.textContent).toBe('Total: 1');
+    app.unmount();
+    host.remove();
+  });
+
+  it('adopting a host with a mounted app unmounts that app first', async () => {
+    const host = await serverHost('counter');
+    const first = fixtures.counter();
+    const firstApp = App(first.view).mount(host, { mode: 'adopt' });
+    const second = fixtures.counter();
+    const { result: secondApp, warnings } = captureWarnings(() => App(second.view).mount(host, { mode: 'adopt' }));
+    expect(warnings.some((w) => w.includes('mounted app'))).toBe(true);
+    expect(warnings.filter((w) => w.includes('differs'))).toEqual([]);
+    expect(host.childNodes.length).toBe(1);
+
+    // One click reaches only the second app: the first app's direct
+    // listeners (the Toggle's container click) are gone.
+    host.querySelector('[role="switch"]').click();
+    host.querySelector('button').click();
+    flushSync();
+    expect([first.on.value, first.count.value]).toEqual([false, 0]);
+    expect([second.on.value, second.count.value]).toEqual([true, 1]);
+
+    // Unmounting the replaced app leaves the host to the second one.
+    firstApp.unmount();
+    expect(host.dataset.swiftuiMounted).toBe('true');
+    host.querySelector('button').click();
+    flushSync();
+    expect(second.count.value).toBe(2);
+    secondApp.unmount();
+    host.remove();
+  });
+
+  it('keeps text typed before hydration when the binding holds the server value', async () => {
+    const host = await serverHost('counter');
+    const input = host.querySelector('input:not([type="checkbox"])');
+    input.value = 'Grace';
+    const fixture = fixtures.counter();
+    const { result: app, warnings } = captureWarnings(() => App(fixture.view).mount(host, { mode: 'adopt' }));
+    expect(warnings.filter((w) => w.includes('differs'))).toEqual([]);
+    expect(host.querySelector('input:not([type="checkbox"])')).toBe(input);
+    expect(input.value).toBe('Grace');
+    expect(fixture.name.value).toBe('Grace');
+    flushSync();
+    expect(host.textContent.includes('Hello, Grace')).toBe(true);
+    app.unmount();
+    host.remove();
+
+    // A binding that changed before mount wins over the typed text.
+    const other = await serverHost('counter');
+    other.querySelector('input:not([type="checkbox"])').value = 'Grace';
+    const changed = fixtures.counter();
+    changed.name.value = 'Linus';
+    const { result: otherApp } = captureWarnings(() => App(changed.view).mount(other, { mode: 'adopt' }));
+    expect(other.querySelector('input:not([type="checkbox"])').value).toBe('Linus');
+    expect(changed.name.value).toBe('Linus');
+    otherApp.unmount();
+    other.remove();
+  });
+
+  it('side elements made during hydration (shader defs, ViewThatFits measurement) take no server nodes', () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<div><span>server</span><div></div><svg><defs><filter><feColorMatrix></feColorMatrix></filter></defs></svg></div>';
+    document.body.appendChild(host);
+    const server = Array.from(host.querySelectorAll('*'));
+    // Unique arguments, so this shader's <filter> is created now.
+    const shader = ShaderLibrary.default.colorize(Color.hex(`#${(Date.now() % 0xffffff).toString(16).padStart(6, '0')}`));
+    let measured = null;
+    const { element, claims } = hydrate(host, () => {
+      const root = document.createElement('div');
+      applyShaderToElement(root, shader);
+      measured = ViewThatFits(Text('measured'))._measureIdealSize(Text('measured'));
+      withoutHydration(() => document.createElement('span'));
+      return root;
+    });
+    expect(element).toBe(server[0]);
+    expect(claims).toBe(1);
+    expect(Boolean(measured)).toBe(true);
+    const filter = document.getElementById(shader.id);
+    expect(Boolean(filter) && !server.includes(filter) && !server.includes(filter.firstElementChild)).toBe(true);
+    host.remove();
+  });
+
+  it('Stepper buttons at a range limit are disabled for keyboard and assistive technology', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const count = new State(3);
+    const app = App(() => Stepper('Count', count.binding, { in: [0, 3] })).mount(host);
+    const [minus, plus] = host.querySelectorAll('button');
+    expect(plus.matches(':disabled')).toBe(true);
+    expect(minus.matches(':disabled')).toBe(false);
+    plus.focus();
+    expect(document.activeElement === plus).toBe(false);
+    plus.click();
+    flushSync();
+    expect(count.value).toBe(3);
+    minus.click();
+    flushSync();
+    expect([count.value, plus.disabled]).toEqual([2, false]);
     app.unmount();
     host.remove();
   });

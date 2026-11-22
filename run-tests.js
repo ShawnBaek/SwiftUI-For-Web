@@ -4189,6 +4189,21 @@ async function runTests() {
         dispose();
       });
 
+      it('Stepper disables the button at a range limit, not only dims it', () => {
+        const count = new State(0);
+        const { element, dispose } = owned(Stepper('Count', count.binding, { in: [0, 1] }));
+        const [minus, plus] = findAll(element, (n) => n.tagName === 'BUTTON');
+        // `disabled` stops keyboard activation and is exposed to assistive technology.
+        expect(minus.disabled).toBe(true);
+        expect(plus.disabled).toBe(false);
+        expect(minus.style.pointerEvents || '').toBe('');
+        count.value = 1;
+        Scheduler.flushSync();
+        expect([minus.disabled, plus.disabled]).toEqual([false, true]);
+        expect(plus.style.opacity).toBe('0.3');
+        dispose();
+      });
+
       it('DatePicker and ColorPicker show values written elsewhere', () => {
         const date = new State(new Date(2026, 0, 2));
         const color = new State(ParityColor.hex('#112233'));

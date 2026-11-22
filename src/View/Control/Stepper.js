@@ -118,10 +118,12 @@ function makeStepButton(text) {
   return button;
 }
 
-// Dim a button at the end of the range.
+// Disable and dim a button at the end of the range. `disabled` also stops
+// keyboard activation and reaches assistive technology.
 function setButtonEnabled(button, enabled) {
   button.style.opacity = enabled ? '1' : '0.3';
-  button.style.pointerEvents = enabled ? 'auto' : 'none';
+  button.style.cursor = enabled ? 'pointer' : 'default';
+  button.disabled = !enabled;
 }
 
 registerRenderer('Stepper', (props) => {

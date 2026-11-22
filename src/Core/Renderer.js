@@ -25,7 +25,7 @@ import { onAppear, onDisappear, cancelAppear } from './LifecycleObserver.js';
 import { delegateEvent } from './EventDelegate.js';
 import { gestureAllowed } from '../Gesture/Gesture.js';
 import { removeWithTransition } from '../Animation/Animation.js';
-import { isHydrating, hydrationFrame } from './Hydration.js';
+import { isHydrating, hydrationFrame, withoutHydration } from './Hydration.js';
 import { createRoot, createEffect, getOwner, onCleanup, untrack } from '../Data/Signal.js';
 import { installReactiveModifier } from './SignalRenderer.js';
 import { applyFrame, withStackAxis, currentStackAxis } from './Frame.js';
@@ -981,7 +981,8 @@ function getShaderDefsRoot() {
 export function applyShaderToElement(element, shader) {
   if (!shader || !shader.id || typeof shader._populate !== 'function') return;
 
-  if (!_mountedShaderFilters.has(shader.id)) {
+  // The shared defs live outside the view tree: never server nodes.
+  if (!_mountedShaderFilters.has(shader.id)) withoutHydration(() => {
     const defs = getShaderDefsRoot();
     if (defs) {
       const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -996,7 +997,7 @@ export function applyShaderToElement(element, shader) {
       defs.appendChild(filter);
       _mountedShaderFilters.add(shader.id);
     }
-  }
+  });
 
   // Compose: append this filter to whatever the element already has so
   // chained .colorEffect().layerEffect() builds "url(#a) url(#b)".

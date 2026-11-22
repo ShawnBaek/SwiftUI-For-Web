@@ -20,7 +20,7 @@ import { buildingView, DEV_BUILD } from './Dev.js';
 import { nextElementId } from './ElementID.js';
 import { withEnvironment, EnvironmentValues } from '../Data/Environment.js';
 import { render } from './Renderer.js';
-import { hydrate } from './Hydration.js';
+import { hydrate, withoutHydration } from './Hydration.js';
 import { ModifierType } from './ViewDescriptor.js';
 import { releaseTree } from './ElementPool.js';
 import { initDelegation, teardownDelegation } from './EventDelegate.js';
@@ -30,6 +30,13 @@ import {
   cancelAppear
 } from './LifecycleObserver.js';
 import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/Signal.js';
+
+function eachField(nodes, fn) {
+  for (const node of nodes) node.querySelectorAll?.('input:not([type=file]), textarea').forEach(fn);
+}
+
+/** Host → disposer of the view mounted in it. */
+const _mounted = new WeakMap();
 
 /**
  * Mount a view tree into a container with fine-grained reactivity.
@@ -41,8 +48,25 @@ import { createRoot, createEffect, onCleanup, untrack, getOwner } from '../Data/
 export function mount(viewFactory, container, options = {}) {
   let dispose;
 
+  // A host that already holds a mounted view (#39): unmount that view first,
+  // or its effects and the listeners on its nodes would stay live. Adopt
+  // then claims copies of its markup, which carry none of those listeners.
+  const previous = _mounted.get(container);
+  if (previous) {
+    if (DEV_BUILD && options.adopt) console.warn("SwiftUI-For-Web: mount(host, { mode: 'adopt' }) on a host with a mounted app unmounted that app first.");
+    const markup = options.adopt && Array.from(container.childNodes, (node) => node.cloneNode(true));
+    // The copies hold the current field state as their markup.
+    eachField(markup || [], (field) => {
+      field.defaultValue = field.value;
+      field.defaultChecked = field.checked;
+    });
+    previous();
+    if (markup) container.replaceChildren?.(...markup);
+  }
+
   createRoot((d) => {
     dispose = d;
+    _mounted.set(container, d);
 
     const view = typeof viewFactory === 'function' ? buildingView(viewFactory) : viewFactory;
 
@@ -65,6 +89,7 @@ export function mount(viewFactory, container, options = {}) {
     }
 
     onCleanup(() => {
+      if (_mounted.get(container) === d) _mounted.delete(container);
       if (element && element.parentNode === container) {
         container.removeChild(element);
       }
@@ -137,6 +162,11 @@ function adoptRender(container, view) {
   // The comparison needs the markup as the server sent it; hydrating
   // empties the reused nodes, so compare against a copy.
   const serverCopy = DEV_BUILD ? Array.from(container.childNodes || [], (node) => node.cloneNode(true)) : null;
+  // As the server sent it: without what the user typed (kept separately, see Hydration.js).
+  eachField(serverCopy || [], (field) => {
+    field.value = field.defaultValue;
+    field.checked = field.defaultChecked;
+  });
   // Fallback focus target, by position, for a focused node not reused.
   const active = typeof document !== 'undefined' ? document.activeElement : null;
   const focusPath = active && active !== container && container.contains?.(active) ? pathTo(container, active) : null;
@@ -595,7 +625,7 @@ function installPresentation(element, kind, value) {
   createEffect(() => {
     const isPresented = Boolean(readValue(binding));
     if (isPresented && !wasPresented) {
-      present();
+      withoutHydration(present);
     } else if (!isPresented && wasPresented) {
       dismissElement();
       if (focusBeforePresentation?.isConnected) {

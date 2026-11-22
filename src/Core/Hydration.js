@@ -30,6 +30,17 @@
  * it would build a new element. The resulting tree is always the client's
  * tree; a wrong guess only costs reuse.
  *
+ * Emptying does not reset a field's dirty `value` or `checked`, and the
+ * renderer then writes the binding's value. Text typed (or a box ticked)
+ * before hydration is kept when the binding still holds the value the server
+ * rendered: the field gets the user's value back and an input (or change)
+ * event, so the binding takes it. When the binding holds another value, the
+ * binding wins.
+ *
+ * Elements made for side work during the render (measurement containers,
+ * shared SVG defs, presented dialogs) are created inside withoutHydration,
+ * so they never take server nodes.
+ *
  * Removing and re-inserting nodes loses focus and scroll offsets, so both are
  * recorded first and restored on the same nodes afterwards.
  */
@@ -72,6 +83,7 @@ function createCursor(container) {
   let low = 0;
   let high = -1;
   let claims = 0;
+  const dirty = [];
 
   // The elements a view may claim lie inside the element its nearest
   // enclosing view claimed: a view's content is never outside its parent's
@@ -97,7 +109,7 @@ function createCursor(container) {
       if (i > high) high = i;
       while (low < list.length && (claimed[low] || high - low > ABANDON)) low++;
       if (frames.length && frames[frames.length - 1] < 0) frames[frames.length - 1] = i;
-      empty(node);
+      empty(node, dirty);
       return node;
     }
     return null;
@@ -107,6 +119,7 @@ function createCursor(container) {
     claim,
     enter() { frames.push(-1); },
     exit() { frames.pop(); },
+    dirty,
     get claims() { return claims; },
     get total() { return list.length; },
   };
@@ -135,8 +148,30 @@ export function hydrationFrame(fn) {
   }
 }
 
-// Give a claimed element the state of a new one.
-function empty(node) {
+/**
+ * Run `fn` with element creation not claiming server nodes, for elements
+ * that are not part of the view tree.
+ * @internal
+ */
+export function withoutHydration(fn) {
+  const cursor = _cursor;
+  _cursor = null;
+  try {
+    return fn();
+  } finally {
+    _cursor = cursor;
+  }
+}
+
+// Give a claimed element the state of a new one, noting a field the user
+// changed: [node, property, server value, user's value].
+function empty(node, dirty) {
+  if ((node.localName === 'input' || node.localName === 'textarea') && node.type !== 'file') {
+    const box = node.type === 'checkbox' || node.type === 'radio';
+    const initial = box ? node.defaultChecked : node.defaultValue;
+    const current = box ? node.checked : node.value;
+    if (current !== initial) dirty.push([node, box ? 'checked' : 'value', initial, current]);
+  }
   for (let i = node.attributes.length - 1; i >= 0; i--) node.removeAttribute(node.attributes[i].name);
   while (node.firstChild) node.removeChild(node.firstChild);
 }
@@ -179,8 +214,8 @@ function restoreViewState(container, { focus, scrolled }) {
 /**
  * Run `render` with element creation claiming the elements already inside
  * `container`. Returns the rendered root and a `restore()` to call once the
- * root is in place, which puts focus and scroll offsets back on the reused
- * nodes and reports whether focus was restored.
+ * root is in place, which puts typed field values, focus and scroll offsets
+ * back on the reused nodes and reports whether focus was restored.
  *
  * @param {HTMLElement} container - Host holding the server markup
  * @param {() => Node} render
@@ -217,8 +252,14 @@ export function hydrate(container, render) {
     element,
     claims: cursor.claims,
     total: cursor.total,
-    restore: () => restoreViewState(container, state),
+    restore: () => {
+      for (const [node, key, initial, typed] of cursor.dirty) {
+        if (!node.isConnected || node[key] !== initial) continue;
+        node[key] = typed;
+        node.dispatchEvent(new Event(key === 'value' ? 'input' : 'change', { bubbles: true }));
+      }
+      return restoreViewState(container, state);
+    },
   };
 }
 
-export default { hydrate };
