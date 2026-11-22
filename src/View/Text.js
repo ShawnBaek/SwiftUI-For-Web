@@ -15,6 +15,7 @@
  *   .bold()
  */
 
+import { chainable as sharedChainable } from '../Core/Chainable.js';
 import {
   createDescriptor,
   addModifier,
@@ -47,118 +48,28 @@ export const AccessibilityHeadingLevel = Object.freeze({
 
 const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 
-/**
- * Create a chainable descriptor with Text-specific modifier methods
- */
-function chainable(descriptor) {
-  const chain = Object.create(null);
-  Object.assign(chain, descriptor);
-
-  // Standard modifiers
-  chain.environment = (key, value) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] })));
-  chain.environmentObject = (object) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [], objects: [object] })));
-  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
-  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
-  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
-  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
-  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
-  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
-  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
-  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
-  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
-  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
-  chain.tag = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.TAG, value)));
-  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
-  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
-  chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
-  chain.task = (optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.TASK, { optionsOrAction, action })));
-  chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
-  chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
-  chain.fullScreenCover = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content })));
-  chain.alert = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options })));
-  chain.confirmationDialog = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options })));
-  chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
-  chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
-  chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
-  chain.accessibilityIdentifier = (identifier) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier)));
-  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
-  chain.colorEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.COLOR_EFFECT, { shader, ...(opts || {}) })));
-  chain.distortionEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.DISTORTION_EFFECT, { shader, ...(opts || {}) })));
-  chain.layerEffect = (shader, opts) => chainable(addModifier(descriptor, createModifier(ModifierType.LAYER_EFFECT, { shader, ...(opts || {}) })));
-  chain.id = (key) => chainable(setKey(descriptor, key));
-  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
-
-  // Text-specific modifiers
-  chain.bold = () => {
-    const newProps = { ...descriptor.props, fontWeight: 'bold' };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.italic = () => {
-    const newProps = { ...descriptor.props, isItalic: true };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.fontWeight = (weight) => {
-    const newProps = { ...descriptor.props, fontWeight: weight };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.underline = (active = true, color = null) => {
-    const newProps = { ...descriptor.props, isUnderline: active, underlineColor: color };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.strikethrough = (active = true, color = null) => {
-    const newProps = { ...descriptor.props, isStrikethrough: active, strikethroughColor: color };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.multilineTextAlignment = (alignment) => {
-    const newProps = { ...descriptor.props, textAlignment: alignment };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.lineLimit = (limit) => {
-    const newProps = { ...descriptor.props, lineLimit: limit };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.truncationMode = (mode) => {
-    const newProps = { ...descriptor.props, truncationMode: mode };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.kerning = (spacing) => {
-    const newProps = { ...descriptor.props, kerning: spacing };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.lineSpacing = (spacing) => {
-    const newProps = { ...descriptor.props, lineSpacing: spacing };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.monospacedDigit = () => {
-    const newProps = { ...descriptor.props, monospacedDigit: true };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
-  chain.baselineOffset = (offset) => {
-    const newProps = { ...descriptor.props, baselineOffset: offset };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
-
+// Text-only modifiers (#48: everything else comes from the shared table).
+const textModifiers = ({ withProps }) => ({
+  bold: () => withProps({ fontWeight: 'bold' }),
+  italic: () => withProps({ isItalic: true }),
+  fontWeight: (weight) => withProps({ fontWeight: weight }),
+  underline: (active = true, color = null) => withProps({ isUnderline: active, underlineColor: color }),
+  strikethrough: (active = true, color = null) => withProps({ isStrikethrough: active, strikethroughColor: color }),
+  multilineTextAlignment: (alignment) => withProps({ textAlignment: alignment }),
+  lineLimit: (limit) => withProps({ lineLimit: limit }),
+  truncationMode: (mode) => withProps({ truncationMode: mode }),
+  kerning: (spacing) => withProps({ kerning: spacing }),
+  lineSpacing: (spacing) => withProps({ lineSpacing: spacing }),
+  monospacedDigit: () => withProps({ monospacedDigit: true }),
+  baselineOffset: (offset) => withProps({ baselineOffset: offset }),
   // Accessibility: marks the Text as a heading. On the web this maps to
   // <h1>..<h6>, giving both VoiceOver/screen-reader semantics and SEO.
   // Passing AccessibilityHeadingLevel.unspecified (or null) reverts to <span>.
-  chain.accessibilityHeading = (level) => {
-    const tag = HEADING_TAGS.has(level) ? level : null;
-    const newProps = { ...descriptor.props, headingLevel: tag };
-    return chainable(createDescriptor('Text', newProps, descriptor.children, descriptor.key, descriptor.modifiers));
-  };
+  accessibilityHeading: (level) => withProps({ headingLevel: HEADING_TAGS.has(level) ? level : null }),
+});
 
-  return Object.freeze(chain);
+function chainable(descriptor) {
+  return sharedChainable(descriptor, textModifiers);
 }
 
 /**

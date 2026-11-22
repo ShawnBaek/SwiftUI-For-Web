@@ -69,7 +69,7 @@ one, the gap is linked to the issue that fixes it.
 | Rendering | `src/Core/Renderer.js`, `src/Core/SignalRenderer.js`, `src/Core/OwnedSlot.js` | `SignalRenderer.mount` is the entry point. `Renderer.render` creates reactive bindings during render. |
 | Reactivity | `src/Data/Signal.js`, `State.js`, `Binding.js`, `ObservableObject.js`, `StateObject.js`, `src/Core/Scheduler.js` | `State` and `ObservableObject` still keep a legacy `subscribe` channel next to the signals. |
 | Platform | `src/Core/EventDelegate.js`, `ElementPool.js`, `LifecycleObserver.js`, `src/Data/Environment.js` | Root-level event delegation; one shared MutationObserver that processes only the subtrees a mutation batch added or removed (#57). |
-| Dead code | `src/Core/Chainable.js`, `src/Core/ViewFactory.js`, `src/Core/index.js`, descriptor hashing and `memo` in `ViewDescriptor.js` | Nothing imports these. Delete them in #48. |
+| Dead code | Descriptor hashing and `memo` in `ViewDescriptor.js` | Nothing reads them. `Core/ViewFactory.js` and `Core/index.js` were deleted, and `Core/Chainable.js` is now the single modifier table (#48). |
 | Entries | `src/index.js` (full), `src/core.js` (`./core`), `src/Charts/index.js` (`./charts`) | Each entry re-exports one list (`src/exports.js`, `src/core-exports.js`) and builds its default from it with `namespaceObject`; the core list is the full list without Charts, and `scripts/check-package.js` fails when they drift. `./styles/*` serves the CSS, and `./internal/*` reaches any module with no stability promise. |
 
 ## 5. Documented exceptions to SwiftUI

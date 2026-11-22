@@ -258,7 +258,7 @@ async function main() {
 
   // 6. sideEffects covers every module that patches a prototype on import.
   const sideEffects = (pkg.sideEffects || []).map((entry) => entry.replace(/^\.\//, ''));
-  const dead = new Set(['src/Core/Chainable.js', 'src/Core/ViewFactory.js', 'src/Core/index.js']);
+  const dead = new Set();
   for (const file of await walk(path.join(root, 'src'))) {
     if (!file.endsWith('.js')) continue;
     const relative = path.relative(root, file).split(path.sep).join('/');

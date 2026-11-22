@@ -19,6 +19,7 @@
  * )
  */
 
+import { chainable as sharedChainable } from '../../Core/Chainable.js';
 import {
   createDescriptor,
   addModifier,
@@ -27,55 +28,8 @@ import {
   ModifierType
 } from '../../Core/ViewDescriptor.js';
 
-/**
- * Create a chainable descriptor with modifier methods
- */
 function chainable(descriptor) {
-  const chain = Object.create(null);
-  Object.assign(chain, descriptor);
-
-  chain.environment = (key, value) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [[key, value]], objects: [] })));
-  chain.environmentObject = (object) => chainable(addModifier(descriptor, createModifier(ModifierType.ENVIRONMENT, { values: [], objects: [object] })));
-  chain.padding = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.PADDING, value)));
-  chain.frame = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.FRAME, options)));
-  chain.foregroundColor = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.FOREGROUND_COLOR, color)));
-  chain.background = (color) => chainable(addModifier(descriptor, createModifier(ModifierType.BACKGROUND, color)));
-  chain.font = (font) => chainable(addModifier(descriptor, createModifier(ModifierType.FONT, font)));
-  chain.opacity = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.OPACITY, value)));
-  chain.cornerRadius = (radius) => chainable(addModifier(descriptor, createModifier(ModifierType.CORNER_RADIUS, radius)));
-  chain.border = (color, width = 1) => chainable(addModifier(descriptor, createModifier(ModifierType.BORDER, { color, width })));
-  chain.shadow = (options) => chainable(addModifier(descriptor, createModifier(ModifierType.SHADOW, options)));
-  chain.onTapGesture = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_TAP, handler)));
-  chain.onAppear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_APPEAR, handler)));
-  chain.onDisappear = (handler) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_DISAPPEAR, handler)));
-  chain.onChange = (of, optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.ON_CHANGE, { of, optionsOrAction, action })));
-  chain.task = (optionsOrAction, action) => chainable(addModifier(descriptor, createModifier(ModifierType.TASK, { optionsOrAction, action })));
-  chain.searchable = (text, options = {}) => chainable(addModifier(descriptor, createModifier(ModifierType.SEARCHABLE, { text, options })));
-  chain.sheet = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.SHEET, { isPresented, optionsOrContent, content })));
-  chain.fullScreenCover = (isPresented, optionsOrContent, content) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'fullScreenCover', isPresented, optionsOrContent, content })));
-  chain.alert = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'alert', title, isPresented, options })));
-  chain.confirmationDialog = (title, isPresented, options) => chainable(addModifier(descriptor, createModifier(ModifierType.PRESENTATION, { kind: 'confirmationDialog', title, isPresented, options })));
-  chain.accessibilityLabel = (label) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_LABEL, label)));
-  chain.accessibilityValue = (value) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_VALUE, value)));
-  chain.accessibilityHint = (hint) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_HINT, hint)));
-  chain.accessibilityIdentifier = (identifier) => chainable(addModifier(descriptor, createModifier(ModifierType.ACCESSIBILITY_IDENTIFIER, identifier)));
-  chain.clipShape = (shape) => chainable(addModifier(descriptor, createModifier(ModifierType.CLIP_SHAPE, shape)));
-  chain.id = (key) => chainable(setKey(descriptor, key));
-  chain.modifier = (mod) => chainable(addModifier(descriptor, createModifier(ModifierType.CUSTOM, mod)));
-
-  // TabView support - store tabItem builder function
-  chain.tabItem = (builder) => {
-    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tabItem: builder }, descriptor.children, descriptor.key, descriptor.modifiers);
-    return chainable(newDesc);
-  };
-
-  // TabView support - store tag for identification
-  chain.tag = (value) => {
-    const newDesc = createDescriptor(descriptor.type, { ...descriptor.props, _tag: value }, descriptor.children, descriptor.key, descriptor.modifiers);
-    return chainable(newDesc);
-  };
-
-  return Object.freeze(chain);
+  return sharedChainable(descriptor);
 }
 
 /**
