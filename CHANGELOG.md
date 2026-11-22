@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed: the first cold load of a page sometimes rendered nothing, and a
+  reload fixed it (#53). The cause was the development server, not the
+  framework's module order: Python's `http.server` and `ThreadingHTTPServer`
+  listen with a backlog of 5, a cold load opens more connections than that,
+  and the operating system resets the overflow. One reset module fails the
+  whole module graph, so `main.js` never runs and no error names it. `serve.py`
+  now listens with a backlog of 1024, and every HTML page it serves reports a
+  script or module that failed to load, in the console and on the page.
+  `npm run serve` and the Playwright config use `serve.py`.
+  `scripts/check-import-order.js` (in `npm test`) imports every module first in
+  a fresh module map to catch circular-import TDZ errors, and
+  `scripts/cold-load.js` (optional) counts blank cold loads in headless Chrome.
+
 - **BREAKING: every built-in view is a descriptor; one view model** (#48).
   The containers, navigation, shapes and the rest of the former `View`
   subclasses now build descriptors with `chainable(createDescriptor(...))`

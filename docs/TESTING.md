@@ -26,7 +26,9 @@
 
 | Suite | Command | Needs |
 |---|---|---|
-| Browser unit tests | Serve the repo (`python3 -m http.server 8000`) and open `http://localhost:8000/Tests/TestRunner.html` | Any browser |
+| Browser unit tests | Serve the repo (`python3 serve.py 8000`) and open `http://localhost:8000/Tests/TestRunner.html` | Any browser |
+| Import order | `node scripts/check-import-order.js` (part of `npm test`). Imports every module under `src/` first, in a fresh module map, then every entry, so a circular import that reads a binding too early fails. | Node |
+| Cold first load, optional and slow | `node scripts/cold-load.js [--runs 20] [page …]` (also `npm run test:cold-load`). Serves the repo with `serve.py` and loads example pages in headless Chrome with a fresh profile each time, counting loads that render nothing. | Python 3, Node ≥ 20 and an installed Chrome, Chromium or Edge |
 | Browser unit tests, headless | `node scripts/run-browser-tests.js` (also `npm run test:browser`). It serves the repo itself and reads the result from the page. `--if-available` skips when no browser is installed; `BROWSER_BIN` selects one. | Node ≥ 20 and an installed Chrome, Chromium, Edge, or Brave |
 | Node unit tests | `node run-tests.js` | Node ≥ 20 |
 | DOM-free `Tests/**` suites | `node scripts/run-node-suites.js` | Node ≥ 20 |

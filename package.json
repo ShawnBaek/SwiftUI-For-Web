@@ -48,7 +48,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node run-tests.js && node scripts/run-node-suites.js && node scripts/check-package.js && node scripts/build-tests.js",
+    "test": "node run-tests.js && node scripts/run-node-suites.js && node scripts/check-import-order.js && node scripts/check-package.js && node scripts/build-tests.js",
     "validate": "npm test && npm run test:browser && npm run build && npm run size",
     "test:browser": "node scripts/run-browser-tests.js",
     "bench": "node scripts/run-browser-tests.js --bench",
@@ -56,7 +56,8 @@
     "test:build": "node scripts/build-tests.js",
     "build": "node scripts/build.js",
     "size": "node scripts/size.js dist --budget-gzip-kb 120",
-    "serve": "python3 -m http.server 8000 || python -m http.server 8000",
+    "serve": "python3 serve.py 8000",
+    "test:cold-load": "node scripts/cold-load.js",
     "example:airbnb": "echo 'Open http://localhost:8000/Examples/Airbnb/' && npm run serve",
     "example:counter": "echo 'Open http://localhost:8000/Examples/Counter/' && npm run serve",
     "example:todo": "echo 'Open http://localhost:8000/Examples/TodoApp/' && npm run serve",

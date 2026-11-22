@@ -147,6 +147,13 @@ python3 serve.py 8000
 Open `http://localhost:8000/Examples/Counter/`. Development uses the checked-in
 browser modules directly: no package installation, bundler, transpiler, or IDE.
 
+A page loads dozens of modules at once on a cold load. Serve them with a server
+that accepts many connections: `serve.py` does, and it shows an error on the
+page if a module fails to load. `python3 -m http.server` resets
+connections under that load, and one failed module leaves the page blank until a
+reload. In production, serve the optional release build (`--bundle` makes one
+file) or use an HTTP/2 host.
+
 Use named imports so an optional production build can retain only the framework
 modules your app references:
 
@@ -720,7 +727,7 @@ Issues and PRs welcome. Read [AGENTS.md](AGENTS.md) first: it covers the princip
 Before opening a PR, run these with nothing to install:
 
 1. `node run-tests.js` and `node scripts/build-tests.js`.
-2. Serve the repo (`python3 -m http.server 8000`) and open `http://localhost:8000/Tests/TestRunner.html`.
+2. Serve the repo (`python3 serve.py 8000`) and open `http://localhost:8000/Tests/TestRunner.html`.
 3. Optionally, the Playwright specs in `Tests/e2e` and `Tests/visual`. They are never required.
 
 ---
