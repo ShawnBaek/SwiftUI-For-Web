@@ -166,7 +166,13 @@ export class ListView extends View {
         if (rendered) {
           // Check if rendered element is a ForEach container (display:contents wrapper)
           // ForEach renderer creates a div with display:contents containing the items
-          if (rendered.dataset && rendered.dataset.view === 'ForEach') {
+          if (rendered.dataset && (rendered.dataset.view === 'For' || rendered.dataset.view === 'Show')) {
+            // A reactive ForEach (For) or Show updates its own children in
+            // place, so keep its wrapper intact: moving its rows into list
+            // rows would detach them on the next update (#52). Its rows are
+            // not given list-row chrome or selection.
+            el.appendChild(rendered);
+          } else if (rendered.dataset && rendered.dataset.view === 'ForEach') {
             // Extract children from ForEach and add each as a list row
             for (const itemEl of Array.from(rendered.childNodes)) {
               if (itemEl.nodeType === Node.ELEMENT_NODE) {

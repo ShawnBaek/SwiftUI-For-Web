@@ -552,6 +552,8 @@ async function runTests() {
     // mount must be as reactive as content rendered at mount.
     const { ForEach: ReactiveForEach } = await import('./src/View/List/ForEach.js');
     const { registerRenderer } = await import('./src/Core/Renderer.js');
+    const { untrack } = await import('./src/Data/Signal.js');
+    const { clearPools } = await import('./src/Core/ElementPool.js');
     const { createDescriptor } = await import('./src/Core/ViewDescriptor.js');
     const { HStack: LayerHStack } = await import('./src/Layout/Stack/HStack.js');
     const { ZStack: LayerZStack } = await import('./src/Layout/Stack/ZStack.js');
@@ -670,6 +672,27 @@ async function runTests() {
         const free = zstack.children[0];
         expect(free.style.width).toBe('100%');
         expect(free.style.height).toBe('100%');
+        teardown();
+      });
+
+      it('frame fill inside a Button or ScrollView ignores the outer stack axis, and a State frame keeps it', () => {
+        // Pooled elements keep styles in this mock DOM (its cssText doesn't clear), so start fresh.
+        clearPools();
+        const frameOptions = new State({ maxWidth: Infinity });
+        const { root, teardown } = mountInRoot(() => VStack(
+          LayerButton(() => {}, ModifierText('Go').frame({ maxWidth: Infinity })),
+          LayerHStack(ModifierText('live').frame(frameOptions))
+        ));
+        const [button, hstack] = root.children[0].children;
+        const label = button.children[0];
+        expect(label.style.width).toBe('100%');
+        expect(label.style.alignSelf || '').toBe('');
+        const live = hstack.children[0];
+        expect(live.style.flexGrow).toBe('1');
+        frameOptions.value = { maxWidth: 'infinity' };
+        Scheduler.flushSync();
+        expect(live.style.flexGrow).toBe('1');
+        expect(live.style.width || '').toBe('');
         teardown();
       });
 
@@ -798,6 +821,37 @@ async function runTests() {
         Scheduler.flushSync();
         expect(texts()).toEqual([['One', 'Three'], ['Three']]);
         teardown();
+      });
+
+      it('a reactive ForEach inside a List keeps updating, and reactive ForEach chains', () => {
+        const items = new State([{ id: 'a' }, { id: 'b' }]);
+        const { root, teardown } = mountInRoot(() => VStack(
+          A11yList(ReactiveForEach(items, { id: 'id' }, (item) => ModifierText(item.id)).id('rows'))
+        ));
+        const text = () => {
+          const parts = [];
+          const walk = (node) => { if (node._textContent) parts.push(node._textContent); (node.children || []).forEach(walk); };
+          walk(root.children[0]);
+          return parts.join('');
+        };
+        expect(text()).toBe('ab');
+        items.value = [...items.value, { id: 'c' }];
+        Scheduler.flushSync();
+        expect(text()).toBe('abc');
+        teardown();
+      });
+
+      it('does not warn for reads inside untrack()', () => {
+        const warnings = [];
+        const originalWarn = console.warn;
+        console.warn = (message) => warnings.push(String(message));
+        try {
+          const count = new State(3);
+          mountInRoot(() => VStack(ModifierText(untrack(() => String(count.value))))).teardown();
+          expect(warnings.filter((m) => m.includes('a State value was read')).length).toBe(0);
+        } finally {
+          console.warn = originalWarn;
+        }
       });
 
       it('Text(state.value) stays a static snapshot', () => {

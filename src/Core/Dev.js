@@ -37,9 +37,9 @@ export function isBuildingView() {
  * @internal
  */
 export function warnUntrackedRead() {
-  const stack = String(new Error().stack || '').split('\n');
-  // [0] "Error", [1] this function, [2] State's getter, [3] the call site.
-  const site = (stack[3] || stack[stack.length - 1] || '').trim();
+  // The first frame outside the framework is the user's read, whatever the
+  // engine's stack format (V8 prints an "Error" header line, others don't).
+  const site = userFrame(new Error());
   if (warnedSites.has(site)) return;
   warnedSites.add(site);
   console.warn(
@@ -61,7 +61,7 @@ const FRAMEWORK_ROOT = String(import.meta.url).replace(/Core\/Dev\.js(?:[?#].*)?
  * @internal
  */
 export function userFrame(error) {
-  const lines = String(error?.stack || '').split('\n').slice(1);
+  const lines = String(error?.stack || '').split('\n');
   for (const line of lines) {
     if (!line.includes(FRAMEWORK_ROOT) && /\d+:\d+\)?\s*$/.test(line)) return line.trim().replace(/^at\s+/, '');
   }

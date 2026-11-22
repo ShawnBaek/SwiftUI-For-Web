@@ -496,6 +496,15 @@ export function isTracking() {
 }
 
 /**
+ * Whether code is running inside untrack(): reads were opted out of
+ * tracking on purpose.
+ * @internal
+ */
+export function isUntracked() {
+  return untrackDepth > 0;
+}
+
+/**
  * @returns {Computation|null}
  */
 export function getCurrentComputation() {

@@ -85,9 +85,10 @@ export function render(descriptor) {
     return document.createComment('empty');
   }
 
-  // Handle legacy View instances (backward compatibility)
+  // Handle legacy View instances (backward compatibility). Their content
+  // is not a stack's children (#50).
   if (isLegacyView(descriptor)) {
-    return descriptor._render();
+    return withStackAxis(null, () => descriptor._render());
   }
 
   // Handle non-descriptor values (strings, numbers)
@@ -146,7 +147,13 @@ function renderDescriptorBody(descriptor, renderer) {
   // Render the element
   let element;
   try {
-    element = renderer(descriptor.props, descriptor.children);
+    // A view's children see no stack axis unless the view is itself a
+    // stack (VStack/HStack set it for their children), so frame and Spacer
+    // inside a Button, ScrollView or List don't act on an outer stack's
+    // axis (#50). Spacer has no children and reads its parent's axis.
+    element = descriptor.type === 'Spacer'
+      ? renderer(descriptor.props, descriptor.children)
+      : withStackAxis(null, () => renderer(descriptor.props, descriptor.children));
   } catch (error) {
     throw describeRenderError(error, descriptor, null);
   }
@@ -343,7 +350,10 @@ function wrapInLayer(inner) {
   }
   // A view that fills its parent keeps filling: the layer fills the parent
   // and the view fills the layer.
-  if (layer.style.flexGrow && layer.style.flexGrow !== '0') inner.style.flexGrow = '1';
+  // The view fills its layer (stretched across by the column layer, grown
+  // along it), so a size set on the layer later, such as a container's
+  // height: 100%, reaches the view.
+  inner.style.flexGrow = '1';
   if (inner.style.width === '100%') layer.style.width = '100%';
   if (inner.style.height === '100%') layer.style.height = '100%';
   layer.appendChild(inner);
@@ -403,11 +413,14 @@ function applySignalModifier(element, modifier) {
   // `{ left }`, a color switched to null) and other modifiers on the element
   // are untouched.
   let previous = null;
+  // Re-runs happen after the parent stack has rendered; keep its axis so a
+  // State-driven frame fills the same way every time (#50).
+  const axis = currentStackAxis();
   createEffect(() => {
     const value = source.value;
     if (previous) restoreWrites(element, previous);
     previous = recordWrites(element, (target) => {
-      applyModifier(target, { ...modifier, value });
+      withStackAxis(axis, () => applyModifier(target, { ...modifier, value }));
     });
   });
 }

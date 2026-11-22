@@ -114,7 +114,7 @@ export function ForEach(data, optionsOrContent, contentFn) {
       : idKey
         ? (item) => item[idKey]
         : undefined;
-    return For(each, (item, index) => builderFn(item, index), keyFn);
+    return chainable(For(each, (item, index) => builderFn(item, index), keyFn));
   }
 
   // Handle range syntax
