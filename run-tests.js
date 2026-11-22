@@ -2873,6 +2873,32 @@ async function runTests() {
         expect(element.tagName).toBe('DIV');
       });
 
+      // #51: the switch is a native button with role="switch".
+      it('renders the switch as a labelled button with role switch and aria-checked', () => {
+        const state = new State(false);
+        const element = Toggle('Wi-Fi', state.binding)._render();
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
+        expect(Boolean(button)).toBe(true);
+        expect(button.getAttribute('role')).toBe('switch');
+        expect(button.getAttribute('aria-checked')).toBe('false');
+        const label = find(element, (node) => node._textContent === 'Wi-Fi');
+        expect(button.getAttribute('aria-labelledby')).toBe(label.id);
+        button.click();
+        Scheduler.flushSync();
+        expect(state.value).toBe(true);
+        expect(button.getAttribute('aria-checked')).toBe('true');
+      });
+
+      it('a disabled switch is a disabled button', () => {
+        const state = new State(false);
+        const element = Toggle('Off', state.binding).disabled(true)._render();
+        const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
+        const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
+        expect(button.disabled).toBe(true);
+        expect(button.getAttribute('aria-disabled')).toBe('true');
+      });
+
       it('should set data-view to Toggle', () => {
         const state = new State(false);
         const toggle = Toggle(state.binding);

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The switch-style `Toggle` is accessible (#51). Its track is a native
+  `<button role="switch">` with `aria-checked` following the binding, named
+  by its label through `aria-labelledby`. It is focusable, Space and Enter
+  toggle it, and a disabled toggle is a disabled button. It used to be a
+  `<div>` with a click handler only.
 - `.environment(key, value)` and `.environmentObject(object)` apply to the
   modified view and its descendants (#49). `.environment` was a no-op, and
   `.environmentObject` set one app-wide object, so the last writer won.
