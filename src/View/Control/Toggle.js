@@ -14,6 +14,12 @@ import { View } from '../../Core/View.js';
 import { Binding } from '../../Data/Binding.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
 
+let toggleLabelCount = 0;
+function nextToggleLabelId() {
+  toggleLabelCount += 1;
+  return `swiftui-toggle-label-${toggleLabelCount}`;
+}
+
 /**
  * ToggleView class - boolean switch control
  */
@@ -102,8 +108,22 @@ export class ToggleView extends View {
     container.style.gap = '8px';
     container.style.cursor = this._isDisabled ? 'not-allowed' : 'pointer';
 
-    // Create the switch track
-    const track = document.createElement('div');
+    // The track is a native button with the WAI-ARIA switch role (#51): it is
+    // focusable, Space and Enter activate it, and aria-checked reports the
+    // state. The click bubbles to the container handler below.
+    const track = document.createElement('button');
+    track.type = 'button';
+    track.setAttribute('role', 'switch');
+    track.style.border = 'none';
+    track.style.padding = '0';
+    track.style.margin = '0';
+    track.style.flexShrink = '0';
+    track.style.cursor = 'inherit';
+    track.style.appearance = 'none';
+    if (this._isDisabled) {
+      track.disabled = true;
+      track.setAttribute('aria-disabled', 'true');
+    }
     track.style.width = '51px';
     track.style.height = '31px';
     track.style.borderRadius = '15.5px';
@@ -125,6 +145,7 @@ export class ToggleView extends View {
     // source (user click OR external write like vm.isOn = …).
     createEffect(() => {
       const isOn = this._isOn.value;
+      track.setAttribute('aria-checked', isOn ? 'true' : 'false');
       if (isOn) {
         track.style.backgroundColor = this._tint || 'rgba(52, 199, 89, 1)'; // iOS green
         thumb.style.left = '22px';
@@ -137,12 +158,18 @@ export class ToggleView extends View {
     track.appendChild(thumb);
 
     // Label
+    // The visible label names the switch.
     if (this._label) {
       const label = document.createElement('span');
       label.textContent = this._label;
+      label.id = nextToggleLabelId();
+      track.setAttribute('aria-labelledby', label.id);
       container.appendChild(label);
     } else if (this._labelView) {
-      container.appendChild(this._labelView._render());
+      const label = this._labelView._render();
+      if (!label.id) label.id = nextToggleLabelId();
+      track.setAttribute('aria-labelledby', label.id);
+      container.appendChild(label);
     }
 
     container.appendChild(track);
