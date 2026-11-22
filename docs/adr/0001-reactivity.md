@@ -15,7 +15,7 @@ get wrong, for example `Text(count.value)` silently never updating.
 ## Decision
 
 1. **Signal-as-value.**
-   - Views and style modifiers accept a `State` or `Binding` directly, for example `Text(count)` and `.opacity(isVisible)`, and subscribe on their own.
+   - Views and style modifiers accept a `State` or `Binding` directly, for example `Text(count)` and `.opacity(isVisible)`, and subscribe on their own. Today that is `Text` and the style modifiers in the table below; other views follow as #48 migrates them.
    - Thunks are only for derived expressions, such as ``Text(() => `${count.value} items`)``.
    - A plain value such as `Text(count.value)` is a static snapshot, which is the correct meaning of that code.
 2. **Control flow.**
@@ -40,6 +40,8 @@ get wrong, for example `Text(count.value)` silently never updating.
 
 ## Consequences
 
-- The README's SwiftUI mapping table documents the run-once body, `Show`, `ForEach`, and the per-instance meaning of `new State()` inside a view function.
+- To do: add the run-once body, `ForEach`, and the per-instance meaning of `new State()` inside a view function to the README's SwiftUI mapping table (it has a `Show` row today).
 - The divergence from a re-evaluated `body` stays a documented exception in ARCHITECTURE §5.
 - A modifier given a `State` without a reactive owner applies once and logs the existing unowned-render warning, the same as a `Text` thunk does.
+- When its value changes, a State-driven modifier first restores the style properties and attributes its previous value wrote, so nothing stale is left behind.
+- Known limitation until #50: modifiers still write onto one element, so in `.padding(state).padding(16)` a change to `state` overwrites the later static `16`. #50's ordered layering fixes this.

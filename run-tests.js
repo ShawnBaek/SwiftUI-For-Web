@@ -371,6 +371,7 @@ async function runTests() {
     const { VStack } = await import('./src/Layout/Stack/VStack.js');
     const { Button } = await import('./src/View/Control/Button.js');
     const { render, taskHasID } = await import('./src/Core/Renderer.js');
+    const { Font: SignalFont } = await import('./src/Graphic/Font.js');
     const { Show } = await import('./src/View/ControlFlow/Show.js');
     const { For } = await import('./src/View/ControlFlow/For.js');
     const { TabView } = await import('./src/View/Navigation/TabView.js');
@@ -572,6 +573,33 @@ async function runTests() {
         Scheduler.flushSync();
         expect(String(text.style.opacity)).toBe('0.25');
         expect(text.getAttribute('aria-label')).toBe('Shown');
+        teardown();
+      });
+
+      it('a State-driven modifier clears what its previous value set', () => {
+        const font = new State(SignalFont.body.italic().textCase('uppercase'));
+        const padding = new State({ top: 8 });
+        const color = new State('red');
+        const { root, teardown } = mountInRoot(() =>
+          VStack(ModifierText('A').font(font).padding(padding).foregroundColor(color).opacity(0.5))
+        );
+        const text = root.children[0].children[0];
+        expect(text.style.fontStyle).toBe('italic');
+        expect(text.style.textTransform).toBe('uppercase');
+        expect(text.style.paddingTop).toBe('8px');
+        expect(text.style.color).toBe('red');
+
+        font.value = SignalFont.body;
+        padding.value = { left: 4 };
+        color.value = null;
+        Scheduler.flushSync();
+        expect(text.style.fontStyle || '').toBe('');
+        expect(text.style.textTransform || '').toBe('');
+        expect(text.style.paddingTop || '').toBe('');
+        expect(text.style.paddingLeft).toBe('4px');
+        expect(text.style.color || '').toBe('');
+        // A static modifier on the same element is left alone.
+        expect(String(text.style.opacity)).toBe('0.5');
         teardown();
       });
 

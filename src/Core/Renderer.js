@@ -269,9 +269,69 @@ function applySignalModifier(element, modifier) {
     warnUnownedRender(`.${modifier.type}`);
     return;
   }
+  // Each run records the style properties and attributes it writes, with
+  // their previous values. The next run restores exactly those before
+  // applying the new value, so nothing from an older value is left behind
+  // (an italic font switched to a plain one, `{ top }` padding switched to
+  // `{ left }`, a color switched to null) and other modifiers on the element
+  // are untouched.
+  let previous = null;
   createEffect(() => {
-    applyModifier(element, { ...modifier, value: source.value });
+    const value = source.value;
+    if (previous) restoreWrites(element, previous);
+    previous = recordWrites(element, (target) => {
+      applyModifier(target, { ...modifier, value });
+    });
   });
+}
+
+function recordWrites(element, apply) {
+  const styles = new Map();
+  const attributes = new Map();
+  const style = new Proxy(element.style, {
+    set(target, property, value) {
+      if (typeof property === 'string' && !styles.has(property)) {
+        styles.set(property, target[property]);
+      }
+      target[property] = value;
+      return true;
+    },
+  });
+  const rememberAttribute = (name) => {
+    if (!attributes.has(name)) {
+      const current = element.getAttribute(name);
+      attributes.set(name, current === undefined ? null : current);
+    }
+  };
+  const target = new Proxy(element, {
+    get(object, property) {
+      if (property === 'style') return style;
+      if (property === 'setAttribute') {
+        return (name, value) => { rememberAttribute(name); object.setAttribute(name, value); };
+      }
+      if (property === 'removeAttribute') {
+        return (name) => { rememberAttribute(name); object.removeAttribute(name); };
+      }
+      const value = Reflect.get(object, property, object);
+      return typeof value === 'function' ? value.bind(object) : value;
+    },
+    set(object, property, value) {
+      object[property] = value;
+      return true;
+    },
+  });
+  apply(target);
+  return { styles, attributes };
+}
+
+function restoreWrites(element, { styles, attributes }) {
+  for (const [property, value] of styles) {
+    element.style[property] = value ?? '';
+  }
+  for (const [name, value] of attributes) {
+    if (value === null) element.removeAttribute(name);
+    else element.setAttribute(name, value);
+  }
 }
 
 /**
