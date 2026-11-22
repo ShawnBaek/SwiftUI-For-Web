@@ -387,17 +387,15 @@ async function runTests() {
     const { GeometryReader } = await import('./src/Layout/GeometryReader.js');
     const { GroupView } = await import('./src/View/Container/Group.js');
     const { NavigationStack, NavigationLink } = await import('./src/View/Navigation/NavigationStack.js');
-    const { Picker, PickerStyle, PickerView } = await import('./src/View/Control/Picker.js');
+    const { Picker, PickerStyle } = await import('./src/View/Control/Picker.js');
     const { List: A11yList } = await import('./src/View/List/List.js');
     const { DisclosureGroup: A11yDisclosureGroup } = await import('./src/View/Container/DisclosureGroup.js');
     const { Menu: A11yMenu } = await import('./src/View/Control/Menu.js');
     const { Button: MenuButton } = await import('./src/View/Control/Button.js');
     const { Divider: MenuDivider } = await import('./src/Layout/Divider.js');
     const focusRingControls = {
-      // The control classes (#48: the factories return descriptors).
-      Slider: (await import('./src/View/Control/Slider.js')).SliderView,
-      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePickerView,
-      TextField: (await import('./src/View/Control/TextField.js')).TextFieldView,
+      Slider: (await import('./src/View/Control/Slider.js')).Slider,
+      DatePicker: (await import('./src/View/Control/DatePicker.js')).DatePicker,
     };
     const { Stepper } = await import('./src/View/Control/Stepper.js');
 
@@ -3608,42 +3606,43 @@ async function runTests() {
     });
 
     // Test TextField
-    const { TextField, TextFieldView, SecureField, SecureFieldView } = await import('./src/View/Control/TextField.js');
+    const { TextField, SecureField } = await import('./src/View/Control/TextField.js');
     describe('TextField', () => {
-      it('TextField returns a descriptor that TextFieldView renders (#48)', () => {
+      it('TextField returns a descriptor with its own methods (#48)', () => {
         const field = TextField('Placeholder').textFieldStyle('plain');
         expect(field.type).toBe('TextField');
-        expect(field.props.calls).toEqual([['textFieldStyle', ['plain']]]);
-        expect(new TextFieldView('Placeholder')).toBeInstanceOf(TextFieldView);
+        expect(field.props.style).toBe('plain');
+        expect(render(field).style.border).toBe('none');
       });
 
-      it('should set placeholder', () => {
-        const field = new TextFieldView('Enter name');
-        expect(field._placeholder).toBe('Enter name');
+      it('does not mutate the descriptor a method is called on', () => {
+        const base = TextField('Placeholder');
+        base.disabled();
+        expect(render(base).disabled).toBe(false);
       });
 
       it('should render an input element', () => {
-        const field = new TextFieldView('Placeholder');
-        const element = field._render();
+        const field = TextField('Placeholder');
+        const element = render(field);
         expect(element.tagName).toBe('INPUT');
       });
 
       it('should set data-view to TextField', () => {
-        const field = new TextFieldView('Placeholder');
-        const element = field._render();
+        const field = TextField('Placeholder');
+        const element = render(field);
         expect(element.dataset.view).toBe('TextField');
       });
 
       it('should set placeholder attribute', () => {
-        const field = new TextFieldView('Enter name');
-        const element = field._render();
+        const field = TextField('Enter name');
+        const element = render(field);
         expect(element.placeholder).toBe('Enter name');
       });
 
       it('should update binding when input changes', () => {
         const state = new State('');
-        const field = new TextFieldView('Placeholder', state.binding);
-        const element = field._render();
+        const field = TextField('Placeholder', state.binding);
+        const element = render(field);
 
         element.value = 'New Value';
         element.dispatchEvent(new Event('input'));
@@ -3652,56 +3651,74 @@ async function runTests() {
       });
 
       it('should disable the input', () => {
-        const field = new TextFieldView('Placeholder').disabled();
-        const element = field._render();
+        const field = TextField('Placeholder').disabled();
+        const element = render(field);
         expect(element.disabled).toBe(true);
       });
 
       it('should apply roundedBorder style', () => {
-        const field = new TextFieldView('Placeholder').textFieldStyle('roundedBorder');
-        const element = field._render();
+        const field = TextField('Placeholder').textFieldStyle('roundedBorder');
+        const element = render(field);
         expect(element.style.borderRadius).toBe('6px');
       });
 
       it('should set input type for email keyboard', () => {
-        const field = new TextFieldView('Email').keyboardType('email');
-        const element = field._render();
+        const field = TextField('Email').keyboardType('email');
+        const element = render(field);
         expect(element.type).toBe('email');
       });
     });
 
     describe('SecureField', () => {
-      it('should create a SecureFieldView instance', () => {
-        const field = new SecureFieldView('Password');
-        expect(field).toBeInstanceOf(SecureFieldView);
+      it('should return a SecureField descriptor', () => {
+        expect(SecureField('Password').type).toBe('SecureField');
+      });
+
+      it('keeps the commit callback from the options object', () => {
+        let committed = 0;
+        const element = render(SecureField({ placeholder: 'Password', onCommit: () => committed++ }));
+        element.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Enter' }));
+        expect(committed).toBe(1);
       });
 
       it('should render input with type password', () => {
-        const field = new SecureFieldView('Password');
-        const element = field._render();
+        const field = SecureField('Password');
+        const element = render(field);
         expect(element.type).toBe('password');
       });
     });
 
     // Test Toggle
-    const { Toggle, ToggleView } = await import('./src/View/Control/Toggle.js');
+    const { Toggle } = await import('./src/View/Control/Toggle.js');
     describe('Toggle', () => {
-      it('should create a ToggleView instance', () => {
+      it('should return a Toggle descriptor', () => {
         const state = new State(false);
         expect(Toggle(state.binding).type).toBe('Toggle');
-        expect(new ToggleView(state.binding)).toBeInstanceOf(ToggleView);
       });
 
       it('should accept label and binding', () => {
         const state = new State(false);
-        const toggle = new ToggleView('Enable', state.binding);
-        expect(toggle._label).toBe('Enable');
+        const element = render(Toggle('Enable', state.binding));
+        expect(element.children[0]._textContent ?? element.children[0].textContent).toBe('Enable');
+      });
+
+      it('accepts a descriptor label view and names the switch with it', () => {
+        const state = new State(false);
+        const element = render(Toggle(ModifierText('Bluetooth'), state.binding));
+        const [label, track] = element.children;
+        expect(track.getAttribute('aria-labelledby')).toBe(label.id);
+      });
+
+      it('accepts an options object', () => {
+        const state = new State(true);
+        const element = render(Toggle({ label: 'Opt', isOn: state.binding }));
+        expect(element.children[1].getAttribute('aria-checked')).toBe('true');
       });
 
       it('should render a div for switch style', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
         expect(element.tagName).toBe('DIV');
       });
 
@@ -3834,13 +3851,14 @@ async function runTests() {
       });
 
       it('form controls leave the focus ring to :focus-visible', () => {
-        const { Slider, DatePicker, TextField } = focusRingControls;
+        const { Slider, DatePicker } = focusRingControls;
         const all = (node, out = []) => { out.push(node); (node.children || []).forEach((c) => all(c, out)); return out; };
         const rendered = [
-          new Slider(new State(0.5).binding)._render(),
-          new DatePicker('Date', new State(new Date(0)).binding)._render(),
-          new TextFieldView('Name', new State('').binding).textFieldStyle('plain')._render(),
-          new PickerView('Pick', new State('a').binding, ModifierText('A').tag('a'))._render(),
+          render(Slider(new State(0.5).binding)),
+          render(DatePicker('Date', new State(new Date(0)).binding)),
+          render(TextField('Name', new State('').binding).textFieldStyle('plain')),
+          render(Picker('Pick', new State('a').binding, ModifierText('A').tag('a'))),
+          render(Picker('Pick', new State('a').binding, ModifierText('A').tag('a')).pickerStyle(PickerStyle.segmented)),
         ];
         for (const root of rendered) {
           for (const node of all(root)) expect(node.style?.outline || '').toBe('');
@@ -3849,7 +3867,7 @@ async function runTests() {
 
       it('renders the switch as a labelled button with role switch and aria-checked', () => {
         const state = new State(false);
-        const element = new ToggleView('Wi-Fi', state.binding)._render();
+        const element = render(Toggle('Wi-Fi', state.binding));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(Boolean(button)).toBe(true);
@@ -3865,7 +3883,7 @@ async function runTests() {
 
       it('a disabled switch is a disabled button', () => {
         const state = new State(false);
-        const element = new ToggleView('Off', state.binding).disabled(true)._render();
+        const element = render(Toggle('Off', state.binding).disabled(true));
         const find = (node, test) => test(node) ? node : (node.children || []).map((c) => find(c, test)).find(Boolean);
         const button = find(element, (node) => node.tagName === 'BUTTON' || node.tagName === 'button');
         expect(button.disabled).toBe(true);
@@ -3874,15 +3892,15 @@ async function runTests() {
 
       it('should set data-view to Toggle', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
         expect(element.dataset.view).toBe('Toggle');
       });
 
       it('should update binding when clicked', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding);
-        const element = toggle._render();
+        const toggle = Toggle(state.binding);
+        const element = render(toggle);
 
         element.click();
 
@@ -3891,8 +3909,8 @@ async function runTests() {
 
       it('should not toggle when disabled', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding).disabled();
-        const element = toggle._render();
+        const toggle = Toggle(state.binding).disabled();
+        const element = render(toggle);
 
         element.click();
 
@@ -3901,15 +3919,15 @@ async function runTests() {
 
       it('should render checkbox style', () => {
         const state = new State(false);
-        const toggle = new ToggleView(state.binding).toggleStyle('checkbox');
-        const element = toggle._render();
+        const toggle = Toggle(state.binding).toggleStyle('checkbox');
+        const element = render(toggle);
         expect(element.tagName).toBe('LABEL');
       });
 
       it('should render button style', () => {
         const state = new State(false);
-        const toggle = new ToggleView('Toggle', state.binding).toggleStyle('button');
-        const element = toggle._render();
+        const toggle = Toggle('Toggle', state.binding).toggleStyle('button');
+        const element = render(toggle);
         expect(element.tagName).toBe('BUTTON');
       });
     });

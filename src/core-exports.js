@@ -3,7 +3,7 @@
  * A zero-dependency UI framework inspired by Apple's SwiftUI
  *
  * @module SwiftUI-For-Web/core
- * @version 3.0.0-alpha.1
+ * @version 3.0.0-alpha.2
  *
  * @example
  * // Import core only (smaller bundle, no Charts)
@@ -66,14 +66,14 @@ import { SearchFieldPlacement } from './View/Search.js';
 
 // Controls
 import { Button } from './View/Control/Button.js';
-import { TextField, TextFieldView, SecureField, SecureFieldView } from './View/Control/TextField.js';
-import { Toggle, ToggleView } from './View/Control/Toggle.js';
-import { Slider, SliderView } from './View/Control/Slider.js';
-import { Stepper, StepperView } from './View/Control/Stepper.js';
-import { Picker, PickerView, PickerStyle } from './View/Control/Picker.js';
+import { TextField, SecureField } from './View/Control/TextField.js';
+import { Toggle } from './View/Control/Toggle.js';
+import { Slider } from './View/Control/Slider.js';
+import { Stepper } from './View/Control/Stepper.js';
+import { Picker, PickerStyle } from './View/Control/Picker.js';
 import { Menu, MenuView } from './View/Control/Menu.js';
-import { DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
-import { ColorPicker, ColorPickerView } from './View/Control/ColorPicker.js';
+import { DatePicker, DatePickerComponents, DatePickerStyle } from './View/Control/DatePicker.js';
+import { ColorPicker } from './View/Control/ColorPicker.js';
 
 // Lists
 import { List, ListView, ListStyle } from './View/List/List.js';
@@ -207,7 +207,7 @@ import {
 // =============================================================================
 // Version Info
 // =============================================================================
-const VERSION = '3.0.0-alpha.1';
+const VERSION = '3.0.0-alpha.2';
 
 
 
@@ -247,15 +247,15 @@ export {
 
   // Controls
   Button,
-  TextField, TextFieldView,
-  SecureField, SecureFieldView,
-  Toggle, ToggleView,
-  Slider, SliderView,
-  Stepper, StepperView,
-  Picker, PickerView, PickerStyle,
+  TextField,
+  SecureField,
+  Toggle,
+  Slider,
+  Stepper,
+  Picker, PickerStyle,
   Menu, MenuView,
-  DatePicker, DatePickerView, DatePickerComponents, DatePickerStyle,
-  ColorPicker, ColorPickerView,
+  DatePicker, DatePickerComponents, DatePickerStyle,
+  ColorPicker,
 
   // Lists
   List, ListView, ListStyle,

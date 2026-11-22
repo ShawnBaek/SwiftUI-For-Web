@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **BREAKING (3.0.0-alpha.2): the form controls are native descriptors and
+  their classes are gone** (#48). `Toggle`, `Slider`, `Stepper`,
+  `TextField`, `SecureField`, `Picker`, `DatePicker` and `ColorPicker` now
+  build view descriptors with their own renderers, like `Text` and `Button`.
+  Removed:
+  - the classes `ToggleView`, `SliderView`, `StepperView`, `TextFieldView`,
+    `SecureFieldView`, `PickerView`, `DatePickerView` and `ColorPickerView`,
+    from `swiftui-for-web`, `swiftui-for-web/core`, the default `SwiftUI`
+    namespace and `core.d.ts`;
+  - `src/Core/LegacyControl.js` (`defineControl`);
+  - the legacy `View` methods these controls forwarded and that have no
+    descriptor equivalent: `.animation()`, `.transition()`, `.gesture()`,
+    `.mask()`, `.matchedGeometryEffect()`, `.onDrag()`,
+    `.onLongPressGesture()` and `.contentShape()`;
+  - the unused descriptor hashing (`_selfHash`, `_hash`),
+    `descriptorsEqual`, `memo` and `isMemoized` in `ViewDescriptor.js`.
+
+  Migration: call the factories, which take the same arguments (a label
+  string, a label view, a binding or an options object). Their own methods
+  (`toggleStyle`, `tint`, `disabled`, `pickerStyle`, `textFieldStyle`,
+  `onCommit`, `keyboardType`, `datePickerStyle`, …) and every shared modifier
+  still chain in any order, but each call returns a new descriptor instead of
+  mutating the view. Render a control with `render()` or mount it; don't read
+  internals such as `._label`.
+
+  ```js
+  // before
+  const element = new ToggleView('Wi-Fi', isOn.binding).toggleStyle('checkbox')._render();
+  // after
+  const element = render(Toggle('Wi-Fi', isOn.binding).toggleStyle('checkbox'));
+  ```
+
+  Descriptors have no animation or gesture modifiers yet; until they do,
+  apply DOM changes through `.modifier((element) => …)`. Also fixed on the
+  way: `Slider`'s minimum/maximum value labels render descriptor views (they
+  rendered only legacy Views), and `SecureField({ onCommit })` keeps the
+  callback from the options object. Rendered markup is unchanged; the server
+  snapshots didn't move. The package version is now `3.0.0-alpha.2`.
 - **BREAKING (3.0.0-alpha.1): performance internals left the main entry**
   (#47). The scheduler (`scheduleWork`, `schedulePostFlush`,
   `batchUpdates`, `endBatch`, `enqueueDOMWrite`, `getSchedulerStats`,

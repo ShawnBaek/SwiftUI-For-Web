@@ -8,7 +8,7 @@
  * Provides IDE auto-completion and IntelliSense support
  *
  * @module swiftui-for-web
- * @version 3.0.0-alpha.1
+ * @version 3.0.0-alpha.2
  */
 
 // =============================================================================
@@ -1542,14 +1542,12 @@ export default SwiftUI;
 
 // ---------------------------------------------------------------------------
 // Classes and functions behind the public API (#47). They are exported for
-// advanced use and tests; prefer the factory functions (Toggle(...), not
-// new ToggleView(...)). Legacy *View classes are replaced by descriptors in
-// #48 and keep minimal declarations until then.
+// advanced use and tests; prefer the factory functions (Group(...), not
+// new GroupView(...)). The remaining legacy *View classes are replaced by
+// descriptors in #48 and keep minimal declarations until then.
 // ---------------------------------------------------------------------------
 
 /** Legacy view classes behind the factory functions. */
-export class ColorPickerView extends View {}
-export class DatePickerView extends View {}
 export class DisclosureGroupView extends View {}
 export class DocumentGroupView extends View {}
 export class FormView extends View {}
@@ -1565,15 +1563,10 @@ export class LazyVGridView extends View {}
 export class LazyVStackView extends View {}
 export class ListView extends View {}
 export class MenuView extends View {}
-export class PickerView extends View {}
 export class ScrollViewView extends View {}
 export class SectionView extends View {}
 export class SettingsView extends View {}
-export class SliderView extends View {}
-export class StepperView extends View {}
 export class TabViewView extends View {}
-export class TextFieldView extends View {}
-export class ToggleView extends View {}
 export class WindowGroupView extends View {}
 /** Base class of the legacy shape views. */
 export class ShapeView extends View {}
@@ -1584,7 +1577,6 @@ export class PathView extends ShapeView {}
 export class RectangleView extends ShapeView {}
 export class RoundedRectangleView extends ShapeView {}
 export class UnevenRoundedRectangleView extends ShapeView {}
-export class SecureFieldView extends TextFieldView {}
 
 /** A mounted app, returned by `App(...).mount(...)`. */
 export class AppInstance {

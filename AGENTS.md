@@ -104,14 +104,15 @@ Fine-grained updates (signals → textContent / attributes / styles)
 ### 4.1 Adding a modifier
 
 - **Generic modifiers** (any view): add a `ModifierType` and its handler in
-  `src/Core/ViewDescriptor.js` and `Renderer.applyModifiers`. Until #48
-  introduces one shared modifier table, also add the chain method to every
-  descriptor view's `chainable()`: `Text`, `Button`, `VStack`, `HStack`,
-  `ZStack`, `Spacer`, `Divider`, and `ForEach`. Add a test that the modifier
-  works on at least one view from each family.
+  `src/Core/ViewDescriptor.js` and `Renderer.applyModifiers`, and add the
+  chain method once to the shared table in `src/Core/Chainable.js`; every
+  descriptor view (Text, Button, stacks, the form controls, …) gets it from
+  there (#48). Add a test that the modifier works on at least one view from
+  each family.
 - **View-specific modifiers** (change the view's own props, such as
-  `Text.bold()`): add them to that view's `chainable()` and have its renderer
-  read the new prop. [src/View/Text.js](src/View/Text.js) is the canonical
+  `Text.bold()` or `Toggle.toggleStyle()`): add them to that view's `extras`
+  passed to `chainable(descriptor, extras)` (usually through `withProps`) and
+  have its renderer read the new prop. [src/View/Text.js](src/View/Text.js) is the canonical
   example:
 
 ```js

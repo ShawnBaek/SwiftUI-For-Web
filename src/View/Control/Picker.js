@@ -19,11 +19,11 @@
  * .pickerStyle(PickerStyle.wheel)
  */
 
-import { defineControl } from '../../Core/LegacyControl.js';
 import { View } from '../../Core/View.js';
-import { isDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
-import { render as renderDescriptor } from '../../Core/Renderer.js';
-import { Color } from '../../Graphic/Color.js';
+import { isDescriptor, isLegacyView, createDescriptor, ModifierType } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, render as renderDescriptor } from '../../Core/Renderer.js';
+import { untrack } from '../../Data/Signal.js';
 
 /**
  * Picker style enum
@@ -37,443 +37,397 @@ export const PickerStyle = {
   navigationLink: 'navigationLink'
 };
 
+// Picker's own modifiers (#48: everything else comes from the shared table).
+const pickerModifiers = ({ withProps }) => ({
+  pickerStyle: (style) => withProps({ pickerStyle: style }),
+});
+
 /**
- * Picker view class
+ * Picker - selection from a set of tagged views
+ *
+ * Signatures: Picker('Label', $selection, ...options) and
+ * Picker($selection, ...options). Options are views (descriptors or legacy
+ * Views) identified by `.tag(_:)`; arrays are flattened.
+ *
+ * @returns {Object} Chainable view descriptor
  */
-export class PickerView extends View {
-  constructor(...args) {
-    super();
-
-    this._selection = null;
-    this._label = null;
-    this._labelText = null;
-    this._options = [];
-    this._pickerStyle = PickerStyle.automatic;
-
-    // Parse arguments
-    if (typeof args[0] === 'string') {
-      // Picker('Label', $selection, ...options)
-      this._labelText = args[0];
-      this._selection = args[1];
-      this._options = args.slice(2).flat();
-    } else {
-      // Picker($selection, ...options) or Picker($selection, { label })
-      this._selection = args[0];
-      const rest = args.slice(1).flat();
-      this._options = rest;
-    }
+export function Picker(...args) {
+  let labelText = null;
+  let selection;
+  let options;
+  if (typeof args[0] === 'string') {
+    labelText = args[0];
+    selection = args[1];
+    options = args.slice(2).flat();
+  } else {
+    selection = args[0];
+    options = args.slice(1).flat();
   }
+  return chainable(createDescriptor('Picker', {
+    labelText,
+    selection,
+    options,
+    pickerStyle: PickerStyle.automatic,
+  }), pickerModifiers);
+}
 
-  /**
-   * Set the picker style
-   * @param {string} style - PickerStyle value
-   * @returns {PickerView} Returns this for chaining
-   */
-  pickerStyle(style) {
-    this._pickerStyle = style;
-    return this;
-  }
+// Whether an option is a view: a legacy View or a view descriptor such as
+// `Text('A').tag('a')` (#48).
+function isOption(option) {
+  return isLegacyView(option) || isDescriptor(option);
+}
 
-  /**
-   * Whether an option is a view: a legacy View or a view descriptor such as
-   * `Text('A').tag('a')` (#48).
-   * @private
-   */
-  _isOption(option) {
-    return option instanceof View || isDescriptor(option);
-  }
+function renderOption(option) {
+  return renderDescriptor(option);
+}
 
-  /** @private */
-  _renderOption(option) {
-    return isDescriptor(option) ? renderDescriptor(option) : option._render();
-  }
-
-  /**
-   * Get the tag value from a view
-   * @private
-   */
-  _getTag(view) {
-    if (isDescriptor(view)) {
-      // The last .tag(_:) wins, as in SwiftUI (#48).
-      for (let i = view.modifiers.length - 1; i >= 0; i--) {
-        if (view.modifiers[i].type === ModifierType.TAG) return view.modifiers[i].value;
-      }
-      return null;
-    }
-    return view._tag ?? null;
-  }
-
-  /**
-   * Get current selection value
-   * @private
-   */
-  _getSelection() {
-    if (this._selection) {
-      return this._selection.value ?? this._selection.wrappedValue ?? null;
+function getTag(view) {
+  if (isDescriptor(view)) {
+    // The last .tag(_:) wins, as in SwiftUI (#48).
+    for (let i = view.modifiers.length - 1; i >= 0; i--) {
+      if (view.modifiers[i].type === ModifierType.TAG) return view.modifiers[i].value;
     }
     return null;
   }
-
-  /**
-   * Set selection value
-   * @private
-   */
-  _setSelection(value) {
-    if (this._selection) {
-      if ('value' in this._selection) {
-        this._selection.value = value;
-      } else if ('wrappedValue' in this._selection) {
-        this._selection.wrappedValue = value;
-      }
-    }
-  }
-
-  _render() {
-    switch (this._pickerStyle) {
-      case PickerStyle.segmented:
-        return this._renderSegmented();
-      case PickerStyle.wheel:
-        return this._renderWheel();
-      case PickerStyle.inline:
-        return this._renderInline();
-      case PickerStyle.menu:
-      case PickerStyle.automatic:
-      default:
-        return this._renderMenu();
-    }
-  }
-
-  /**
-   * Render as dropdown menu (default)
-   * @private
-   */
-  _renderMenu() {
-    const container = document.createElement('div');
-    container.dataset.view = 'picker';
-    container.dataset.style = 'menu';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.justifyContent = 'space-between';
-    container.style.gap = '8px';
-
-    // Label
-    if (this._labelText) {
-      const label = document.createElement('span');
-      label.textContent = this._labelText;
-      container.appendChild(label);
-    }
-
-    // Select element
-    const select = document.createElement('select');
-    select.style.padding = '8px 12px';
-    select.style.fontSize = '16px';
-    select.style.border = '1px solid rgba(60, 60, 67, 0.2)';
-    select.style.borderRadius = '8px';
-    select.style.backgroundColor = 'white';
-    select.style.color = 'rgba(0, 122, 255, 1)';
-    select.style.cursor = 'pointer';
-    select.style.minWidth = '120px';
-
-    // Add options
-    const currentSelection = this._getSelection();
-    for (const option of this._options) {
-      if (this._isOption(option)) {
-        const opt = document.createElement('option');
-        const tag = this._getTag(option);
-        opt.value = tag ?? '';
-
-        // Get text content from view
-        const rendered = this._renderOption(option);
-        opt.textContent = rendered.textContent || tag || '';
-
-        if (tag === currentSelection) {
-          opt.selected = true;
-        }
-
-        select.appendChild(opt);
-      }
-    }
-
-    // Handle selection change. <option>.value is always a string, so map the
-    // chosen option back to its original tag (a number tag stays a number).
-    const optionTags = this._options.filter((option) => this._isOption(option)).map((option) => this._getTag(option));
-    select.addEventListener('change', (e) => {
-      const index = e.target.selectedIndex;
-      this._setSelection(index >= 0 && index < optionTags.length ? optionTags[index] : e.target.value);
-    });
-
-    container.appendChild(select);
-
-    return this._applyModifiers(container);
-  }
-
-  /**
-   * Render as segmented control
-   * @private
-   */
-  _renderSegmented() {
-    // #51: a WAI-ARIA radio group. Each segment is a radio button with
-    // aria-checked and a roving tabindex; arrow keys move and select. Colors
-    // come from the theme tokens in base.css, so dark mode works.
-    const container = document.createElement('div');
-    container.dataset.view = 'picker';
-    container.dataset.style = 'segmented';
-    container.setAttribute('role', 'radiogroup');
-    if (this._labelText) container.setAttribute('aria-label', this._labelText);
-    container.style.display = 'inline-flex';
-    container.style.backgroundColor = 'var(--color-fill-tertiary, rgba(118, 118, 128, 0.12))';
-    container.style.borderRadius = '8px';
-    container.style.padding = '2px';
-    container.style.gap = '2px';
-
-    const segments = [];
-    const tags = [];
-
-    const select = (index, focus) => {
-      segments.forEach((segment, i) => {
-        const checked = i === index;
-        segment.setAttribute('aria-checked', checked ? 'true' : 'false');
-        segment.tabIndex = checked ? 0 : -1;
-        segment.style.backgroundColor = checked
-          ? 'var(--color-segmented-selected, #FFFFFF)'
-          : 'transparent';
-        segment.style.boxShadow = checked ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none';
-      });
-      if (focus) segments[index].focus?.();
-    };
-
-    for (const option of this._options) {
-      if (!this._isOption(option)) continue;
-      const index = segments.length;
-      const tag = this._getTag(option);
-      const segment = document.createElement('button');
-      segment.setAttribute('type', 'button');
-      segment.setAttribute('role', 'radio');
-      segment.style.padding = '6px 12px';
-      segment.style.border = 'none';
-      segment.style.borderRadius = '6px';
-      segment.style.font = 'inherit';
-      segment.style.fontSize = '13px';
-      segment.style.fontWeight = '500';
-      segment.style.color = 'var(--color-primary, #000000)';
-      segment.style.cursor = 'pointer';
-      segment.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
-
-      const rendered = this._renderOption(option);
-      segment.textContent = rendered.textContent || tag || '';
-
-      segment.addEventListener('click', () => {
-        this._setSelection(tag);
-        select(index, false);
-      });
-      segment.addEventListener('keydown', (event) => {
-        const last = segments.length - 1;
-        let next = null;
-        switch (event.key) {
-          case 'ArrowRight':
-          case 'ArrowDown':
-            next = index === last ? 0 : index + 1;
-            break;
-          case 'ArrowLeft':
-          case 'ArrowUp':
-            next = index === 0 ? last : index - 1;
-            break;
-          case 'Home':
-            next = 0;
-            break;
-          case 'End':
-            next = last;
-            break;
-          default:
-            return;
-        }
-        event.preventDefault?.();
-        // Radio groups select on focus move.
-        this._setSelection(tags[next]);
-        select(next, true);
-      });
-
-      segments.push(segment);
-      tags.push(tag);
-      container.appendChild(segment);
-    }
-
-    if (segments.length > 0) {
-      const selectedIndex = tags.indexOf(this._getSelection());
-      select(selectedIndex, false);
-      // With no matching selection, keep the group reachable by Tab.
-      if (selectedIndex === -1) segments[0].tabIndex = 0;
-    }
-
-    return this._applyModifiers(container);
-  }
-
-  /**
-   * Render as wheel picker
-   * @private
-   */
-  _renderWheel() {
-    const container = document.createElement('div');
-    container.dataset.view = 'picker';
-    container.dataset.style = 'wheel';
-    container.style.position = 'relative';
-    container.style.height = '150px';
-    container.style.overflow = 'hidden';
-    container.style.backgroundColor = 'rgba(242, 242, 247, 1)';
-    container.style.borderRadius = '8px';
-
-    // Selection indicator
-    const indicator = document.createElement('div');
-    indicator.style.position = 'absolute';
-    indicator.style.top = '50%';
-    indicator.style.transform = 'translateY(-50%)';
-    indicator.style.left = '0';
-    indicator.style.right = '0';
-    indicator.style.height = '34px';
-    indicator.style.backgroundColor = 'rgba(120, 120, 128, 0.12)';
-    indicator.style.borderRadius = '4px';
-    indicator.style.margin = '0 4px';
-    indicator.style.pointerEvents = 'none';
-    container.appendChild(indicator);
-
-    // Scrollable options
-    const scroll = document.createElement('div');
-    scroll.style.height = '100%';
-    scroll.style.overflowY = 'auto';
-    scroll.style.scrollSnapType = 'y mandatory';
-    scroll.style.paddingTop = '58px';
-    scroll.style.paddingBottom = '58px';
-
-    // Hide scrollbar
-    scroll.style.scrollbarWidth = 'none';
-    scroll.style.msOverflowStyle = 'none';
-
-    const currentSelection = this._getSelection();
-    let selectedIndex = 0;
-
-    this._options.forEach((option, index) => {
-      if (this._isOption(option)) {
-        const item = document.createElement('div');
-        item.style.height = '34px';
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.justifyContent = 'center';
-        item.style.scrollSnapAlign = 'center';
-        item.style.cursor = 'pointer';
-
-        const tag = this._getTag(option);
-        const rendered = this._renderOption(option);
-        item.textContent = rendered.textContent || tag || '';
-
-        if (tag === currentSelection) {
-          selectedIndex = index;
-        }
-
-        item.addEventListener('click', () => {
-          this._setSelection(tag);
-          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
-
-        scroll.appendChild(item);
-      }
-    });
-
-    // Scroll to selected item
-    requestAnimationFrame(() => {
-      const items = scroll.children;
-      if (items[selectedIndex]) {
-        items[selectedIndex].scrollIntoView({ block: 'center' });
-      }
-    });
-
-    // Handle scroll selection
-    scroll.addEventListener('scrollend', () => {
-      const scrollCenter = scroll.scrollTop + scroll.clientHeight / 2 - 58;
-      const itemHeight = 34;
-      const index = Math.round(scrollCenter / itemHeight);
-      if (this._isOption(this._options[index])) {
-        const tag = this._getTag(this._options[index]);
-        this._setSelection(tag);
-      }
-    });
-
-    container.appendChild(scroll);
-
-    return this._applyModifiers(container);
-  }
-
-  /**
-   * Render as inline list
-   * @private
-   */
-  _renderInline() {
-    const container = document.createElement('div');
-    container.dataset.view = 'picker';
-    container.dataset.style = 'inline';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '2px';
-
-    const currentSelection = this._getSelection();
-
-    for (const option of this._options) {
-      if (this._isOption(option)) {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.padding = '11px 16px';
-        row.style.borderRadius = '8px';
-        row.style.cursor = 'pointer';
-        row.style.transition = 'background-color 0.15s ease';
-
-        const tag = this._getTag(option);
-        const rendered = this._renderOption(option);
-
-        // Checkmark for selected item
-        const checkmark = document.createElement('span');
-        checkmark.textContent = tag === currentSelection ? '✓' : '';
-        checkmark.style.color = 'rgba(0, 122, 255, 1)';
-        checkmark.style.marginRight = '12px';
-        checkmark.style.width = '20px';
-        row.appendChild(checkmark);
-
-        const content = document.createElement('span');
-        content.textContent = rendered.textContent || tag || '';
-        row.appendChild(content);
-
-        row.addEventListener('mouseenter', () => {
-          row.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
-        });
-        row.addEventListener('mouseleave', () => {
-          row.style.backgroundColor = 'transparent';
-        });
-
-        row.addEventListener('click', () => {
-          this._setSelection(tag);
-          // Update all checkmarks
-          container.querySelectorAll('span:first-child').forEach(c => c.textContent = '');
-          checkmark.textContent = '✓';
-        });
-
-        container.appendChild(row);
-      }
-    }
-
-    return this._applyModifiers(container);
-  }
+  return view._tag ?? null;
 }
 
-/**
- * Factory function for Picker
- */
-// A view descriptor rendered by PickerView (#48).
-const makePicker = defineControl('Picker', PickerView, ['pickerStyle']);
-
-export function Picker(...args) {
-  return makePicker(...args);
+function selectionAccessors(selection) {
+  return {
+    getSelection: () => {
+      if (!selection) return null;
+      return untrack(() => selection.value ?? selection.wrappedValue ?? null);
+    },
+    setSelection: (value) => {
+      if (!selection) return;
+      untrack(() => {
+        if ('value' in selection) selection.value = value;
+        else if ('wrappedValue' in selection) selection.wrappedValue = value;
+      });
+    },
+  };
 }
 
-// Add tag method to View class
+function renderMenu(ctx) {
+  const container = document.createElement('div');
+  container.dataset.view = 'picker';
+  container.dataset.style = 'menu';
+  container.style.display = 'flex';
+  container.style.alignItems = 'center';
+  container.style.justifyContent = 'space-between';
+  container.style.gap = '8px';
+
+  // Label
+  if (ctx.labelText) {
+    const label = document.createElement('span');
+    label.textContent = ctx.labelText;
+    container.appendChild(label);
+  }
+
+  // Select element
+  const select = document.createElement('select');
+  select.style.padding = '8px 12px';
+  select.style.fontSize = '16px';
+  select.style.border = '1px solid rgba(60, 60, 67, 0.2)';
+  select.style.borderRadius = '8px';
+  select.style.backgroundColor = 'white';
+  select.style.color = 'rgba(0, 122, 255, 1)';
+  select.style.cursor = 'pointer';
+  select.style.minWidth = '120px';
+
+  // Add options
+  const currentSelection = ctx.getSelection();
+  for (const option of ctx.options) {
+    if (isOption(option)) {
+      const opt = document.createElement('option');
+      const tag = getTag(option);
+      opt.value = tag ?? '';
+
+      // Get text content from view
+      const rendered = renderOption(option);
+      opt.textContent = rendered.textContent || tag || '';
+
+      if (tag === currentSelection) {
+        opt.selected = true;
+      }
+
+      select.appendChild(opt);
+    }
+  }
+
+  // Handle selection change. <option>.value is always a string, so map the
+  // chosen option back to its original tag (a number tag stays a number).
+  const optionTags = ctx.options.filter((option) => isOption(option)).map((option) => getTag(option));
+  select.addEventListener('change', (e) => {
+    const index = e.target.selectedIndex;
+    ctx.setSelection(index >= 0 && index < optionTags.length ? optionTags[index] : e.target.value);
+  });
+
+  container.appendChild(select);
+
+  return container;
+}
+
+function renderSegmented(ctx) {
+  // #51: a WAI-ARIA radio group. Each segment is a radio button with
+  // aria-checked and a roving tabindex; arrow keys move and select. Colors
+  // come from the theme tokens in base.css, so dark mode works.
+  const container = document.createElement('div');
+  container.dataset.view = 'picker';
+  container.dataset.style = 'segmented';
+  container.setAttribute('role', 'radiogroup');
+  if (ctx.labelText) container.setAttribute('aria-label', ctx.labelText);
+  container.style.display = 'inline-flex';
+  container.style.backgroundColor = 'var(--color-fill-tertiary, rgba(118, 118, 128, 0.12))';
+  container.style.borderRadius = '8px';
+  container.style.padding = '2px';
+  container.style.gap = '2px';
+
+  const segments = [];
+  const tags = [];
+
+  const select = (index, focus) => {
+    segments.forEach((segment, i) => {
+      const checked = i === index;
+      segment.setAttribute('aria-checked', checked ? 'true' : 'false');
+      segment.tabIndex = checked ? 0 : -1;
+      segment.style.backgroundColor = checked
+        ? 'var(--color-segmented-selected, #FFFFFF)'
+        : 'transparent';
+      segment.style.boxShadow = checked ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none';
+    });
+    if (focus) segments[index].focus?.();
+  };
+
+  for (const option of ctx.options) {
+    if (!isOption(option)) continue;
+    const index = segments.length;
+    const tag = getTag(option);
+    const segment = document.createElement('button');
+    segment.setAttribute('type', 'button');
+    segment.setAttribute('role', 'radio');
+    segment.style.padding = '6px 12px';
+    segment.style.border = 'none';
+    segment.style.borderRadius = '6px';
+    segment.style.font = 'inherit';
+    segment.style.fontSize = '13px';
+    segment.style.fontWeight = '500';
+    segment.style.color = 'var(--color-primary, #000000)';
+    segment.style.cursor = 'pointer';
+    segment.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
+
+    const rendered = renderOption(option);
+    segment.textContent = rendered.textContent || tag || '';
+
+    segment.addEventListener('click', () => {
+      ctx.setSelection(tag);
+      select(index, false);
+    });
+    segment.addEventListener('keydown', (event) => {
+      const last = segments.length - 1;
+      let next = null;
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          next = index === last ? 0 : index + 1;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          next = index === 0 ? last : index - 1;
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = last;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault?.();
+      // Radio groups select on focus move.
+      ctx.setSelection(tags[next]);
+      select(next, true);
+    });
+
+    segments.push(segment);
+    tags.push(tag);
+    container.appendChild(segment);
+  }
+
+  if (segments.length > 0) {
+    const selectedIndex = tags.indexOf(ctx.getSelection());
+    select(selectedIndex, false);
+    // With no matching selection, keep the group reachable by Tab.
+    if (selectedIndex === -1) segments[0].tabIndex = 0;
+  }
+
+  return container;
+}
+
+function renderWheel(ctx) {
+  const container = document.createElement('div');
+  container.dataset.view = 'picker';
+  container.dataset.style = 'wheel';
+  container.style.position = 'relative';
+  container.style.height = '150px';
+  container.style.overflow = 'hidden';
+  container.style.backgroundColor = 'rgba(242, 242, 247, 1)';
+  container.style.borderRadius = '8px';
+
+  // Selection indicator
+  const indicator = document.createElement('div');
+  indicator.style.position = 'absolute';
+  indicator.style.top = '50%';
+  indicator.style.transform = 'translateY(-50%)';
+  indicator.style.left = '0';
+  indicator.style.right = '0';
+  indicator.style.height = '34px';
+  indicator.style.backgroundColor = 'rgba(120, 120, 128, 0.12)';
+  indicator.style.borderRadius = '4px';
+  indicator.style.margin = '0 4px';
+  indicator.style.pointerEvents = 'none';
+  container.appendChild(indicator);
+
+  // Scrollable options
+  const scroll = document.createElement('div');
+  scroll.style.height = '100%';
+  scroll.style.overflowY = 'auto';
+  scroll.style.scrollSnapType = 'y mandatory';
+  scroll.style.paddingTop = '58px';
+  scroll.style.paddingBottom = '58px';
+
+  // Hide scrollbar
+  scroll.style.scrollbarWidth = 'none';
+  scroll.style.msOverflowStyle = 'none';
+
+  const currentSelection = ctx.getSelection();
+  let selectedIndex = 0;
+
+  ctx.options.forEach((option, index) => {
+    if (isOption(option)) {
+      const item = document.createElement('div');
+      item.style.height = '34px';
+      item.style.display = 'flex';
+      item.style.alignItems = 'center';
+      item.style.justifyContent = 'center';
+      item.style.scrollSnapAlign = 'center';
+      item.style.cursor = 'pointer';
+
+      const tag = getTag(option);
+      const rendered = renderOption(option);
+      item.textContent = rendered.textContent || tag || '';
+
+      if (tag === currentSelection) {
+        selectedIndex = index;
+      }
+
+      item.addEventListener('click', () => {
+        ctx.setSelection(tag);
+        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      scroll.appendChild(item);
+    }
+  });
+
+  // Scroll to selected item
+  requestAnimationFrame(() => {
+    const items = scroll.children;
+    if (items[selectedIndex]) {
+      items[selectedIndex].scrollIntoView({ block: 'center' });
+    }
+  });
+
+  // Handle scroll selection
+  scroll.addEventListener('scrollend', () => {
+    const scrollCenter = scroll.scrollTop + scroll.clientHeight / 2 - 58;
+    const itemHeight = 34;
+    const index = Math.round(scrollCenter / itemHeight);
+    if (isOption(ctx.options[index])) {
+      const tag = getTag(ctx.options[index]);
+      ctx.setSelection(tag);
+    }
+  });
+
+  container.appendChild(scroll);
+
+  return container;
+}
+
+function renderInline(ctx) {
+  const container = document.createElement('div');
+  container.dataset.view = 'picker';
+  container.dataset.style = 'inline';
+  container.style.display = 'flex';
+  container.style.flexDirection = 'column';
+  container.style.gap = '2px';
+
+  const currentSelection = ctx.getSelection();
+
+  for (const option of ctx.options) {
+    if (isOption(option)) {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.padding = '11px 16px';
+      row.style.borderRadius = '8px';
+      row.style.cursor = 'pointer';
+      row.style.transition = 'background-color 0.15s ease';
+
+      const tag = getTag(option);
+      const rendered = renderOption(option);
+
+      // Checkmark for selected item
+      const checkmark = document.createElement('span');
+      checkmark.textContent = tag === currentSelection ? '✓' : '';
+      checkmark.style.color = 'rgba(0, 122, 255, 1)';
+      checkmark.style.marginRight = '12px';
+      checkmark.style.width = '20px';
+      row.appendChild(checkmark);
+
+      const content = document.createElement('span');
+      content.textContent = rendered.textContent || tag || '';
+      row.appendChild(content);
+
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
+      });
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = 'transparent';
+      });
+
+      row.addEventListener('click', () => {
+        ctx.setSelection(tag);
+        // Update all checkmarks
+        container.querySelectorAll('span:first-child').forEach(c => c.textContent = '');
+        checkmark.textContent = '✓';
+      });
+
+      container.appendChild(row);
+    }
+  }
+
+  return container;
+}
+
+registerRenderer('Picker', (props) => {
+  const ctx = { labelText: props.labelText, options: props.options, ...selectionAccessors(props.selection) };
+  switch (props.pickerStyle) {
+    case PickerStyle.segmented:
+      return renderSegmented(ctx);
+    case PickerStyle.wheel:
+      return renderWheel(ctx);
+    case PickerStyle.inline:
+      return renderInline(ctx);
+    case PickerStyle.menu:
+    case PickerStyle.automatic:
+    default:
+      return renderMenu(ctx);
+  }
+});
+
+// Legacy views get .tag(_:) too, so they can be Picker and TabView options.
 View.prototype.tag = function (value) {
   this._tag = value;
   return this;

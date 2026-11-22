@@ -148,13 +148,14 @@ describe('renderToString (#40)', () => {
     expect((html.match(/data-lazy-index=/g) || []).length).toBe(2);
   });
 
-  it('controls keep legacy View methods and accept a descriptor label', async () => {
-    const { Toggle, Stepper, Animation } = await import('../../src/index.js');
+  it('controls are native descriptors and accept a descriptor label (#48)', async () => {
+    const { Toggle, Stepper } = await import('../../src/index.js');
     const on = new State(true);
     const toggle = Toggle(Text('Wi-Fi'), on.binding);
-    expect(typeof toggle.animation).toBe('function');
-    expect(typeof toggle.gesture).toBe('function');
-    const html = renderToString(() => toggle.animation(Animation.default, on));
+    // The legacy-only View methods were dropped with the control classes.
+    expect(typeof toggle.animation).toBe('undefined');
+    expect(typeof toggle.gesture).toBe('undefined');
+    const html = renderToString(() => toggle.padding(4));
     expect(html.includes('Wi-Fi')).toBe(true);
     expect(html.includes('aria-checked="true"')).toBe(true);
     expect(renderToString(() => Stepper(Text('Count'), new State(1).binding)).includes('Count')).toBe(true);

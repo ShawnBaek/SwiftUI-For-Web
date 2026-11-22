@@ -7,14 +7,14 @@
  * Usage:
  *   Toggle('Label', isOnBinding)
  *   Toggle(isOnBinding)
+ *   Toggle(labelView, isOnBinding)
  *   Toggle({ label: 'Label', isOn: binding })
  */
 
-import { defineControl } from '../../Core/LegacyControl.js';
 import { nextElementId } from '../../Core/ElementID.js';
-import { View } from '../../Core/View.js';
-import { isDescriptor } from '../../Core/ViewDescriptor.js';
-import { render as renderLabelView } from '../../Core/Renderer.js';
+import { isDescriptor, isLegacyView, createDescriptor } from '../../Core/ViewDescriptor.js';
+import { chainable } from '../../Core/Chainable.js';
+import { registerRenderer, render as renderLabelView } from '../../Core/Renderer.js';
 import { Binding } from '../../Data/Binding.js';
 import { createEffect, untrack } from '../../Data/Signal.js';
 
@@ -22,312 +22,236 @@ function nextToggleLabelId() {
   return nextElementId('swiftui-toggle-label');
 }
 
-/**
- * ToggleView class - boolean switch control
- */
-export class ToggleView extends View {
-  /**
-   * Create a Toggle
-   * @param {string|Binding|Object} labelOrBindingOrOptions - Label string, binding, or options
-   * @param {Binding} [isOnBinding] - Binding to the boolean state
-   */
-  constructor(labelOrBindingOrOptions, isOnBinding) {
-    super();
-
-    // Parse arguments
-    if (labelOrBindingOrOptions instanceof Binding) {
-      // Toggle(isOnBinding)
-      this._label = null;
-      this._labelView = null;
-      this._isOn = labelOrBindingOrOptions;
-    } else if (typeof labelOrBindingOrOptions === 'object' && !(labelOrBindingOrOptions instanceof View) && !isDescriptor(labelOrBindingOrOptions)) {
-      // Options object style
-      const options = labelOrBindingOrOptions;
-      this._label = options.label || null;
-      this._labelView = options.labelView || null;
-      this._isOn = options.isOn || Binding.constant(false);
-    } else if (typeof labelOrBindingOrOptions === 'string') {
-      // Toggle('Label', isOnBinding)
-      this._label = labelOrBindingOrOptions;
-      this._labelView = null;
-      this._isOn = isOnBinding || Binding.constant(false);
-    } else if (labelOrBindingOrOptions instanceof View || isDescriptor(labelOrBindingOrOptions)) {
-      // Toggle(labelView, isOnBinding), the view a legacy View or a descriptor
-      this._label = null;
-      this._labelView = labelOrBindingOrOptions;
-      this._isOn = isOnBinding || Binding.constant(false);
-    } else {
-      this._label = null;
-      this._labelView = null;
-      this._isOn = Binding.constant(false);
-    }
-
-    // Internal state
-    this._isDisabled = false;
-    this._style = 'switch'; // 'switch', 'checkbox', 'button'
-    this._tint = null;
-  }
-
-  /**
-   * Disable the toggle
-   * @param {boolean} [isDisabled=true] - Whether to disable
-   * @returns {ToggleView}
-   */
-  disabled(isDisabled = true) {
-    this._isDisabled = isDisabled;
-    return this;
-  }
-
-  /**
-   * Set the toggle style
-   * @param {string} style - 'switch', 'checkbox', 'button'
-   * @returns {ToggleView}
-   */
-  toggleStyle(style) {
-    this._style = style;
-    return this;
-  }
-
-  /**
-   * Set the tint color when on
-   * @param {string|ColorValue} color - The tint color
-   * @returns {ToggleView}
-   */
-  tint(color) {
-    this._tint = typeof color === 'string' ? color : color.rgba?.() || color;
-    return this;
-  }
-
-  /**
-   * Render the switch-style toggle
-   * @returns {HTMLElement}
-   */
-  _renderSwitch() {
-    const container = document.createElement('div');
-    container.dataset.view = 'Toggle';
-    container.style.display = 'inline-flex';
-    container.style.alignItems = 'center';
-    container.style.gap = '8px';
-    container.style.cursor = this._isDisabled ? 'not-allowed' : 'pointer';
-
-    // The track is a native button with the WAI-ARIA switch role (#51): it is
-    // focusable, Space and Enter activate it, and aria-checked reports the
-    // state. The click bubbles to the container handler below.
-    const track = document.createElement('button');
-    track.type = 'button';
-    track.setAttribute('role', 'switch');
-    track.style.border = 'none';
-    track.style.padding = '0';
-    track.style.margin = '0';
-    track.style.flexShrink = '0';
-    track.style.cursor = 'inherit';
-    track.style.appearance = 'none';
-    if (this._isDisabled) {
-      track.disabled = true;
-      track.setAttribute('aria-disabled', 'true');
-    }
-    track.style.width = '51px';
-    track.style.height = '31px';
-    track.style.borderRadius = '15.5px';
-    track.style.position = 'relative';
-    track.style.transition = 'background-color 0.2s ease';
-
-    // Create the switch thumb
-    const thumb = document.createElement('div');
-    thumb.style.width = '27px';
-    thumb.style.height = '27px';
-    thumb.style.borderRadius = '50%';
-    thumb.style.backgroundColor = 'white';
-    thumb.style.position = 'absolute';
-    thumb.style.top = '2px';
-    thumb.style.transition = 'left 0.2s ease';
-    thumb.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-
-    // Reactive visual state — re-runs when _isOn binding changes from any
-    // source (user click OR external write like vm.isOn = …).
-    createEffect(() => {
-      const isOn = this._isOn.value;
-      track.setAttribute('aria-checked', isOn ? 'true' : 'false');
-      if (isOn) {
-        track.style.backgroundColor = this._tint || 'rgba(52, 199, 89, 1)'; // iOS green
-        thumb.style.left = '22px';
-      } else {
-        track.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
-        thumb.style.left = '2px';
-      }
-    });
-
-    track.appendChild(thumb);
-
-    // Label
-    // The visible label names the switch.
-    if (this._label) {
-      const label = document.createElement('span');
-      label.textContent = this._label;
-      label.id = nextToggleLabelId();
-      track.setAttribute('aria-labelledby', label.id);
-      container.appendChild(label);
-    } else if (this._labelView) {
-      const label = renderLabelView(this._labelView);
-      if (!label.id) label.id = nextToggleLabelId();
-      track.setAttribute('aria-labelledby', label.id);
-      container.appendChild(label);
-    }
-
-    container.appendChild(track);
-
-    // Click handler — toggle the binding; the effect above re-renders.
-    if (!this._isDisabled) {
-      container.addEventListener('click', () => {
-        untrack(() => { this._isOn.value = !this._isOn.value; });
-      });
-    }
-
-    // Disabled styling
-    if (this._isDisabled) {
-      container.style.opacity = '0.5';
-    }
-
-    return container;
-  }
-
-  /**
-   * Render the checkbox-style toggle
-   * @returns {HTMLElement}
-   */
-  _renderCheckbox() {
-    const container = document.createElement('label');
-    container.dataset.view = 'Toggle';
-    container.style.display = 'inline-flex';
-    container.style.alignItems = 'center';
-    container.style.gap = '8px';
-    container.style.cursor = this._isDisabled ? 'not-allowed' : 'pointer';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.disabled = this._isDisabled;
-    checkbox.style.width = '18px';
-    checkbox.style.height = '18px';
-    checkbox.style.cursor = 'inherit';
-
-    if (this._tint) {
-      checkbox.style.accentColor = this._tint;
-    }
-
-    // Reactive sync: keep checkbox.checked aligned with the binding.
-    createEffect(() => {
-      const desired = !!this._isOn.value;
-      if (checkbox.checked !== desired) checkbox.checked = desired;
-    });
-
-    checkbox.addEventListener('change', () => {
-      untrack(() => { this._isOn.value = checkbox.checked; });
-    });
-
-    container.appendChild(checkbox);
-
-    // Label
-    if (this._label) {
-      const label = document.createElement('span');
-      label.textContent = this._label;
-      container.appendChild(label);
-    } else if (this._labelView) {
-      container.appendChild(renderLabelView(this._labelView));
-    }
-
-    // Disabled styling
-    if (this._isDisabled) {
-      container.style.opacity = '0.5';
-    }
-
-    return container;
-  }
-
-  /**
-   * Render the button-style toggle
-   * @returns {HTMLElement}
-   */
-  _renderButton() {
-    const button = document.createElement('button');
-    button.dataset.view = 'Toggle';
-    button.disabled = this._isDisabled;
-    button.style.cursor = this._isDisabled ? 'not-allowed' : 'pointer';
-    button.style.padding = '8px 16px';
-    button.style.borderRadius = '8px';
-    button.style.border = 'none';
-    button.style.fontFamily = 'inherit';
-    button.style.fontSize = 'inherit';
-    button.style.transition = 'background-color 0.2s ease';
-
-    // Reactive visual state — re-runs when the binding changes.
-    createEffect(() => {
-      const isOn = this._isOn.value;
-      if (isOn) {
-        button.style.backgroundColor = this._tint || 'rgba(0, 122, 255, 1)';
-        button.style.color = 'white';
-      } else {
-        button.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
-        button.style.color = 'inherit';
-      }
-    });
-
-    // Label
-    if (this._label) {
-      button.textContent = this._label;
-    } else if (this._labelView) {
-      button.appendChild(renderLabelView(this._labelView));
-    }
-
-    // Click handler — toggle the binding; the effect above re-renders.
-    button.addEventListener('click', () => {
-      if (!this._isDisabled) {
-        untrack(() => { this._isOn.value = !this._isOn.value; });
-      }
-    });
-
-    // Disabled styling
-    if (this._isDisabled) {
-      button.style.opacity = '0.5';
-    }
-
-    return button;
-  }
-
-  /**
-   * Render to DOM
-   * @returns {HTMLElement}
-   */
-  _render() {
-    let element;
-
-    switch (this._style) {
-      case 'checkbox':
-        element = this._renderCheckbox();
-        break;
-      case 'button':
-        element = this._renderButton();
-        break;
-      case 'switch':
-      default:
-        element = this._renderSwitch();
-        break;
-    }
-
-    return this._applyModifiers(element);
-  }
+function isView(value) {
+  return isLegacyView(value) || isDescriptor(value);
 }
 
-/**
- * Factory function for Toggle
- * @param {string|Binding|Object} labelOrBindingOrOptions - Label, binding, or options
- * @param {Binding} [isOnBinding] - Boolean binding
- * @returns {ToggleView}
- */
-// A view descriptor rendered by ToggleView (#48).
-const makeToggle = defineControl('Toggle', ToggleView, ['disabled', 'toggleStyle', 'tint']);
+// Toggle's own modifiers (#48: everything else comes from the shared table).
+const toggleModifiers = ({ withProps }) => ({
+  disabled: (isDisabled = true) => withProps({ isDisabled }),
+  // 'switch', 'checkbox', 'button'
+  toggleStyle: (style) => withProps({ style }),
+  tint: (color) => withProps({ tint: typeof color === 'string' ? color : color.rgba?.() || color }),
+});
 
+/**
+ * Toggle - boolean switch control
+ *
+ * @param {string|Binding|Object} labelOrBindingOrOptions - Label string, label view, binding, or options
+ * @param {Binding} [isOnBinding] - Binding to the boolean state
+ * @returns {Object} Chainable view descriptor
+ */
 export function Toggle(labelOrBindingOrOptions, isOnBinding) {
-  return makeToggle(labelOrBindingOrOptions, isOnBinding);
+  let label = null;
+  let labelView = null;
+  let isOn;
+
+  if (labelOrBindingOrOptions instanceof Binding) {
+    // Toggle(isOnBinding)
+    isOn = labelOrBindingOrOptions;
+  } else if (typeof labelOrBindingOrOptions === 'string') {
+    // Toggle('Label', isOnBinding)
+    label = labelOrBindingOrOptions;
+    isOn = isOnBinding || Binding.constant(false);
+  } else if (isView(labelOrBindingOrOptions)) {
+    // Toggle(labelView, isOnBinding), the view a legacy View or a descriptor
+    labelView = labelOrBindingOrOptions;
+    isOn = isOnBinding || Binding.constant(false);
+  } else if (labelOrBindingOrOptions && typeof labelOrBindingOrOptions === 'object') {
+    // Options object style
+    const options = labelOrBindingOrOptions;
+    label = options.label || null;
+    labelView = options.labelView || null;
+    isOn = options.isOn || Binding.constant(false);
+  } else {
+    isOn = Binding.constant(false);
+  }
+
+  return chainable(createDescriptor('Toggle', {
+    label,
+    labelView,
+    isOn,
+    isDisabled: false,
+    style: 'switch',
+    tint: null,
+  }), toggleModifiers);
 }
+
+function renderSwitch(props) {
+  const { label, labelView, isOn, isDisabled, tint } = props;
+  const container = document.createElement('div');
+  container.dataset.view = 'Toggle';
+  container.style.display = 'inline-flex';
+  container.style.alignItems = 'center';
+  container.style.gap = '8px';
+  container.style.cursor = isDisabled ? 'not-allowed' : 'pointer';
+
+  // The track is a native button with the WAI-ARIA switch role (#51): it is
+  // focusable, Space and Enter activate it, and aria-checked reports the
+  // state. The click bubbles to the container handler below.
+  const track = document.createElement('button');
+  track.type = 'button';
+  track.setAttribute('role', 'switch');
+  track.style.border = 'none';
+  track.style.padding = '0';
+  track.style.margin = '0';
+  track.style.flexShrink = '0';
+  track.style.cursor = 'inherit';
+  track.style.appearance = 'none';
+  if (isDisabled) {
+    track.disabled = true;
+    track.setAttribute('aria-disabled', 'true');
+  }
+  track.style.width = '51px';
+  track.style.height = '31px';
+  track.style.borderRadius = '15.5px';
+  track.style.position = 'relative';
+  track.style.transition = 'background-color 0.2s ease';
+
+  const thumb = document.createElement('div');
+  thumb.style.width = '27px';
+  thumb.style.height = '27px';
+  thumb.style.borderRadius = '50%';
+  thumb.style.backgroundColor = 'white';
+  thumb.style.position = 'absolute';
+  thumb.style.top = '2px';
+  thumb.style.transition = 'left 0.2s ease';
+  thumb.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+
+  // Re-runs when the binding changes from any source (a click or a write
+  // elsewhere).
+  createEffect(() => {
+    const on = isOn.value;
+    track.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (on) {
+      track.style.backgroundColor = tint || 'rgba(52, 199, 89, 1)'; // iOS green
+      thumb.style.left = '22px';
+    } else {
+      track.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
+      thumb.style.left = '2px';
+    }
+  });
+
+  track.appendChild(thumb);
+
+  // The visible label names the switch.
+  if (label) {
+    const labelElement = document.createElement('span');
+    labelElement.textContent = label;
+    labelElement.id = nextToggleLabelId();
+    track.setAttribute('aria-labelledby', labelElement.id);
+    container.appendChild(labelElement);
+  } else if (labelView) {
+    const labelElement = renderLabelView(labelView);
+    if (!labelElement.id) labelElement.id = nextToggleLabelId();
+    track.setAttribute('aria-labelledby', labelElement.id);
+    container.appendChild(labelElement);
+  }
+
+  container.appendChild(track);
+
+  if (!isDisabled) {
+    container.addEventListener('click', () => {
+      untrack(() => { isOn.value = !isOn.value; });
+    });
+  } else {
+    container.style.opacity = '0.5';
+  }
+
+  return container;
+}
+
+function renderCheckbox(props) {
+  const { label, labelView, isOn, isDisabled, tint } = props;
+  const container = document.createElement('label');
+  container.dataset.view = 'Toggle';
+  container.style.display = 'inline-flex';
+  container.style.alignItems = 'center';
+  container.style.gap = '8px';
+  container.style.cursor = isDisabled ? 'not-allowed' : 'pointer';
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.disabled = isDisabled;
+  checkbox.style.width = '18px';
+  checkbox.style.height = '18px';
+  checkbox.style.cursor = 'inherit';
+  if (tint) checkbox.style.accentColor = tint;
+
+  createEffect(() => {
+    const desired = !!isOn.value;
+    if (checkbox.checked !== desired) checkbox.checked = desired;
+  });
+
+  checkbox.addEventListener('change', () => {
+    untrack(() => { isOn.value = checkbox.checked; });
+  });
+
+  container.appendChild(checkbox);
+
+  if (label) {
+    const labelElement = document.createElement('span');
+    labelElement.textContent = label;
+    container.appendChild(labelElement);
+  } else if (labelView) {
+    container.appendChild(renderLabelView(labelView));
+  }
+
+  if (isDisabled) container.style.opacity = '0.5';
+
+  return container;
+}
+
+function renderButton(props) {
+  const { label, labelView, isOn, isDisabled, tint } = props;
+  const button = document.createElement('button');
+  button.dataset.view = 'Toggle';
+  button.disabled = isDisabled;
+  button.style.cursor = isDisabled ? 'not-allowed' : 'pointer';
+  button.style.padding = '8px 16px';
+  button.style.borderRadius = '8px';
+  button.style.border = 'none';
+  button.style.fontFamily = 'inherit';
+  button.style.fontSize = 'inherit';
+  button.style.transition = 'background-color 0.2s ease';
+
+  createEffect(() => {
+    if (isOn.value) {
+      button.style.backgroundColor = tint || 'rgba(0, 122, 255, 1)';
+      button.style.color = 'white';
+    } else {
+      button.style.backgroundColor = 'rgba(120, 120, 128, 0.16)';
+      button.style.color = 'inherit';
+    }
+  });
+
+  if (label) {
+    button.textContent = label;
+  } else if (labelView) {
+    button.appendChild(renderLabelView(labelView));
+  }
+
+  button.addEventListener('click', () => {
+    if (!isDisabled) {
+      untrack(() => { isOn.value = !isOn.value; });
+    }
+  });
+
+  if (isDisabled) button.style.opacity = '0.5';
+
+  return button;
+}
+
+registerRenderer('Toggle', (props) => {
+  switch (props.style) {
+    case 'checkbox':
+      return renderCheckbox(props);
+    case 'button':
+      return renderButton(props);
+    case 'switch':
+    default:
+      return renderSwitch(props);
+  }
+});
 
 export default Toggle;
