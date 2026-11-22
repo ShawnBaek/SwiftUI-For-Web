@@ -120,6 +120,7 @@ export const UserInterfaceIdiom = {
  * @returns {string} Device idiom
  */
 export function currentDeviceIdiom() {
+  if (typeof window === 'undefined') return UserInterfaceIdiom.unspecified;
   const width = window.innerWidth;
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
@@ -144,7 +145,16 @@ class EnvironmentStore {
     // Lazily populated on first tracked read.
     this._keyObservers = new Map();
 
-    // Initialize with system defaults
+    // System defaults are created on first use, not at import, so importing
+    // the library never touches `window` or `document` (#49). In an
+    // environment without them (Node, static rendering) fixed defaults apply.
+    this._defaultsReady = false;
+  }
+
+  /** @private */
+  _ensureDefaults() {
+    if (this._defaultsReady) return;
+    this._defaultsReady = true;
     this._initializeDefaults();
   }
 
@@ -166,40 +176,42 @@ class EnvironmentStore {
    * @private
    */
   _initializeDefaults() {
-    // Color scheme from system preference
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    this._values.set(EnvironmentValues.colorScheme, prefersDark ? ColorScheme.dark : ColorScheme.light);
+    const hasWindow = typeof window !== 'undefined';
+    const media = (query) => (hasWindow ? window.matchMedia?.(query) : undefined);
 
-    // Listen for system color scheme changes
-    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    // Color scheme from system preference
+    const darkQuery = media('(prefers-color-scheme: dark)');
+    this._values.set(EnvironmentValues.colorScheme, darkQuery?.matches ? ColorScheme.dark : ColorScheme.light);
+    darkQuery?.addEventListener?.('change', (e) => {
       this.set(EnvironmentValues.colorScheme, e.matches ? ColorScheme.dark : ColorScheme.light);
     });
 
     // Locale
-    this._values.set(EnvironmentValues.locale, navigator.language ?? 'en-US');
+    const language = typeof navigator !== 'undefined' ? navigator.language : undefined;
+    this._values.set(EnvironmentValues.locale, language ?? 'en-US');
 
     // Timezone
     this._values.set(EnvironmentValues.timeZone, Intl.DateTimeFormat().resolvedOptions().timeZone);
 
     // Accessibility
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    this._values.set(EnvironmentValues.accessibilityReduceMotion, prefersReducedMotion);
-
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener('change', (e) => {
+    const motionQuery = media('(prefers-reduced-motion: reduce)');
+    this._values.set(EnvironmentValues.accessibilityReduceMotion, Boolean(motionQuery?.matches));
+    motionQuery?.addEventListener?.('change', (e) => {
       this.set(EnvironmentValues.accessibilityReduceMotion, e.matches);
     });
 
     // Layout direction
-    const dir = document.documentElement.dir || 'ltr';
+    const dir = (typeof document !== 'undefined' && document.documentElement?.dir) || 'ltr';
     this._values.set(EnvironmentValues.layoutDirection, dir === 'rtl' ? LayoutDirection.rightToLeft : LayoutDirection.leftToRight);
 
     // Size classes based on viewport
     this._updateSizeClasses();
-    window.addEventListener('resize', () => this._updateSizeClasses());
+    if (hasWindow) window.addEventListener?.('resize', () => this._updateSizeClasses());
 
-    // OpenURL handler
+    // OpenURL handler. noopener keeps the opened page from reaching back
+    // through window.opener.
     this._values.set(EnvironmentValues.openURL, (url) => {
-      window.open(url, '_blank');
+      if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
     });
   }
 
@@ -223,8 +235,9 @@ class EnvironmentStore {
    * @private
    */
   _updateSizeClasses() {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    // Without a window (Node, static rendering) assume a regular-size viewport.
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const height = typeof window !== 'undefined' ? window.innerHeight : 768;
     const isLandscape = width > height;
 
     // Horizontal size class
@@ -255,6 +268,7 @@ class EnvironmentStore {
    * @returns {*} The environment value
    */
   get(key) {
+    this._ensureDefaults();
     trackObservers(this._observersForKey(key));
     return this._values.get(key);
   }
@@ -265,6 +279,7 @@ class EnvironmentStore {
    * @param {*} value - Value to set
    */
   set(key, value) {
+    this._ensureDefaults();
     const oldValue = this._values.get(key);
     this._values.set(key, value);
 

@@ -2278,9 +2278,31 @@ async function runTests() {
       });
     });
 
-    // Note: Environment auto-tracking is verified via e2e tests; this Node
-    // runner can't import src/Data/Environment.js (it touches window/navigator
-    // at module-load time).
+    // #49: the environment store creates its system defaults on first use, so
+    // it imports in Node and falls back to fixed defaults without a browser.
+    const { Environment: EnvStore, EnvironmentValues: EnvKeys, ColorScheme: EnvColorScheme } =
+      await import('./src/Data/Environment.js');
+    describe('Environment without a browser', () => {
+      it('reads defaults without window, document or navigator', () => {
+        expect(typeof globalThis.window).toBe('undefined');
+        expect(EnvStore.get(EnvKeys.colorScheme)).toBe(EnvColorScheme.light);
+        expect(typeof EnvStore.get(EnvKeys.locale)).toBe('string');
+        expect(typeof EnvStore.get(EnvKeys.openURL)).toBe('function');
+      });
+
+      it('openURL opens with noopener and noreferrer', () => {
+        const calls = [];
+        globalThis.window = { open: (...args) => { calls.push(args); } };
+        try {
+          EnvStore.get(EnvKeys.openURL)('https://example.com');
+        } finally {
+          delete globalThis.window;
+        }
+        expect(calls.length).toBe(1);
+        expect(calls[0][1]).toBe('_blank');
+        expect(calls[0][2]).toBe('noopener,noreferrer');
+      });
+    });
 
     // Test Color
     const { Color, ColorValue } = await import('./src/Graphic/Color.js');

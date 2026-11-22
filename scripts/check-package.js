@@ -14,6 +14,7 @@
  *    runtime export is undeclared unless it is listed in
  *    `scripts/types-baseline.json` (a list that may only shrink).
  * 6. `sideEffects` lists every module that patches a prototype when imported.
+ * 7. Every entry imports in plain Node, with no browser globals (#49).
  *
  * Usage: node scripts/check-package.js
  */
@@ -28,41 +29,6 @@ let checks = 0;
 function check(condition, message) {
   checks++;
   if (!condition) failures.push(message);
-}
-
-// Importing the library still reads `window` and `document` (invariant I6,
-// #49). Until that is fixed, give it the minimum it reads at import time.
-function installBrowserStub() {
-  const mediaQuery = { matches: false, addEventListener() {}, removeEventListener() {} };
-  const element = () => ({
-    style: {}, dataset: {}, children: [],
-    setAttribute() {}, appendChild(child) { return child; }, addEventListener() {},
-  });
-  const define = (name, value) => {
-    if (globalThis[name] === undefined) {
-      Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
-    }
-  };
-  define('window', {
-    matchMedia: () => mediaQuery,
-    addEventListener() {},
-    removeEventListener() {},
-    innerWidth: 1024,
-    innerHeight: 768,
-    location: { href: 'http://localhost/' },
-  });
-  define('document', {
-    documentElement: { dir: 'ltr', lang: 'en', style: {} },
-    body: element(),
-    head: element(),
-    createElement: element,
-    createElementNS: element,
-    getElementById: () => null,
-    querySelector: () => null,
-    addEventListener() {},
-    contains: () => false,
-  });
-  define('navigator', { language: 'en-US', userAgent: 'node' });
 }
 
 async function exists(file) {
@@ -178,7 +144,8 @@ async function loadDeclarations(file, seen = new Set()) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  installBrowserStub();
+  // No browser globals are installed: every entry must import in plain Node
+  // (#49). A failure here means an import-time read of window or document.
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const entries = Object.entries(pkg.exports);
 
